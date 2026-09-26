@@ -1,8 +1,8 @@
 # Documentation site
 
-The app that renders the repository's documentation as the site at <https://connectors.integraledger.com>:
-Fumadocs on Next.js, exported as static files for Cloudflare Pages. The content lives in the Markdown files under
-`../docs/`; this folder holds only the app. The documentation folder is named once, in
+The app that renders the repository's documentation as the site at <https://connectors.integraledger.com>: Fumadocs on
+Next.js, exported as static files and served by Cloudflare as a Worker's static assets. The content lives in the
+Markdown files under `../docs/`; this folder holds only the app. The documentation folder is named once, in
 [`src/lib/docs-dir.ts`](src/lib/docs-dir.ts).
 
 This folder has its own lockfile and is not part of the repository's pnpm workspace.

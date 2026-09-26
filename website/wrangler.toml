@@ -1,2 +1,8 @@
+# The documentation site as a Cloudflare Worker with static assets, deployed by Workers Builds from the
+# repository root with `npx wrangler deploy -c website/wrangler.toml` after the build writes website/out.
 name = "integra-agentic-connectors-docs"
-pages_build_output_dir = "out"
+compatibility_date = "2026-09-26"
+
+[assets]
+directory = "./out"
+not_found_handling = "404-page"
