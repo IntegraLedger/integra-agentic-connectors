@@ -1,0 +1,110 @@
+{
+  "name": "issue",
+  "fixed": {
+    "tenant": "t-acme",
+    "credential": "isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "credentialDigest": "0xbc357689ffc51ab5e745f005b3df2faaab2c715f110e41fc56d4ca8fdead30d4",
+    "resources": [
+      {
+        "id": "quote",
+        "pairings": [
+          "x402/exact/eip155/eip3009"
+        ]
+      }
+    ],
+    "storageBase": "https://atr.seller.example/",
+    "clock": 1790000000,
+    "atrIds": [
+      "6f1c2b0e-8d4a-4c3b-9e2f-1a7d5c9b3e50"
+    ]
+  },
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/issue",
+        "headers": {
+          "authorization": "Bearer isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "content-type": "application/json"
+        },
+        "body": {
+          "mintRequestId": "chk_7Q2:v1",
+          "resource": "quote",
+          "lifetimeSeconds": 60,
+          "offers": [
+            {
+              "pairing": "x402/exact/eip155/eip3009",
+              "option": {
+                "scheme": "exact",
+                "network": "eip155:84532",
+                "amount": "10000",
+                "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+                "payTo": "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
+                "maxTimeoutSeconds": 60,
+                "extra": {
+                  "name": "USDC",
+                  "version": "2"
+                }
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "path": "/v1/report",
+            "query": "",
+            "bodyDigest": "0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "content": [
+            {
+              "slot": "terms",
+              "bytes": "IlBheSAxMDAwMCBiYXNlIHVuaXRzIG9mIFVTREMgZm9yIG9uZSByZXBvcnQuIg=="
+            }
+          ]
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "atrHash": "0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3",
+          "link": "https://atr.seller.example/0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3",
+          "expiresAt": "2026-09-21T14:14:20.000Z",
+          "mintRequestId": "chk_7Q2:v1",
+          "carriers": {
+            "lcp": "lcp:sha256:0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3",
+            "legalContext": {
+              "type": "sha256",
+              "value": "0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3",
+              "legalContextUrl": "https://atr.seller.example/0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3"
+            },
+            "legal_context": {
+              "type": "sha256",
+              "value": "0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3",
+              "legal_context_url": "https://atr.seller.example/0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3"
+            }
+          },
+          "pairings": [
+            {
+              "pairing": "x402/exact/eip155/eip3009",
+              "pattern": {
+                "pattern": "native-field",
+                "canonical": false,
+                "profile": "x402/exact/eip155/eip3009",
+                "buyerSigns": true,
+                "onChain": true,
+                "zeroPartyRecoverable": true,
+                "forwardIndexable": true,
+                "publicProof": true,
+                "proves": "The payer signed an EIP-3009 transfer authorization whose nonce is this ATR's hash. The token contract verified that signature when it executed the transfer, and the hash is on chain as the nonce topic of its AuthorizationUsed event in the settlement transaction. This does not show that amount, payee, asset or timing match the ATR's content."
+              }
+            }
+          ]
+        }
+      },
+      "stored": {
+        "bytes": "{\"atrVersion\":\"1\",\"id\":\"6f1c2b0e-8d4a-4c3b-9e2f-1a7d5c9b3e50\",\"x402\":{\"accepts\":[{\"scheme\":\"exact\",\"network\":\"eip155:84532\",\"amount\":\"10000\",\"asset\":\"0x036CbD53842c5426634e7929541eC2318f3dCF7e\",\"payTo\":\"0x209693Bc6afc0C5328bA36FaF03C514EF312287C\",\"maxTimeoutSeconds\":60,\"extra\":{\"name\":\"USDC\",\"version\":\"2\"}}],\"request\":{\"method\":\"GET\",\"path\":\"/v1/report\",\"query\":\"\",\"bodyDigest\":\"0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"}},\"terms\":\"Pay 10000 base units of USDC for one report.\"}",
+        "sha256": "0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3"
+      }
+    }
+  ],
+  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. Content: printf '%s' '\"Pay 10000 base units of USDC for one report.\"' | base64"
+}

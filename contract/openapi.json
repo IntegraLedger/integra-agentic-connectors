@@ -1,0 +1,1869 @@
+{
+  "openapi": "3.1.1",
+  "info": {
+    "title": "Integra seller door",
+    "version": "0.1.0",
+    "description": "The door a seller's own systems call to issue an ATR before approval, to claim a presented payment, to report a settlement, and to read a record's status. Every call is server to server.",
+    "license": {
+      "name": "Apache-2.0",
+      "identifier": "Apache-2.0"
+    }
+  },
+  "servers": [
+    {
+      "url": "{doorBase}",
+      "variables": {
+        "doorBase": {
+          "default": "https://seller.example/door"
+        }
+      }
+    }
+  ],
+  "security": [
+    {
+      "sellerCredential": []
+    }
+  ],
+  "paths": {
+    "/issue": {
+      "post": {
+        "operationId": "issue",
+        "summary": "Assemble, store and hash the ATR for one checkout state; return the values to place.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The ATR is in the seller's storage; place these values before approval.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IssueResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not the operation's JSON object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/malformed"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid seller credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/unauthenticated"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Bearer realm=\"seller-door\" (RFC 6750 §3).",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "Bearer realm=\"seller-door\""
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The request carries an Origin header; the door serves servers only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/browser-origin"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nothing known by that name for this tenant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/not-found",
+                            "door/resource-unknown",
+                            "claim/unknown"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record is in a state that does not allow this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "issue/mint-request-reused",
+                            "issue/mint-request-lapsed",
+                            "claim/in-progress",
+                            "claim/paid",
+                            "claim/not-this-request",
+                            "claim/channel-open",
+                            "claim/channel-not-open",
+                            "report/pairing-mismatch",
+                            "settle/other-reference",
+                            "settle/not-settling"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is larger than this operation accepts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/too-large"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not application/json.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/media-type"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request cannot be served as sent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/request-required",
+                            "door/chosen-required",
+                            "door/reference-required",
+                            "door/receipt-required",
+                            "issue/input-bounds",
+                            "issue/pairing-not-served",
+                            "issue/offer-refused",
+                            "issue/mixed-protocols",
+                            "core/slot-name",
+                            "core/slot-reserved",
+                            "core/slot-duplicate",
+                            "core/content-not-json",
+                            "core/binding-not-json",
+                            "core/too-large",
+                            "claim/pairing-unknown",
+                            "claim/not-bound",
+                            "claim/nothing-to-check"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not available now; retry after one second.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "issue/deadline",
+                            "issue/contributor-unavailable",
+                            "issue/storage-unavailable",
+                            "issue/store-unavailable",
+                            "issue/capacity",
+                            "claim/store-unavailable",
+                            "settle/store-unavailable"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before a retry.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "1"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/claim": {
+      "post": {
+        "operationId": "claim",
+        "summary": "The one check: the presented payment carries this ATR's hash, for the options issued.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClaimRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Claimed, and the record is settling; or, for a pushed payment that landed and then failed the check, declined.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ClaimResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ClaimDeclined"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not the operation's JSON object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/malformed"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid seller credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/unauthenticated"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Bearer realm=\"seller-door\" (RFC 6750 §3).",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "Bearer realm=\"seller-door\""
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The request carries an Origin header; the door serves servers only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/browser-origin"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nothing known by that name for this tenant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/not-found",
+                            "door/resource-unknown",
+                            "claim/unknown"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record is in a state that does not allow this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "issue/mint-request-reused",
+                            "issue/mint-request-lapsed",
+                            "claim/in-progress",
+                            "claim/paid",
+                            "claim/not-this-request",
+                            "claim/channel-open",
+                            "claim/channel-not-open",
+                            "report/pairing-mismatch",
+                            "settle/other-reference",
+                            "settle/not-settling",
+                            "claim/agreement-first",
+                            "claim/instrument-claimed"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "410": {
+            "description": "The challenge has lapsed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "claim/lapsed"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is larger than this operation accepts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/too-large"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not application/json.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/media-type"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request cannot be served as sent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/request-required",
+                            "door/chosen-required",
+                            "door/reference-required",
+                            "door/receipt-required",
+                            "issue/input-bounds",
+                            "issue/pairing-not-served",
+                            "issue/offer-refused",
+                            "issue/mixed-protocols",
+                            "core/slot-name",
+                            "core/slot-reserved",
+                            "core/slot-duplicate",
+                            "core/content-not-json",
+                            "core/binding-not-json",
+                            "core/too-large",
+                            "claim/pairing-unknown",
+                            "claim/not-bound",
+                            "claim/nothing-to-check"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not available now; retry after one second.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "issue/deadline",
+                            "issue/contributor-unavailable",
+                            "issue/storage-unavailable",
+                            "issue/store-unavailable",
+                            "issue/capacity",
+                            "claim/store-unavailable",
+                            "claim/read-unavailable",
+                            "settle/store-unavailable"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before a retry.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "1"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/report": {
+      "post": {
+        "operationId": "report",
+        "summary": "The platform's payment reference, keyed by the ATR hash.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The record as it now stands.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordView"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "Accepted; nothing final was read yet. A settling record is finished by the seller door; an issued one is reported again later.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not the operation's JSON object.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/malformed"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid seller credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/unauthenticated"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Bearer realm=\"seller-door\" (RFC 6750 §3).",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "Bearer realm=\"seller-door\""
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The request carries an Origin header; the door serves servers only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/browser-origin"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nothing known by that name for this tenant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/not-found",
+                            "door/resource-unknown",
+                            "claim/unknown"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The record is in a state that does not allow this.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "issue/mint-request-reused",
+                            "issue/mint-request-lapsed",
+                            "claim/in-progress",
+                            "claim/paid",
+                            "claim/not-this-request",
+                            "claim/channel-open",
+                            "claim/channel-not-open",
+                            "report/pairing-mismatch",
+                            "settle/other-reference",
+                            "settle/not-settling"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is larger than this operation accepts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/too-large"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "The body is not application/json.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/media-type"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The request cannot be served as sent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/request-required",
+                            "door/chosen-required",
+                            "door/reference-required",
+                            "door/receipt-required",
+                            "issue/input-bounds",
+                            "issue/pairing-not-served",
+                            "issue/offer-refused",
+                            "issue/mixed-protocols",
+                            "core/slot-name",
+                            "core/slot-reserved",
+                            "core/slot-duplicate",
+                            "core/content-not-json",
+                            "core/binding-not-json",
+                            "core/too-large",
+                            "claim/pairing-unknown",
+                            "claim/not-bound",
+                            "claim/nothing-to-check"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not available now; retry after one second.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "issue/deadline",
+                            "issue/contributor-unavailable",
+                            "issue/storage-unavailable",
+                            "issue/store-unavailable",
+                            "issue/capacity",
+                            "claim/store-unavailable",
+                            "settle/store-unavailable"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before a retry.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "1"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/status/{atrHash}": {
+      "get": {
+        "operationId": "status",
+        "summary": "The record and what it proves.",
+        "parameters": [
+          {
+            "name": "atrHash",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AtrHashInput"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The record.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecordView"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid seller credential.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/unauthenticated"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "WWW-Authenticate": {
+                "description": "Bearer realm=\"seller-door\" (RFC 6750 §3).",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "Bearer realm=\"seller-door\""
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The request carries an Origin header; the door serves servers only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/browser-origin"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Nothing known by that name for this tenant.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/not-found",
+                            "door/resource-unknown",
+                            "claim/unknown"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not available now; retry after one second.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "settle/store-unavailable"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before a retry.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "1"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/openapi.json": {
+      "get": {
+        "operationId": "openapi",
+        "summary": "This document.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "This document's bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "sellerCredential": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "isk_<base64url>",
+        "description": "The tenant's seller credential, issued through the admin door: `isk_` and 43 base64url characters."
+      }
+    },
+    "schemas": {
+      "AtrHash": {
+        "type": "string",
+        "pattern": "^0x[0-9a-f]{64}$",
+        "description": "`0x` and 64 lowercase hex digits: the SHA-256 of the ATR's bytes."
+      },
+      "AtrHashInput": {
+        "type": "string",
+        "pattern": "^0x[0-9a-fA-F]{64}$",
+        "description": "`0x` and 64 hex digits, either case."
+      },
+      "PairingId": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128,
+        "pattern": "^[a-z0-9-]+(/[A-Za-z0-9._:-]+)+$",
+        "description": "A pairing of protocol, scheme and rail, as the LCP package registers it."
+      },
+      "Offer": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pairing",
+          "option"
+        ],
+        "properties": {
+          "pairing": {
+            "$ref": "#/components/schemas/PairingId"
+          },
+          "option": {
+            "description": "The payment option exactly as the challenge will carry it."
+          }
+        }
+      },
+      "ContentSlot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "slot",
+          "bytes"
+        ],
+        "properties": {
+          "slot": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+          },
+          "bytes": {
+            "type": "string",
+            "maxLength": 1398104,
+            "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$",
+            "description": "Base64 with padding (RFC 4648 §4) of the slot's exact bytes: one JSON value."
+          }
+        }
+      },
+      "RequestCommitment": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "method",
+          "path",
+          "query",
+          "bodyDigest"
+        ],
+        "properties": {
+          "method": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$"
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 8192,
+            "pattern": "^/[!-~]*$"
+          },
+          "query": {
+            "type": "string",
+            "maxLength": 8192,
+            "pattern": "^[!-~]*$"
+          },
+          "bodyDigest": {
+            "$ref": "#/components/schemas/AtrHash"
+          }
+        },
+        "description": "The request an x402 challenge answers: the method, the target split at its first `?`, and SHA-256 over the body bytes as received."
+      },
+      "IssueRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mintRequestId",
+          "resource",
+          "lifetimeSeconds",
+          "offers"
+        ],
+        "properties": {
+          "mintRequestId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+          },
+          "resource": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "lifetimeSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 604800
+          },
+          "offers": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "$ref": "#/components/schemas/Offer"
+            }
+          },
+          "content": {
+            "type": "array",
+            "maxItems": 56,
+            "items": {
+              "$ref": "#/components/schemas/ContentSlot"
+            }
+          },
+          "request": {
+            "$ref": "#/components/schemas/RequestCommitment"
+          }
+        }
+      },
+      "Carriers": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "lcp",
+          "legalContext",
+          "legal_context"
+        ],
+        "properties": {
+          "lcp": {
+            "type": "string",
+            "pattern": "^lcp:sha256:0x[0-9a-f]{64}$"
+          },
+          "legalContext": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "value",
+              "legalContextUrl"
+            ],
+            "properties": {
+              "type": {
+                "const": "sha256"
+              },
+              "value": {
+                "$ref": "#/components/schemas/AtrHash"
+              },
+              "legalContextUrl": {
+                "type": "string",
+                "pattern": "^https://"
+              }
+            }
+          },
+          "legal_context": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "type",
+              "value",
+              "legal_context_url"
+            ],
+            "properties": {
+              "type": {
+                "const": "sha256"
+              },
+              "value": {
+                "$ref": "#/components/schemas/AtrHash"
+              },
+              "legal_context_url": {
+                "type": "string",
+                "pattern": "^https://"
+              }
+            }
+          }
+        }
+      },
+      "LcpPattern": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "pattern",
+          "canonical",
+          "buyerSigns",
+          "onChain",
+          "zeroPartyRecoverable",
+          "forwardIndexable",
+          "publicProof",
+          "proves"
+        ],
+        "properties": {
+          "pattern": {
+            "enum": [
+              "native-field",
+              "overlay-contract",
+              "sidecar-attestation",
+              "opaque-challenge",
+              "id-reuse",
+              "protocol-extension",
+              "http-advisory",
+              "truncated-field"
+            ]
+          },
+          "canonical": {
+            "type": "boolean"
+          },
+          "profile": {
+            "type": "string"
+          },
+          "buyerSigns": {
+            "type": "boolean"
+          },
+          "onChain": {
+            "type": "boolean"
+          },
+          "zeroPartyRecoverable": {
+            "type": "boolean"
+          },
+          "forwardIndexable": {
+            "type": "boolean"
+          },
+          "publicProof": {
+            "type": "boolean"
+          },
+          "proves": {
+            "type": "string"
+          },
+          "instrument": {
+            "enum": [
+              "landed"
+            ]
+          }
+        }
+      },
+      "Proves": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "claimed",
+          "pattern",
+          "settledBy"
+        ],
+        "properties": {
+          "claimed": {
+            "type": "boolean"
+          },
+          "pattern": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/LcpPattern"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "settledBy": {
+            "description": "What made the payment paid: a read of the rail, the facilitator's settle answer, or the seller's report on a pairing with nothing to read; null while unpaid.",
+            "enum": [
+              "read",
+              "facilitator",
+              "seller-report",
+              null
+            ]
+          }
+        }
+      },
+      "IssueResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "atrHash",
+          "link",
+          "expiresAt",
+          "mintRequestId",
+          "carriers",
+          "pairings"
+        ],
+        "properties": {
+          "atrHash": {
+            "$ref": "#/components/schemas/AtrHash"
+          },
+          "link": {
+            "type": "string",
+            "pattern": "^https://"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mintRequestId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9._:-]{1,128}$"
+          },
+          "carriers": {
+            "$ref": "#/components/schemas/Carriers"
+          },
+          "pairings": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 16,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "pairing",
+                "pattern"
+              ],
+              "properties": {
+                "pairing": {
+                  "$ref": "#/components/schemas/PairingId"
+                },
+                "pattern": {
+                  "$ref": "#/components/schemas/LcpPattern"
+                }
+              }
+            }
+          },
+          "agreement": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "url",
+              "network",
+              "pairing"
+            ],
+            "description": "Present when the record requires the agreement step: the agreement URL to place beside the carriers, the network the agreement is paid on, and the agreement pairing.",
+            "properties": {
+              "url": {
+                "type": "string",
+                "pattern": "^https://",
+                "maxLength": 2048
+              },
+              "network": {
+                "type": "string",
+                "maxLength": 64
+              },
+              "pairing": {
+                "$ref": "#/components/schemas/PairingId"
+              }
+            }
+          }
+        }
+      },
+      "ClaimRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "resource",
+          "pairing",
+          "payment",
+          "chosen",
+          "network"
+        ],
+        "properties": {
+          "resource": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "pairing": {
+            "$ref": "#/components/schemas/PairingId"
+          },
+          "payment": {
+            "description": "What the buyer presented, exactly as received."
+          },
+          "chosen": {
+            "description": "The option the payment names, as issued."
+          },
+          "network": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "request": {
+            "$ref": "#/components/schemas/RequestCommitment"
+          },
+          "settleBy": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Unix seconds; at most now + 604 800."
+          }
+        }
+      },
+      "ClaimResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "atrHash",
+          "state",
+          "pairing",
+          "proves"
+        ],
+        "properties": {
+          "atrHash": {
+            "$ref": "#/components/schemas/AtrHash"
+          },
+          "state": {
+            "const": "settling"
+          },
+          "pairing": {
+            "$ref": "#/components/schemas/PairingId"
+          },
+          "proves": {
+            "$ref": "#/components/schemas/Proves"
+          }
+        }
+      },
+      "ClaimDeclined": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "atrHash",
+          "state",
+          "pairing",
+          "code",
+          "transaction"
+        ],
+        "description": "A pushed payment that landed and then failed the check: reported, never refused.",
+        "properties": {
+          "atrHash": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AtrHash"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "state": {
+            "const": "declined"
+          },
+          "pairing": {
+            "$ref": "#/components/schemas/PairingId"
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[a-z0-9-]+/[a-z0-9-]+$",
+            "maxLength": 64
+          },
+          "transaction": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 256
+          }
+        }
+      },
+      "Reference": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256,
+        "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+      },
+      "ReportRequest": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ReportOutcome"
+          },
+          {
+            "$ref": "#/components/schemas/ReportClosed"
+          }
+        ]
+      },
+      "ReportOutcome": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "atrHash",
+          "pairing",
+          "outcome"
+        ],
+        "properties": {
+          "atrHash": {
+            "$ref": "#/components/schemas/AtrHashInput"
+          },
+          "pairing": {
+            "$ref": "#/components/schemas/PairingId"
+          },
+          "outcome": {
+            "enum": [
+              "paid",
+              "declined"
+            ]
+          },
+          "reference": {
+            "$ref": "#/components/schemas/Reference"
+          },
+          "network": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "chosen": {
+            "description": "On a record with no claim: the option the payment paid, as issued, from which its read keys are taken."
+          },
+          "receipt": {
+            "description": "On a confirm-only channel pairing's paid report: the receipt its opening answered, from which the channel is read."
+          },
+          "request": {
+            "$ref": "#/components/schemas/RequestCommitment"
+          }
+        }
+      },
+      "ReportClosed": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "atrHash",
+          "pairing",
+          "state",
+          "reference"
+        ],
+        "description": "A channel pairing's close: the close transaction, read before the record is closed.",
+        "properties": {
+          "atrHash": {
+            "$ref": "#/components/schemas/AtrHashInput"
+          },
+          "pairing": {
+            "$ref": "#/components/schemas/PairingId"
+          },
+          "state": {
+            "const": "closed"
+          },
+          "reference": {
+            "$ref": "#/components/schemas/Reference"
+          },
+          "network": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "chosen": {}
+        }
+      },
+      "Channel": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "network",
+          "channel",
+          "until",
+          "closed"
+        ],
+        "properties": {
+          "network": {
+            "type": "string"
+          },
+          "channel": {
+            "type": "string"
+          },
+          "until": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "The rail's deadline for the channel, or null when the rail gives none."
+          },
+          "closed": {
+            "type": "boolean"
+          }
+        }
+      },
+      "Agreement": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "state",
+          "network",
+          "transaction"
+        ],
+        "description": "The agreement step's leg: required until the buyer pays the agreement URL, settling while that payment settles, recorded once it is on chain.",
+        "properties": {
+          "state": {
+            "enum": [
+              "required",
+              "settling",
+              "recorded"
+            ]
+          },
+          "network": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "transaction": {
+            "oneOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "RecordView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "atrHash",
+          "state",
+          "expiresAt",
+          "settlement",
+          "proves",
+          "agreement",
+          "channel"
+        ],
+        "properties": {
+          "atrHash": {
+            "$ref": "#/components/schemas/AtrHash"
+          },
+          "state": {
+            "enum": [
+              "issued",
+              "settling",
+              "paid",
+              "closed"
+            ]
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "settlement": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "pairing"
+                ],
+                "properties": {
+                  "pairing": {
+                    "$ref": "#/components/schemas/PairingId"
+                  },
+                  "network": {
+                    "type": "string"
+                  },
+                  "reference": {
+                    "type": "string"
+                  }
+                }
+              }
+            ]
+          },
+          "proves": {
+            "$ref": "#/components/schemas/Proves"
+          },
+          "agreement": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Agreement"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "channel": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/Channel"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        }
+      },
+      "Refusal": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "sentence",
+          "correlationId"
+        ],
+        "properties": {
+          "code": {
+            "enum": [
+              "door/malformed",
+              "door/unauthenticated",
+              "door/browser-origin",
+              "door/not-found",
+              "door/resource-unknown",
+              "claim/unknown",
+              "door/method",
+              "door/too-large",
+              "door/media-type",
+              "issue/mint-request-reused",
+              "issue/mint-request-lapsed",
+              "claim/in-progress",
+              "claim/paid",
+              "claim/not-this-request",
+              "claim/channel-open",
+              "claim/channel-not-open",
+              "claim/agreement-first",
+              "claim/instrument-claimed",
+              "report/pairing-mismatch",
+              "settle/other-reference",
+              "settle/not-settling",
+              "claim/lapsed",
+              "door/request-required",
+              "door/chosen-required",
+              "door/reference-required",
+              "door/receipt-required",
+              "issue/input-bounds",
+              "issue/pairing-not-served",
+              "issue/offer-refused",
+              "issue/mixed-protocols",
+              "core/slot-name",
+              "core/slot-reserved",
+              "core/slot-duplicate",
+              "core/content-not-json",
+              "core/binding-not-json",
+              "core/too-large",
+              "claim/pairing-unknown",
+              "claim/not-bound",
+              "claim/nothing-to-check",
+              "issue/deadline",
+              "issue/contributor-unavailable",
+              "issue/storage-unavailable",
+              "issue/store-unavailable",
+              "issue/capacity",
+              "claim/store-unavailable",
+              "claim/read-unavailable",
+              "settle/store-unavailable"
+            ]
+          },
+          "sentence": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

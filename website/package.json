@@ -1,0 +1,39 @@
+{
+  "name": "integra-agentic-connectors-website",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.27.1",
+  "engines": {
+    "node": ">=26.10.0 <27"
+  },
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "api": "API_PACKAGE=contract typedoc --options typedoc.config.mjs && API_PACKAGE=profile-facilitator typedoc --options typedoc.config.mjs",
+    "typecheck": "fumadocs-mdx && tsc --noEmit",
+    "postinstall": "fumadocs-mdx"
+  },
+  "dependencies": {
+    "fumadocs-core": "16.15.14",
+    "fumadocs-mdx": "15.4.5",
+    "fumadocs-twoslash": "3.3.1",
+    "fumadocs-ui": "16.15.14",
+    "mermaid": "12.0.0",
+    "next": "16.3.6",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "shiki": "4.4.3",
+    "twoslash": "0.3.9"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/mdx": "2.0.14",
+    "@types/node": "26.6.2",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "tailwindcss": "4.3.3",
+    "typedoc": "0.28.20",
+    "typedoc-plugin-markdown": "4.13.1",
+    "typescript": "6.0.3"
+  }
+}

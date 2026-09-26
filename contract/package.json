@@ -1,0 +1,57 @@
+{
+  "name": "@integraledger/agentic-connectors",
+  "version": "0.1.0",
+  "description": "The seller door's contract: the OpenAPI 3.1 document, TypeScript types, refusal table and vectors a connector speaks to issue an ATR, claim a payment and report a settlement.",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=26.10.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/IntegraLedger/integra-agentic-connectors.git",
+    "directory": "contract"
+  },
+  "homepage": "https://github.com/IntegraLedger/integra-agentic-connectors/tree/main/contract#readme",
+  "bugs": "https://github.com/IntegraLedger/integra-agentic-connectors/issues",
+  "keywords": [
+    "lcp",
+    "legal-context-protocol",
+    "agentic-commerce",
+    "atr",
+    "x402",
+    "openapi",
+    "seller",
+    "connector"
+  ],
+  "type": "module",
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "openapi.json",
+    "vectors",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "node scripts/embed.mjs && tsc -p tsconfig.json",
+    "typecheck": "node scripts/embed.mjs && tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "node scripts/embed.mjs && vitest run"
+  },
+  "dependencies": {
+    "@integraledger/lcp": "0.1.0"
+  },
+  "devDependencies": {
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "esbuild": "0.28.2",
+    "vitest": "5.0.1"
+  }
+}

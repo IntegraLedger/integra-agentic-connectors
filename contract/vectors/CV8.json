@@ -1,0 +1,37 @@
+{
+  "name": "status unknown",
+  "fixed": {
+    "tenant": "t-acme",
+    "credential": "isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "credentialDigest": "0xbc357689ffc51ab5e745f005b3df2faaab2c715f110e41fc56d4ca8fdead30d4",
+    "resources": [
+      {
+        "id": "quote",
+        "pairings": [
+          "x402/exact/eip155/eip3009"
+        ]
+      }
+    ],
+    "storageBase": "https://atr.seller.example/",
+    "clock": 1790000000,
+    "atrIds": []
+  },
+  "steps": [
+    {
+      "request": {
+        "method": "GET",
+        "path": "/status/0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+        "headers": {
+          "authorization": "Bearer isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      "expect": {
+        "status": 404,
+        "body": {
+          "code": "door/not-found"
+        }
+      }
+    }
+  ],
+  "source": "printf '%s' abc | sha256sum (FIPS 180-2's published vector): a hash never issued."
+}

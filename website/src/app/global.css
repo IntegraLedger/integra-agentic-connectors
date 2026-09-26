@@ -1,0 +1,26 @@
+@import "tailwindcss";
+@import "fumadocs-ui/css/neutral.css";
+@import "fumadocs-ui/css/preset.css";
+@import "fumadocs-twoslash/twoslash.css";
+
+@source "../../node_modules/fumadocs-ui/dist/**/*.js";
+@source "../../node_modules/fumadocs-twoslash/dist/**/*.js";
+
+/* Code keeps every character as typed. */
+code,
+pre,
+kbd,
+samp {
+  font-variant-ligatures: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

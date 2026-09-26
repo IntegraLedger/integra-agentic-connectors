@@ -1,0 +1,238 @@
+{
+  "name": "plain card checkout",
+  "fixed": {
+    "tenant": "t-acme",
+    "credential": "isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "credentialDigest": "0xbc357689ffc51ab5e745f005b3df2faaab2c715f110e41fc56d4ca8fdead30d4",
+    "resources": [
+      {
+        "id": "checkout",
+        "pairings": [
+          "card/seller-reference"
+        ]
+      }
+    ],
+    "storageBase": "https://atr.seller.example/",
+    "clock": 1790000000,
+    "atrIds": [
+      "6f1c2b0e-8d4a-4c3b-9e2f-1a7d5c9b3e52"
+    ],
+    "hosts": [
+      "seller.example"
+    ],
+    "agreement": {
+      "pairing": "x402/exact/eip155/eip3009",
+      "network": "eip155:84532",
+      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "payTo": "0x0Dace8dE11Dc988F17e0aD97456067a15CF9aaa6",
+      "amount": "1",
+      "maxTimeoutSeconds": 120,
+      "extra": {
+        "name": "USDC",
+        "version": "2"
+      }
+    }
+  },
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/issue",
+        "headers": {
+          "authorization": "Bearer isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "content-type": "application/json"
+        },
+        "body": {
+          "mintRequestId": "chk_1001:v1",
+          "resource": "checkout",
+          "lifetimeSeconds": 900,
+          "offers": [
+            {
+              "pairing": "card/seller-reference",
+              "option": {
+                "scheme": "seller-reference",
+                "checkout": "chk_1001"
+              }
+            }
+          ],
+          "content": [
+            {
+              "slot": "checkout",
+              "bytes": "eyJpZCI6ImNoa18xMDAxIiwidG90YWwiOnsiY3VycmVuY3kiOiJVU0QiLCJhbW91bnQiOjI3OTk5fX0="
+            }
+          ]
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "atrHash": "0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39145d46842f825d8",
+          "link": "https://atr.seller.example/0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39145d46842f825d8",
+          "expiresAt": "2026-09-21T14:28:20.000Z",
+          "mintRequestId": "chk_1001:v1",
+          "carriers": {
+            "lcp": "lcp:sha256:0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39145d46842f825d8",
+            "legalContext": {
+              "type": "sha256",
+              "value": "0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39145d46842f825d8",
+              "legalContextUrl": "https://atr.seller.example/0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39145d46842f825d8"
+            },
+            "legal_context": {
+              "type": "sha256",
+              "value": "0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39145d46842f825d8",
+              "legal_context_url": "https://atr.seller.example/0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39145d46842f825d8"
+            }
+          },
+          "pairings": [
+            {
+              "pairing": "card/seller-reference",
+              "pattern": {
+                "pattern": "http-advisory",
+                "canonical": true,
+                "buyerSigns": false,
+                "onChain": false,
+                "zeroPartyRecoverable": false,
+                "forwardIndexable": false,
+                "publicProof": false,
+                "proves": "Before this payment, the buyer signed and paid an agreement transaction carrying this ATR's hash on <network>, recorded in <transaction>. The ATR was in the seller's storage before payment, and its hash and link were given to the seller to show the buyer and to place in its processor reference. Nothing the buyer signed carries the hash. The seller checked nothing the buyer signed, and settlement is the seller's report. This record does not show that the buyer's approval carried the hash."
+              }
+            }
+          ],
+          "agreement": {
+            "url": "https://seller.example/agreement/0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39145d46842f825d8",
+            "network": "eip155:84532",
+            "pairing": "x402/exact/eip155/eip3009"
+          }
+        }
+      },
+      "stored": {
+        "bytes": "{\"atrVersion\":\"1\",\"id\":\"6f1c2b0e-8d4a-4c3b-9e2f-1a7d5c9b3e52\",\"card\":{\"options\":[{\"scheme\":\"seller-reference\",\"checkout\":\"chk_1001\"}]},\"checkout\":{\"id\":\"chk_1001\",\"total\":{\"currency\":\"USD\",\"amount\":27999}}}",
+        "sha256": "0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39145d46842f825d8"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/claim",
+        "headers": {
+          "authorization": "Bearer isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "content-type": "application/json"
+        },
+        "body": {
+          "resource": "checkout",
+          "pairing": "card/seller-reference",
+          "payment": {},
+          "chosen": {
+            "scheme": "seller-reference",
+            "checkout": "chk_1001"
+          },
+          "network": "card"
+        }
+      },
+      "expect": {
+        "status": 422,
+        "body": {
+          "code": "claim/nothing-to-check"
+        }
+      }
+    },
+    {
+      "agreed": {
+        "atrHash": "0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39145d46842f825d8",
+        "network": "eip155:84532",
+        "transaction": "0x2222222222222222222222222222222222222222222222222222222222222222"
+      },
+      "request": {
+        "method": "POST",
+        "path": "/report",
+        "headers": {
+          "authorization": "Bearer isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "content-type": "application/json"
+        },
+        "body": {
+          "atrHash": "0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39145d46842f825d8",
+          "pairing": "card/seller-reference",
+          "outcome": "paid",
+          "reference": "pi_3Nma8hD7mauJ7ZJt0bKKZkRT",
+          "network": "card"
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "atrHash": "0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39145d46842f825d8",
+          "state": "paid",
+          "expiresAt": "2026-09-21T14:28:20.000Z",
+          "settlement": {
+            "pairing": "card/seller-reference",
+            "network": "card",
+            "reference": "pi_3Nma8hD7mauJ7ZJt0bKKZkRT"
+          },
+          "proves": {
+            "claimed": false,
+            "pattern": {
+              "pattern": "http-advisory",
+              "canonical": true,
+              "buyerSigns": false,
+              "onChain": false,
+              "zeroPartyRecoverable": false,
+              "forwardIndexable": false,
+              "publicProof": false,
+              "proves": "Before this payment, the buyer signed and paid an agreement transaction carrying this ATR's hash on eip155:84532, recorded in 0x2222222222222222222222222222222222222222222222222222222222222222. The ATR was in the seller's storage before payment, and its hash and link were given to the seller to show the buyer and to place in its processor reference. Nothing the buyer signed carries the hash. The seller checked nothing the buyer signed, and settlement is the seller's report. This record does not show that the buyer's approval carried the hash."
+            },
+            "settledBy": "seller-report"
+          },
+          "agreement": {
+            "state": "recorded",
+            "network": "eip155:84532",
+            "transaction": "0x2222222222222222222222222222222222222222222222222222222222222222"
+          },
+          "channel": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/status/0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39145d46842f825d8",
+        "headers": {
+          "authorization": "Bearer isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "atrHash": "0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39145d46842f825d8",
+          "state": "paid",
+          "expiresAt": "2026-09-21T14:28:20.000Z",
+          "settlement": {
+            "pairing": "card/seller-reference",
+            "network": "card",
+            "reference": "pi_3Nma8hD7mauJ7ZJt0bKKZkRT"
+          },
+          "proves": {
+            "claimed": false,
+            "pattern": {
+              "pattern": "http-advisory",
+              "canonical": true,
+              "buyerSigns": false,
+              "onChain": false,
+              "zeroPartyRecoverable": false,
+              "forwardIndexable": false,
+              "publicProof": false,
+              "proves": "Before this payment, the buyer signed and paid an agreement transaction carrying this ATR's hash on eip155:84532, recorded in 0x2222222222222222222222222222222222222222222222222222222222222222. The ATR was in the seller's storage before payment, and its hash and link were given to the seller to show the buyer and to place in its processor reference. Nothing the buyer signed carries the hash. The seller checked nothing the buyer signed, and settlement is the seller's report. This record does not show that the buyer's approval carried the hash."
+            },
+            "settledBy": "seller-report"
+          },
+          "agreement": {
+            "state": "recorded",
+            "network": "eip155:84532",
+            "transaction": "0x2222222222222222222222222222222222222222222222222222222222222222"
+          },
+          "channel": null
+        }
+      }
+    }
+  ],
+  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. The reference is Wix's documented providerTransactionId example. expiresAt: date -u -d @1790000900. The agreement URL is https://<the tenant's first host>/agreement/<atrHash>; the agreement transaction is a stated input, recorded before the report. Once the agreement is recorded, the pattern's statement names it: sed 's/<network>/eip155:84532/; s/<transaction>/<the agreement transaction>/'."
+}

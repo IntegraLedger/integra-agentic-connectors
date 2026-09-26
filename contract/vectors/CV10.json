@@ -1,0 +1,207 @@
+{
+  "name": "a card payment reported before the agreement is recorded",
+  "fixed": {
+    "tenant": "t-acme",
+    "credential": "isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "credentialDigest": "0xbc357689ffc51ab5e745f005b3df2faaab2c715f110e41fc56d4ca8fdead30d4",
+    "resources": [
+      {
+        "id": "checkout",
+        "pairings": [
+          "card/seller-reference"
+        ]
+      }
+    ],
+    "storageBase": "https://atr.seller.example/",
+    "clock": 1790000000,
+    "atrIds": [
+      "6f1c2b0e-8d4a-4c3b-9e2f-1a7d5c9b3e53"
+    ],
+    "hosts": [
+      "seller.example"
+    ],
+    "agreement": {
+      "pairing": "x402/exact/eip155/eip3009",
+      "network": "eip155:84532",
+      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "payTo": "0x0Dace8dE11Dc988F17e0aD97456067a15CF9aaa6",
+      "amount": "1",
+      "maxTimeoutSeconds": 120,
+      "extra": {
+        "name": "USDC",
+        "version": "2"
+      }
+    }
+  },
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/issue",
+        "headers": {
+          "authorization": "Bearer isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "content-type": "application/json"
+        },
+        "body": {
+          "mintRequestId": "chk_1002:v1",
+          "resource": "checkout",
+          "lifetimeSeconds": 900,
+          "offers": [
+            {
+              "pairing": "card/seller-reference",
+              "option": {
+                "scheme": "seller-reference",
+                "checkout": "chk_1002"
+              }
+            }
+          ],
+          "content": [
+            {
+              "slot": "checkout",
+              "bytes": "eyJpZCI6ImNoa18xMDAyIiwidG90YWwiOnsiY3VycmVuY3kiOiJVU0QiLCJhbW91bnQiOjI3OTk5fX0="
+            }
+          ]
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "atrHash": "0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32",
+          "link": "https://atr.seller.example/0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32",
+          "expiresAt": "2026-09-21T14:28:20.000Z",
+          "mintRequestId": "chk_1002:v1",
+          "carriers": {
+            "lcp": "lcp:sha256:0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32",
+            "legalContext": {
+              "type": "sha256",
+              "value": "0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32",
+              "legalContextUrl": "https://atr.seller.example/0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32"
+            },
+            "legal_context": {
+              "type": "sha256",
+              "value": "0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32",
+              "legal_context_url": "https://atr.seller.example/0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32"
+            }
+          },
+          "pairings": [
+            {
+              "pairing": "card/seller-reference",
+              "pattern": {
+                "pattern": "http-advisory",
+                "canonical": true,
+                "buyerSigns": false,
+                "onChain": false,
+                "zeroPartyRecoverable": false,
+                "forwardIndexable": false,
+                "publicProof": false,
+                "proves": "Before this payment, the buyer signed and paid an agreement transaction carrying this ATR's hash on <network>, recorded in <transaction>. The ATR was in the seller's storage before payment, and its hash and link were given to the seller to show the buyer and to place in its processor reference. Nothing the buyer signed carries the hash. The seller checked nothing the buyer signed, and settlement is the seller's report. This record does not show that the buyer's approval carried the hash."
+              }
+            }
+          ],
+          "agreement": {
+            "url": "https://seller.example/agreement/0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32",
+            "network": "eip155:84532",
+            "pairing": "x402/exact/eip155/eip3009"
+          }
+        }
+      },
+      "stored": {
+        "bytes": "{\"atrVersion\":\"1\",\"id\":\"6f1c2b0e-8d4a-4c3b-9e2f-1a7d5c9b3e53\",\"card\":{\"options\":[{\"scheme\":\"seller-reference\",\"checkout\":\"chk_1002\"}]},\"checkout\":{\"id\":\"chk_1002\",\"total\":{\"currency\":\"USD\",\"amount\":27999}}}",
+        "sha256": "0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/report",
+        "headers": {
+          "authorization": "Bearer isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "content-type": "application/json"
+        },
+        "body": {
+          "atrHash": "0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32",
+          "pairing": "card/seller-reference",
+          "outcome": "paid",
+          "reference": "pi_3Nma8hD7mauJ7ZJt0bKKZkRT",
+          "network": "card"
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "atrHash": "0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32",
+          "state": "paid",
+          "expiresAt": "2026-09-21T14:28:20.000Z",
+          "settlement": {
+            "pairing": "card/seller-reference",
+            "network": "card",
+            "reference": "pi_3Nma8hD7mauJ7ZJt0bKKZkRT"
+          },
+          "proves": {
+            "claimed": false,
+            "pattern": {
+              "pattern": "http-advisory",
+              "canonical": true,
+              "buyerSigns": false,
+              "onChain": false,
+              "zeroPartyRecoverable": false,
+              "forwardIndexable": false,
+              "publicProof": false,
+              "proves": "No agreement was recorded before this payment; nothing public carries this ATR's hash."
+            },
+            "settledBy": "seller-report"
+          },
+          "agreement": {
+            "state": "required",
+            "network": null,
+            "transaction": null
+          },
+          "channel": null
+        }
+      }
+    },
+    {
+      "request": {
+        "method": "GET",
+        "path": "/status/0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32",
+        "headers": {
+          "authorization": "Bearer isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "atrHash": "0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32",
+          "state": "paid",
+          "expiresAt": "2026-09-21T14:28:20.000Z",
+          "settlement": {
+            "pairing": "card/seller-reference",
+            "network": "card",
+            "reference": "pi_3Nma8hD7mauJ7ZJt0bKKZkRT"
+          },
+          "proves": {
+            "claimed": false,
+            "pattern": {
+              "pattern": "http-advisory",
+              "canonical": true,
+              "buyerSigns": false,
+              "onChain": false,
+              "zeroPartyRecoverable": false,
+              "forwardIndexable": false,
+              "publicProof": false,
+              "proves": "No agreement was recorded before this payment; nothing public carries this ATR's hash."
+            },
+            "settledBy": "seller-report"
+          },
+          "agreement": {
+            "state": "required",
+            "network": null,
+            "transaction": null
+          },
+          "channel": null
+        }
+      }
+    }
+  ],
+  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. The checkout bytes: printf '%s' '{\"id\":\"chk_1002\",\"total\":{\"currency\":\"USD\",\"amount\":27999}}' | base64. expiresAt: date -u -d @1790000900. The agreement URL is https://<the tenant's first host>/agreement/<atrHash>. The reference is Wix's documented providerTransactionId example. The payment has moved, so it is recorded on the seller's report, and the record states what is missing: no agreement was recorded before this payment, and nothing public carries this ATR's hash."
+}

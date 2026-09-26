@@ -1,0 +1,14 @@
+packages:
+  - "*"
+  - "!website"
+
+minimumReleaseAge: 1440
+trustPolicy: no-downgrade
+strictDepBuilds: true
+
+allowBuilds:
+  esbuild: false
+  secp256k1: false
+
+minimumReleaseAgeExclude:
+  - "@integraledger/*"

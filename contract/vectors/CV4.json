@@ -1,0 +1,74 @@
+{
+  "name": "content not JSON",
+  "fixed": {
+    "tenant": "t-acme",
+    "credential": "isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "credentialDigest": "0xbc357689ffc51ab5e745f005b3df2faaab2c715f110e41fc56d4ca8fdead30d4",
+    "resources": [
+      {
+        "id": "quote",
+        "pairings": [
+          "x402/exact/eip155/eip3009"
+        ]
+      }
+    ],
+    "storageBase": "https://atr.seller.example/",
+    "clock": 1790000000,
+    "atrIds": [
+      "6f1c2b0e-8d4a-4c3b-9e2f-1a7d5c9b3e50"
+    ]
+  },
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/issue",
+        "headers": {
+          "authorization": "Bearer isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "content-type": "application/json"
+        },
+        "body": {
+          "mintRequestId": "chk_7Q2:v2",
+          "resource": "quote",
+          "lifetimeSeconds": 60,
+          "offers": [
+            {
+              "pairing": "x402/exact/eip155/eip3009",
+              "option": {
+                "scheme": "exact",
+                "network": "eip155:84532",
+                "amount": "10000",
+                "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+                "payTo": "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
+                "maxTimeoutSeconds": 60,
+                "extra": {
+                  "name": "USDC",
+                  "version": "2"
+                }
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "path": "/v1/report",
+            "query": "",
+            "bodyDigest": "0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "content": [
+            {
+              "slot": "terms",
+              "bytes": "eyJhIjoxfSB7ImIiOjJ9"
+            }
+          ]
+        }
+      },
+      "expect": {
+        "status": 422,
+        "body": {
+          "code": "core/content-not-json"
+        }
+      }
+    }
+  ],
+  "source": "printf '%s' '{\"a\":1} {\"b\":2}' | base64: two JSON values in one slot are not one JSON value (RFC 8259)."
+}

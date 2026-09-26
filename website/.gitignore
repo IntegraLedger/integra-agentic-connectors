@@ -1,0 +1,9 @@
+node_modules/
+.next/
+out/
+.source/
+.wrangler/
+*.tsbuildinfo
+next-env.d.ts
+AGENTS.md
+CLAUDE.md

@@ -1,0 +1,20 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "lib": [
+      "es2024",
+      "dom"
+    ],
+    "types": [
+      "node"
+    ],
+    // @polkadot/api-derive's and @polkadot/rpc-provider's own declaration files fail a strict library
+    // check (TS2305, TS2416); this package's code type-checks without the skip.
+    "skipLibCheck": true
+  },
+  "include": [
+    "src",
+    "test"
+  ]
+}
