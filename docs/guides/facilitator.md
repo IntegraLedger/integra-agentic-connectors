@@ -170,7 +170,9 @@ The rail specifics are in the [Tron](./tron.md) and [Polkadot](./polkadot.md) gu
 When the wait ends first, `/settle` answers `{success: false, errorReason: "settlement_pending", transaction}` with
 the transaction id or extrinsic hash; x402 requires that `transaction` not be empty. Call `/settle` again with the
 same request: it reads the chain from where it stopped, never submits twice, and returns the final answer once there
-is one. On Tron a payment is answered success once: every later `/settle` of it answers `invalid_transaction_state`
+is one. The facilitator keeps the payment's row until that final answer is written, however long that takes, so a
+repeat made after the validity window has ended still reads the chain. On Tron a payment is answered success once:
+every later `/settle` of it answers `invalid_transaction_state`
 with the transaction id, because x402's `exact` family requires that a consumed payment produce a settlement failure,
 never a success. An answer with an empty `transaction` means nothing was submitted. When the store cannot be read,
 the facilitator cannot know whether the payment was submitted, so it answers `settlement_pending` with the id.
@@ -184,10 +186,10 @@ one payment, one answers success and the other that failure.
 
 - **No key, no fee.** The facilitator signs nothing. It submits exactly the bytes the payer signed, and the payer pays
   every fee, as both profiles require.
-- **Settled once.** Settlements are deduplicated by transaction id or extrinsic hash, atomically, until the validity
-  window ends and for 24 hours after. A payment is answered success once, across every process that shares
-  the store, to the `/settle` whose write stores it, on Tron and on Polkadot. On Tron, a transaction id the node
-  already holds is refused.
+- **Settled once.** Settlements are deduplicated by transaction id or extrinsic hash, atomically, for as long as the
+  answer is not final, and for at least 24 hours after the validity window ends. A payment is answered success once,
+  across every process that shares the store, to the `/settle` whose write stores it, on Tron and on Polkadot. On
+  Tron, a transaction id the node already holds is refused.
 - **Success only from the chain.** `success: true` is given only when a node shows the transaction in a block with
   the profile's success conditions: on Tron, receipt result `SUCCESS` and a `Transfer` log from the token.
 - **What it does not check.** It checks that the payment carries H in the profile's form, not which H the seller

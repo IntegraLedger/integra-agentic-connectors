@@ -65,7 +65,9 @@ CREATE TABLE IF NOT EXISTS settlement (
   since bigint,
   unread bigint[] NOT NULL DEFAULT '{}',
   PRIMARY KEY (network, id)
-)
+);
+CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
+  WHERE answer IS NOT NULL AND answer->>'errorReason' IS DISTINCT FROM 'settlement_pending'
 ```
 
 - One row per settled payment, keyed by network and transaction id (Tron) or extrinsic hash (Polkadot).
@@ -73,8 +75,15 @@ CREATE TABLE IF NOT EXISTS settlement (
   pending one is replaced by what a later read of the chain shows.
 - `until` is the end of the payment's validity window: Tron's `expiration`, or, for Polkadot, the end of the last
   block that can include the extrinsic (the era's last, and no later than `System.BlockHashCount` + 1 blocks after its
-  birth), counted from the best block at 12 seconds a block. A row is kept for 24 hours after it, so a repeat in that
-  time reads the stored answer before anything is verified again. A sweep every minute drops older rows.
+  birth), counted from the best block at 12 seconds a block.
+- A row whose answer is final (`success: true`, or a failure other than `settlement_pending`) is kept for 24 hours
+  after `until`, so a repeat in that time reads the stored answer before anything is verified again.
+- A row whose answer is not final (claimed with no answer, or `settlement_pending`) is kept, whatever its age, until a
+  repeated `/settle` reads the chain and writes a final answer. A repeat therefore always finds the id of a payment
+  that was submitted, and never answers with an empty `transaction` for it.
+- A sweep every minute drops the rows whose answer is final and whose `until` is more than 24 hours past. It reads
+  them through `settlement_final_until`, an index that holds only rows with a final answer, so the rows it keeps add
+  nothing to its work.
 - `since` is, for Polkadot, the first block the scan has not yet read at finality.
 - `unread` is, for Polkadot, the finalized blocks below `since` that the node could not give. None of them is shown to
   lack the extrinsic, so each is read again, and the answer that the extrinsic can never be included waits until the
@@ -94,6 +103,11 @@ CREATE TABLE IF NOT EXISTS settlement (
   and read again later. Every other node call has no such limit. On Tron, `/verify` makes six FullNode calls:
   the account, the two id reads, the simulation and the head read at once, then the reference block read.
 - A request body is at most 64 KiB. The server's request timeout is `settleWaitMs` plus 60 seconds.
+- The table holds a row with a final answer until 24 hours after its validity window ends. A row with no final answer
+  stays until a repeated `/settle` for it gives one. Each such row is a payment that passed every check and was
+  claimed for submission; it is one row of fixed columns, the sweep's index does not hold it, and each repeat reads the
+  chain within `settleWaitMs`. On Tron, one repeat made once the latest solidified block is two slots past the
+  expiration gives a final answer whenever the nodes answer its reads.
 - The facilitator writes one JSON line on standard error for what the operator should see and the answer does not
   carry: `settlement-failed` (with the events, or the receipt result and why the transfer does not count, that the
   chain shows), `settlement-expired`, `answer-not-stored`, `block-unreadable` (a finalized Polkadot block recorded
