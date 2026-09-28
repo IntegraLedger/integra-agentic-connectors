@@ -1,6 +1,6 @@
 {
   "name": "@integraledger/agentic-connectors",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The seller door's contract: the OpenAPI 3.1 document, TypeScript types, refusal table and vectors a connector speaks to issue an ATR, claim a payment and report a settlement.",
   "license": "Apache-2.0",
   "engines": {

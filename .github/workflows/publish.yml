@@ -83,5 +83,5 @@ jobs:
         run: |
           set -eu
           for f in pack/*.tgz; do
-            npm stage publish "$f"
+            npm stage publish "./$f"
           done

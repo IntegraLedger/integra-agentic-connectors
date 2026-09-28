@@ -6,8 +6,9 @@ description: What the profile facilitator verifies and settles for x402/exact/po
 # Polkadot: `x402/exact/polkadot/lcp-assets-remark`
 
 On Polkadot Asset Hub, H rides in a remark the payer signs, batched with the transfer:
-`utility.batch_all([assets.transfer_keep_alive(asset, Id(payTo), amount), system.remark_with_event(R)])`, where R is
-the 77 ASCII bytes `lcp:sha256:` followed by H in lowercase hex. The payer pays every fee, in DOT or in an asset its wallet selects.
+`utility.batch_all([assets.transfer_keep_alive(asset, Id(payTo), amount), system.remark_with_event(R)])`, where R is the
+77 ASCII bytes `lcp:sha256:` followed by H in lowercase hex. The payer pays every fee, in DOT or in an asset its wallet
+selects.
 
 | Requirement | Value |
 |---|---|
@@ -60,11 +61,11 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
    reads first the finalized blocks, then the blocks up to the head. In the block that holds the extrinsic, success
    needs `System.ExtrinsicSuccess`, `System.Remarked` for R's BLAKE2b-256 and `Assets.Transferred` for `asset`. A
    failure counts only in a finalized block.
-6. A finalized block the node cannot give, its body or, for the block that holds the extrinsic, its events, is
-   recorded as unread and skipped. The scan goes on to the blocks after it, so a success in a later block is still
-   found, and the unread block is read again on each later pass and on each repeat. A block read that cannot start
-   before the deadline, because the process's 4 block reads are all running, is recorded the same way. A block above the finalized head
-   that cannot be read is skipped, since it is read again at finality.
+6. A finalized block the node cannot give, its body or, for the block that holds the extrinsic, its events, is recorded
+   as unread and skipped. The scan goes on to the blocks after it, so a success in a later block is still found, and the
+   unread block is read again on each later pass and on each repeat. A block read that cannot start before the deadline,
+   because the process's 4 block reads are all running, is recorded the same way. A block above the finalized head that
+   cannot be read is skipped, since it is read again at finality.
 7. Once every block to the last is finalized without the extrinsic, and no block is unread, it can never be included:
    `invalid_transaction_state`.
 8. Stores the answer and returns it. A success is given only by the `/settle` that stores it. When it cannot be stored,

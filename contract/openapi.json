@@ -2,7 +2,7 @@
   "openapi": "3.1.1",
   "info": {
     "title": "Integra seller door",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "The door a seller's own systems call to issue an ATR before approval, to claim a presented payment, to report a settlement, and to read a record's status. Every call is server to server.",
     "license": {
       "name": "Apache-2.0",

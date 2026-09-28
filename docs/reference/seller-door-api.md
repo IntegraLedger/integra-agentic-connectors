@@ -9,7 +9,7 @@ description: "Every operation, request, answer and schema of the seller door, ge
 
 The door a seller's own systems call to issue an ATR before approval, to claim a presented payment, to report a settlement, and to read a record's status. Every call is server to server.
 
-- **OpenAPI:** 3.1.1; document version `0.1.0`; license Apache-2.0.
+- **OpenAPI:** 3.1.1; document version `0.2.0`; license Apache-2.0.
 - **Base URL:** `{doorBase}`, where `doorBase` (for example `https://seller.example/door`) is your door's base URL.
 - **Authentication:** `sellerCredential`: HTTP `bearer` with format `isk_<base64url>`. The tenant's seller credential, issued through the admin door: `isk_` and 43 base64url characters.
 

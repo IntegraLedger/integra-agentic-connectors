@@ -62,7 +62,8 @@ describe("the OpenAPI document", () => {
     const validate = oas.compile(schema);
     expect(validate(doc), JSON.stringify(validate.errors)).toBe(true);
     expect(doc.openapi).toBe("3.1.1");
-    expect(doc.info.version).toBe("0.1.0");
+    // The document is versioned with the package.
+    expect(doc.info.version).toBe(JSON.parse(readFileSync(new URL("../package.json", import.meta.url), "utf8")).version);
     expect(doc.servers).toEqual([{ url: "{doorBase}", variables: { doorBase: { default: "https://seller.example/door" } } }]);
     expect(doc.components.securitySchemes.sellerCredential).toMatchObject({ type: "http", scheme: "bearer", bearerFormat: "isk_<base64url>" });
     expect(doc.paths["/openapi.json"].get.security).toEqual([]);
