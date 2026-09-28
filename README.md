@@ -1,7 +1,7 @@
 # integra-agentic-connectors
 
 The seller side of proof of agreement: the contract a seller's systems speak to put an Agentic Transaction Record's
-hash into their payments, and an x402 facilitator for the LCP profiles on Tron and Polkadot.
+hash into their payments, and an x402 facilitator for the LCP profiles on Tron, Polkadot and Casper.
 
 Before a buyer's agent pays, the seller's side assembles an **Agentic Transaction Record (ATR)**: the agreement's
 record, a JSON document the seller serves. The **ATR hash (H)** is SHA-256 over the ATR's exact bytes. H rides inside
@@ -21,7 +21,7 @@ flowchart LR
     door["Seller door<br/>(speaks @integraledger/agentic-connectors)"]
     storage[("Seller's storage<br/>the ATR")]
     fac["@integraledger/profile-facilitator"]
-    chain[("Tron / Polkadot")]
+    chain[("Tron / Polkadot / Casper")]
     buyer["Buyer's agent<br/>(buyer gate)"]
     platform --> connector
     connector -- "issue, claim, report, status" --> door
@@ -36,8 +36,8 @@ flowchart LR
 - **The contract** fixes what a connector and the seller door say to each other: issue the ATR before approval, claim
   a presented payment before it moves, report the platform's payment reference after, and read the record and what it
   proves.
-- **The profile facilitator** verifies and settles x402 payments on the two LCP profiles that carry H in the payer's
-  own signed transaction on Tron and Polkadot.
+- **The profile facilitator** verifies and settles x402 payments on the three LCP profiles that carry H in the payer's
+  own signed transaction on Tron, Polkadot and Casper.
 - Both use [`@integraledger/lcp`](https://github.com/IntegraLedger/integra-protocol), which owns the ATR's assembly
   and hashing and every binding of H into a payment.
 
@@ -46,7 +46,7 @@ flowchart LR
 | Package | Purpose | Install |
 |---|---|---|
 | [`@integraledger/agentic-connectors`](./contract) | The seller door's contract: `openapi.json`, its TypeScript types, the refusal table and the vectors. | `npm install @integraledger/agentic-connectors` |
-| [`@integraledger/profile-facilitator`](./profile-facilitator) | An x402 facilitator for `x402/exact/tron/lcp-trc20-memo` and `x402/exact/polkadot/lcp-assets-remark`. | `npm install @integraledger/profile-facilitator` |
+| [`@integraledger/profile-facilitator`](./profile-facilitator) | An x402 facilitator for `x402/exact/tron/lcp-trc20-memo`, `x402/exact/polkadot/lcp-assets-remark` and `x402/exact/casper/lcp-runtime-arg`. | `npm install @integraledger/profile-facilitator` |
 
 Both need Node.js `>=26.10.0` and are ESM only. The facilitator also needs Postgres.
 
@@ -60,7 +60,7 @@ and rail, and the complete reference.
 
 - **You connect a checkout to the seller door:** start with [Getting started](./docs/getting-started.md), or the
   [contract's README](./contract#readme). Both issue an ATR and read the carriers to place.
-- **You accept x402 payments on Tron or Polkadot:** start with the
+- **You accept x402 payments on Tron, Polkadot or Casper:** start with the
   [profile facilitator's README](./profile-facilitator#readme). Its quickstart starts the facilitator and reads
   `/supported`.
 - **You implement the seller door, or a test double of it:** replay the contract's vectors. `scripts/stand-in-door.mjs`

@@ -1,12 +1,13 @@
 ---
 title: Run the profile facilitator
-description: Start the x402 facilitator for the Tron and Polkadot LCP profiles, configure its networks and store, and call it.
+description: Start the x402 facilitator for the Tron, Polkadot and Casper LCP profiles, configure its networks and store, and call it.
 ---
 
 # Run the profile facilitator
 
 [`@integraledger/profile-facilitator`](../../profile-facilitator/README.md) is an x402 facilitator for
-`x402/exact/tron/lcp-trc20-memo` and `x402/exact/polkadot/lcp-assets-remark`. It verifies and settles payments whose
+`x402/exact/tron/lcp-trc20-memo`, `x402/exact/polkadot/lcp-assets-remark` and `x402/exact/casper/lcp-runtime-arg`. It
+verifies and settles payments whose
 payer-signed transaction carries the ATR hash (H), holds no key and pays no fee. This guide runs it.
 
 ## Install
@@ -16,7 +17,7 @@ npm install @integraledger/profile-facilitator
 ```
 
 It needs Node.js `>=26.10.0`, Postgres (the tests run on Postgres 18), and an HTTP endpoint for each network you
-serve: a Tron FullNode and Solidity node, or a Polkadot Asset Hub RPC node.
+serve: a Tron FullNode and Solidity node, a Polkadot Asset Hub RPC node, or a Casper JSON-RPC node.
 
 ## Start it and read what it supports
 
@@ -31,6 +32,7 @@ const facilitator = await serveProfileFacilitator({
   listen: "127.0.0.1:4020",
   tron: [{ network: "tron:728126428", fullNode: "http://127.0.0.1:8090", solidityNode: "http://127.0.0.1:8091" }],
   polkadot: [{ network: "polkadot:68d56f15f85d3136970ec16946040bc1", rpc: "http://127.0.0.1:9944" }],
+  casper: [{ network: "casper:casper", rpc: "https://x402-facilitator.cspr.cloud/rpc" }],
   store: { url: process.env.DATABASE_URL ?? "postgres://postgres@127.0.0.1:5432/postgres" },
   settleWaitMs: 30_000,
 });
@@ -57,6 +59,14 @@ await facilitator.close();
       "network": "polkadot:68d56f15f85d3136970ec16946040bc1",
       "extra": {
         "assetTransferMethod": "lcp-assets-remark"
+      }
+    },
+    {
+      "x402Version": 2,
+      "scheme": "exact",
+      "network": "casper:casper",
+      "extra": {
+        "assetTransferMethod": "lcp-runtime-arg"
       }
     }
   ],
