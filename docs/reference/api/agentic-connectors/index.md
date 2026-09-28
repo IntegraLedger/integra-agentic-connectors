@@ -27,11 +27,11 @@ The agreement step's leg of a record.
 
 #### Properties
 
-| Property | Type |
-| ------ | ------ |
-| <a id="property-network-1"></a> `network` | `string` \| `null` |
-| <a id="property-state"></a> `state` | `"required"` \| `"settling"` \| `"recorded"` |
-| <a id="property-transaction"></a> `transaction` | `string` \| `null` |
+| Property | Type | Description |
+| ------ | ------ | ------ |
+| <a id="property-network-1"></a> `network` | `string` \| `null` | - |
+| <a id="property-state"></a> `state` | `"required"` \| `"settling"` \| `"recorded"` \| `"stale"` | `stale`: the agreement payment was claimed, and 604 800 seconds after its `settleBy` no read has shown it settled or unable to settle. Terminal: the record carries a notice, and the agreement is never recorded after that. |
+| <a id="property-transaction"></a> `transaction` | `string` \| `null` | - |
 
 ***
 
@@ -199,7 +199,7 @@ What a record proves: whether the claim read the hash from the payment, the pair
 | <a id="property-expiresat-1"></a> `expiresAt` | `string` | - |
 | <a id="property-proves-1"></a> `proves` | [`Proves`](#proves) | - |
 | <a id="property-settlement"></a> `settlement` | \{ `network?`: `string`; `pairing`: `string`; `reference?`: `string`; \} \| `null` | - |
-| <a id="property-state-3"></a> `state` | `"closed"` \| `"settling"` \| `"paid"` \| `"issued"` | - |
+| <a id="property-state-3"></a> `state` | `"closed"` \| `"settling"` \| `"paid"` \| `"stale"` \| `"issued"` | `stale`: the payment was claimed, and 604 800 seconds after its `settleBy` no read has shown it settled or unable to settle. Terminal: the record carries a notice, and it is never paid after that. |
 
 ***
 

@@ -328,24 +328,26 @@ An object. A member not listed here is refused.
 
 ### Agreement
 
-The agreement step's leg: required until the buyer pays the agreement URL, settling while that payment settles, recorded once it is on chain.
+The agreement step's leg: required until the buyer pays the agreement URL, settling while that payment settles, recorded once it is on chain. Stale when the agreement payment was claimed and, 604 800 seconds after its settleBy, no read has shown it settled or unable to settle: terminal, with a notice on the record, and never recorded after that.
 
 An object. A member not listed here is refused.
 
 | Field | Type | Required | Constraints | Description |
 |---|---|---|---|---|
-| `state` | `"required"`, `"settling"`, `"recorded"` | yes |  |  |
+| `state` | `"required"`, `"settling"`, `"recorded"`, `"stale"` | yes |  |  |
 | `network` | `string` or `null` | yes |  |  |
 | `transaction` | `string` or `null` | yes |  |  |
 
 ### RecordView
+
+One ATR's record: issued once the ATR is placed and no payment is recorded, settling while a claimed or reported payment's settlement is not yet read, paid once it is recorded as settled, closed once a channel pairing's close is reported and read. Stale when the payment was claimed and, 604 800 seconds after its settleBy, no read has shown it settled or unable to settle: terminal, with a notice on the record, and never paid after that.
 
 An object. A member not listed here is refused.
 
 | Field | Type | Required | Constraints | Description |
 |---|---|---|---|---|
 | `atrHash` | [AtrHash](#atrhash) | yes |  |  |
-| `state` | `"issued"`, `"settling"`, `"paid"`, `"closed"` | yes |  |  |
+| `state` | `"issued"`, `"settling"`, `"paid"`, `"closed"`, `"stale"` | yes |  |  |
 | `expiresAt` | `string` | yes | format `date-time` |  |
 | `settlement` | `null` or `object` | yes |  |  |
 | `proves` | [Proves](#proves) | yes |  |  |

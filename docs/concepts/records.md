@@ -17,6 +17,7 @@ stateDiagram-v2
     settling --> paid: settlement read
     issued --> paid: report of a settled payment
     paid --> closed: report of a channel's close
+    settling --> stale: 604 800 s after settleBy, nothing read
 ```
 
 | State | Meaning |
@@ -25,6 +26,7 @@ stateDiagram-v2
 | `settling` | A payment was claimed, or reported, and its settlement is not yet read. The door finishes the record. |
 | `paid` | The payment is recorded as settled. |
 | `closed` | A channel pairing's close was reported and read. |
+| `stale` | A payment was claimed, and 604 800 seconds after its `settleBy` no read has shown it settled or unable to settle. Terminal: the record carries a notice and is never paid after that. |
 
 ## `proves`
 
@@ -55,7 +57,9 @@ payment, the buyer's agent pays a nominal amount in a payment whose signed paylo
 
 - `required`: the buyer has not paid the agreement URL yet;
 - `settling`: the agreement payment is settling;
-- `recorded`: the agreement payment is on chain, in `transaction` on `network`.
+- `recorded`: the agreement payment is on chain, in `transaction` on `network`;
+- `stale`: the agreement payment was claimed, and 604 800 seconds after its `settleBy` no read has shown it settled or
+  unable to settle. Terminal: the record carries a notice and the agreement is never recorded after that.
 
 `agreement` is `null` when the record needs no agreement step. See [the agreement step](../guides/agreement-step.md).
 
