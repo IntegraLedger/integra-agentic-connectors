@@ -167,15 +167,15 @@ The rail specifics are in the [Tron](./tron.md) and [Polkadot](./polkadot.md) gu
 
 ## Pending and repeated settles
 
-When the wait ends first, `/settle` answers `{success: false, errorReason: "settlement_pending", transaction}` with
-the transaction id or extrinsic hash; x402 requires that `transaction` not be empty. Call `/settle` again with the
-same request: it reads the chain from where it stopped, never submits twice, and returns the final answer once there
-is one. The facilitator keeps the payment's row until that final answer is written, however long that takes, so a
-repeat made after the validity window has ended still reads the chain. On Tron a payment is answered success once:
-every later `/settle` of it answers `invalid_transaction_state`
-with the transaction id, because x402's `exact` family requires that a consumed payment produce a settlement failure,
-never a success. An answer with an empty `transaction` means nothing was submitted. When the store cannot be read,
-the facilitator cannot know whether the payment was submitted, so it answers `settlement_pending` with the id.
+When the wait ends first, `/settle` answers `{success: false, errorReason: "settlement_pending", transaction}` with the
+transaction id or extrinsic hash; x402 requires that `transaction` not be empty. Call `/settle` again with the same
+request: it reads the chain from where it stopped, never submits twice, and returns the final answer once there is one.
+The facilitator keeps the payment's row until that final answer is written, however long that takes, so a repeat made
+after the validity window has ended still reads the chain. On Tron a payment is answered success once: every later
+`/settle` of it answers `invalid_transaction_state` with the transaction id, because x402's `exact` family requires that
+a consumed payment produce a settlement failure, never a success. An answer with an empty `transaction` means nothing
+was submitted. When the store cannot be read, the facilitator cannot know whether the payment was submitted, so it
+answers `settlement_pending` with the id.
 
 A payment whose success has been answered is consumed. On Polkadot, a repeated `/settle` for it answers
 `invalid_transaction_state` with the success's `transaction`, never a second success, as x402's `exact` family
@@ -192,13 +192,12 @@ one payment, one answers success and the other that failure.
   Tron, a transaction id the node already holds is refused.
 - **Success only from the chain.** `success: true` is given only when a node shows the transaction in a block with
   the profile's success conditions: on Tron, receipt result `SUCCESS` and a `Transfer` log from the token.
-- **What it does not check.** It checks that the payment carries H in the profile's form, not which H the seller
-  issued. Its store claims a payment's id once, so the payment is submitted once. On Tron and on Polkadot, a success is
-  answered only by the settle whose write stored it, and a repeated `/settle` of that payment answers
-  `invalid_transaction_state` with the transaction. Each profile's rule 6 puts the
-  remaining checks on the resource server: it accepts a payment only when the payment's H is one it issued for that
-  request and has not seen claimed. The seller door's `claim` makes both checks. It answers `404 claim/unknown` for an
-  H it holds no record of, `409 claim/not-this-request` for a payment of another request, and `409 claim/in-progress`
-  or `409 claim/paid` once the ATR's payment has been claimed. The facilitator checks the amount, asset and payee
-  against the requirements it is given because x402 requires that of a facilitator, and carries no business or legal
-  logic beyond that.
+- **What it does not check.** It checks that the payment carries H in the profile's form, not which H the seller issued.
+  Its store claims a payment's id once, so the payment is submitted once. On Tron and on Polkadot, a success is answered
+  only by the settle whose write stored it, and a repeated `/settle` of that payment answers `invalid_transaction_state`
+  with the transaction. Each profile's rule 6 puts the remaining checks on the resource server: it accepts a payment
+  only when the payment's H is one it issued for that request and has not seen claimed. The seller door's `claim` makes
+  both checks. It answers `404 claim/unknown` for an H it holds no record of, `409 claim/not-this-request` for a payment
+  of another request, and `409 claim/in-progress` or `409 claim/paid` once the ATR's payment has been claimed. The
+  facilitator checks the amount, asset and payee against the requirements it is given because x402 requires that of a
+  facilitator, and carries no business or legal logic beyond that.

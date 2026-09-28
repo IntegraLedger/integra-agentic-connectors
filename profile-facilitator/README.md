@@ -298,11 +298,11 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
    reads first the finalized blocks, then the blocks up to the head. In the block that holds the extrinsic, success
    needs `System.ExtrinsicSuccess`, `System.Remarked` for R's BLAKE2b-256 and `Assets.Transferred` for `asset`. A
    failure counts only in a finalized block.
-6. A finalized block the node cannot give, its body or, for the block that holds the extrinsic, its events, is
-   recorded as unread and skipped. The scan goes on to the blocks after it, so a success in a later block is still
-   found, and the unread block is read again on each later pass and on each repeat. A block read that cannot start
-   before the deadline, because the process's 4 block reads are all running, is recorded the same way. A block above the finalized head
-   that cannot be read is skipped, since it is read again at finality.
+6. A finalized block the node cannot give, its body or, for the block that holds the extrinsic, its events, is recorded
+   as unread and skipped. The scan goes on to the blocks after it, so a success in a later block is still found, and the
+   unread block is read again on each later pass and on each repeat. A block read that cannot start before the deadline,
+   because the process's 4 block reads are all running, is recorded the same way. A block above the finalized head that
+   cannot be read is skipped, since it is read again at finality.
 7. Once every block to the last is finalized without the extrinsic, and no block is unread, it can never be included:
    `invalid_transaction_state`.
 8. Stores the answer and returns it. A success is given only by the `/settle` that stores it. When it cannot be stored,
@@ -314,15 +314,15 @@ the extrinsic's hash.
 
 ### Pending and repeated settles
 
-When the wait ends first, `/settle` answers `{success: false, errorReason: "settlement_pending", transaction}` with
-the transaction id or extrinsic hash; x402 requires that `transaction` not be empty. Call `/settle` again with the
-same request: it reads the chain from where it stopped, never submits twice, and returns the final answer once there
-is one. The facilitator keeps the payment's row until that final answer is written, however long that takes, so a
-repeat made after the validity window has ended still reads the chain. On Tron a payment is answered success once:
-every later `/settle` of it answers `invalid_transaction_state`
-with the transaction id, because x402's `exact` family requires that a consumed payment produce a settlement failure,
-never a success. An answer with an empty `transaction` means nothing was submitted. When the store cannot be read,
-the facilitator cannot know whether the payment was submitted, so it answers `settlement_pending` with the id.
+When the wait ends first, `/settle` answers `{success: false, errorReason: "settlement_pending", transaction}` with the
+transaction id or extrinsic hash; x402 requires that `transaction` not be empty. Call `/settle` again with the same
+request: it reads the chain from where it stopped, never submits twice, and returns the final answer once there is one.
+The facilitator keeps the payment's row until that final answer is written, however long that takes, so a repeat made
+after the validity window has ended still reads the chain. On Tron a payment is answered success once: every later
+`/settle` of it answers `invalid_transaction_state` with the transaction id, because x402's `exact` family requires that
+a consumed payment produce a settlement failure, never a success. An answer with an empty `transaction` means nothing
+was submitted. When the store cannot be read, the facilitator cannot know whether the payment was submitted, so it
+answers `settlement_pending` with the id.
 
 A payment whose success has been answered is consumed. On Polkadot, a repeated `/settle` for it answers
 `invalid_transaction_state` with the success's `transaction`, never a second success, as x402's `exact` family
@@ -446,16 +446,15 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   Tron, a transaction id the node already holds is refused.
 - **Success only from the chain.** `success: true` is given only when a node shows the transaction in a block with
   the profile's success conditions: on Tron, receipt result `SUCCESS` and a `Transfer` log from the token.
-- **What it does not check.** It checks that the payment carries H in the profile's form, not which H the seller
-  issued. Its store claims a payment's id once, so the payment is submitted once. On Tron and on Polkadot, a success is
-  answered only by the settle whose write stored it, and a repeated `/settle` of that payment answers
-  `invalid_transaction_state` with the transaction. Each profile's rule 6 puts the
-  remaining checks on the resource server: it accepts a payment only when the payment's H is one it issued for that
-  request and has not seen claimed. The seller door's `claim` makes both checks. It answers `404 claim/unknown` for an
-  H it holds no record of, `409 claim/not-this-request` for a payment of another request, and `409 claim/in-progress`
-  or `409 claim/paid` once the ATR's payment has been claimed. The facilitator checks the amount, asset and payee
-  against the requirements it is given because x402 requires that of a facilitator, and carries no business or legal
-  logic beyond that.
+- **What it does not check.** It checks that the payment carries H in the profile's form, not which H the seller issued.
+  Its store claims a payment's id once, so the payment is submitted once. On Tron and on Polkadot, a success is answered
+  only by the settle whose write stored it, and a repeated `/settle` of that payment answers `invalid_transaction_state`
+  with the transaction. Each profile's rule 6 puts the remaining checks on the resource server: it accepts a payment
+  only when the payment's H is one it issued for that request and has not seen claimed. The seller door's `claim` makes
+  both checks. It answers `404 claim/unknown` for an H it holds no record of, `409 claim/not-this-request` for a payment
+  of another request, and `409 claim/in-progress` or `409 claim/paid` once the ATR's payment has been claimed. The
+  facilitator checks the amount, asset and payee against the requirements it is given because x402 requires that of a
+  facilitator, and carries no business or legal logic beyond that.
 
 ## Test vectors and conformance
 
