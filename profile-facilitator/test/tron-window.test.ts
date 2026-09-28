@@ -1,16 +1,17 @@
 // The validity window's end, on Tron. A dedupe row is kept for 24 h after `until` (the transaction's `expiration`), and a
 // repeat in that time reads the stored answer, then the chain, before anything is verified again: a pending answer must
-// be able to become final. A transaction is final as never included once no node holds it and the latest solidified
-// block is two 3-second slots past its expiration (the lcp tron entry point's status rule: a node accepts a transaction
-// only while `expiration` is after the head block's time). Until then the answer stays settlement_pending with the id. An
-// empty `transaction` says nothing was broadcast (x402), so it is never given for an id the store holds. Expected
-// values: those rules, and the lcp vectors' V2 (raw_data, id, payer, expiration).
+// be able to become final, and a success already answered makes the payment consumed. A transaction is final as never
+// included once no node holds it and the latest solidified block is two 3-second slots past its expiration (the lcp tron
+// entry point's status rule: a node accepts a transaction only while `expiration` is after the head block's time).
+// Until then the answer stays settlement_pending with the id. An empty `transaction` says nothing was broadcast (x402),
+// so it is never given for an id the store holds. Expected values: those rules, and the lcp vectors' V2 (raw_data, id,
+// payer, expiration).
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
 import { openStore } from "../src/store.js";
-import { fixture, freePort, freshDatabase, post, stub, type Stub } from "./support.js";
+import { fixture, freePort, freshDatabase, post, stub, tronChainReads, type Stub } from "./support.js";
 
 const RAW_V2 =
   "0a0289ad22087d1ddbe0b0adbe8740a0b6f4b18d34524d6c63703a7368613235363a3078626137383136626638663031636665613431343134306465356461653232323362303033363161333936313737613963623431306666363166323030313561645aae01081f12a9010a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412740a1541f39fd6e51aad88f6f4ce6ab8827279cfffb92266121541a614f803b6fd780986a42c78ec9c7f77e6ded13c2244a9059cbb000000000000000000000000209693bc6afc0c5328ba36faf03c514ef312287c000000000000000000000000000000000000000000000000000000000000271070c0e1f0b18d34900180c2d72f";
@@ -59,7 +60,7 @@ let solidTime = NOW_V2;
 let broadcast: unknown = { result: true, txid: TXID_V2 };
 
 async function start(settleWaitMs: number): Promise<void> {
-  node = await stub(async (path) => {
+  node = await stub(async (path, sent) => {
     if (path === "/wallet/triggerconstantcontract") return live["triggerSuccess"];
     if (path === "/wallet/broadcasthex") return broadcast;
     if (path === "/wallet/gettransactioninfobyid" || path === "/walletsolidity/gettransactioninfobyid") {
@@ -70,7 +71,7 @@ async function start(settleWaitMs: number): Promise<void> {
     if (path === "/walletsolidity/getnowblock") {
       return { blockID: "00", block_header: { raw_data: { number: 86542800, timestamp: solidTime } } };
     }
-    return {};
+    return tronChainReads(path, sent) ?? {};
   });
   const port = await freePort();
   const f = await serveProfileFacilitator({
@@ -103,7 +104,8 @@ afterEach(async () => {
 }, 60_000);
 
 describe("the end of a Tron transaction's validity window", () => {
-  it("a landed payment repeated after its expiration, inside the 24 h after it, gives the stored success", async () => {
+  it("a landed payment repeated after its expiration, inside the 24 h after it, is consumed: invalid_transaction_state with the id", async () => {
+    // x402's exact family: "A consumed primitive MUST produce a settlement failure, never a success."
     await start(1_000);
     const success = { success: true, transaction: TXID_V2, network: NETWORK, payer: PAYER };
     expect((await post(`${base}/settle`, body())).json).toEqual(success);
@@ -112,7 +114,12 @@ describe("the end of a Tron transaction's validity window", () => {
     const store = await openStore(db.url);
     await store.drop();
     await store.close();
-    expect((await post(`${base}/settle`, body())).json).toEqual(success);
+    expect((await post(`${base}/settle`, body())).json).toEqual({
+      success: false,
+      errorReason: "invalid_transaction_state",
+      transaction: TXID_V2,
+      network: NETWORK,
+    });
     expect(broadcasts()).toBe(1);
   });
 

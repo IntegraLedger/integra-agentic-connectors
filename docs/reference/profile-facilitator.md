@@ -41,15 +41,16 @@ controls, to the resource servers that use it.
 | `invalid_network` | yes | yes | The network is not one this facilitator is configured with. |
 | `invalid_payment_requirements` | yes | yes | The requirements are not ones the profile admits. |
 | `invalid_payload` | yes | yes | The payload does not match the profile or the requirements, or its signature or expiration fails. |
-| `unsupported_permission` | yes | yes | Tron: the transaction carries more than one signature. |
-| `invalid_transaction` | yes | yes | The node refuses the transaction in simulation or validation. |
-| `unexpected_verify_error` | yes | no | The node could not be read. |
+| `unsupported_permission` | yes | yes | Tron: the transaction carries more than one signature, or the owner's permission does not accept its one signature (the key's weight is below the threshold). |
+| `invalid_transaction` | yes | yes | The node refuses the transaction in simulation or validation. On Tron this includes a reference block (TaPoS) that does not match the node's. |
+| `unexpected_verify_error` | yes | no | The node or the store could not be read. |
 | `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission. |
 | `settlement_pending` | no | yes | Submitted, and not yet final when the wait ended. |
-| `invalid_transaction_state` | no | yes | Included and failed, or it can never be included. |
+| `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. |
 
-`unsupported_permission` and `invalid_transaction` are this facilitator's, for a multi-signature Tron owner and for
-a transaction the node refuses in simulation or validation. The others are the x402 specification's.
+`unsupported_permission` and `invalid_transaction` are this facilitator's, for a Tron owner permission that does not
+accept the transaction's one signature and for a transaction the node refuses in simulation or validation. The
+others are the x402 specification's.
 
 ## Storage
 
@@ -78,8 +79,11 @@ CREATE TABLE IF NOT EXISTS settlement (
 
 ## Bounds and logs
 
-- Each node call has a timeout of at most 5 seconds and an answer of at most 4 MiB.
+- Each node call has a timeout of at most 5 seconds and an answer of at most 4 MiB. On Tron, `/verify` makes six
+  FullNode calls: the account, the two id reads, the simulation and the head read at once, then the reference block
+  read.
 - A request body is at most 64 KiB. The server's request timeout is `settleWaitMs` plus 60 seconds.
 - The facilitator writes one JSON line on standard error for what the operator should see and the answer does not
-  carry: `settlement-failed` (with the events or receipt result the chain shows), `settlement-expired` and
+  carry: `settlement-failed` (with the events, or the receipt result and why the transfer does not count, that the
+  chain shows), `settlement-expired` and
   `answer-not-stored`.
