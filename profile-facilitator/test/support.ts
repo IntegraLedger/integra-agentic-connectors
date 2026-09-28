@@ -132,7 +132,8 @@ export const V2_HEAD = 86542790;
  * java-tron's HTTP shapes: `/wallet/getaccount` gives the default owner permission java-tron gives an account
  * (`AccountCapsule.createDefaultOwnerPermission`: the address's own key, weight 1, threshold 1); `/wallet/getnowblock`
  * the head; `/wallet/getblock` V2's reference block by number, and `{}` for a block it does not hold;
- * `/wallet/gettransactionbyid` `{}`, the answer for an id the node does not hold. Undefined for any other path.
+ * `/wallet/gettransactionbyid` and `/wallet/gettransactionfrompending` `{}`, the answer for an id the node does not
+ * hold in its blocks or its pending pool. Undefined for any other path.
  */
 export function tronChainReads(path: string, body: unknown): unknown {
   if (path === "/wallet/getaccount") {
@@ -148,6 +149,6 @@ export function tronChainReads(path: string, body: unknown): unknown {
       ? { blockID: V2_REF_BLOCK.id, block_header: { raw_data: { number: V2_REF_BLOCK.number } } }
       : {};
   }
-  if (path === "/wallet/gettransactionbyid") return {};
+  if (path === "/wallet/gettransactionbyid" || path === "/wallet/gettransactionfrompending") return {};
   return undefined;
 }

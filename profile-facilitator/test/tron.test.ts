@@ -114,6 +114,8 @@ interface Node {
   head?: unknown;
   /** `/wallet/gettransactionbyid`'s answer. */
   held?: () => unknown;
+  /** `/wallet/gettransactionfrompending`'s answer. */
+  pendingPool?: () => unknown;
 }
 
 let db: Awaited<ReturnType<typeof freshDatabase>>;
@@ -140,6 +142,7 @@ async function start(n: Node = {}, settleWaitMs = 3_000): Promise<void> {
     if (path === "/wallet/getnowblock" && n.head !== undefined) return n.head;
     if (path === "/wallet/getblock" && n.block !== undefined) return n.block((sent as { id_or_num: string }).id_or_num);
     if (path === "/wallet/gettransactionbyid" && n.held !== undefined) return n.held();
+    if (path === "/wallet/gettransactionfrompending" && n.pendingPool !== undefined) return n.pendingPool();
     return tronChainReads(path, sent) ?? {};
   });
   const port = await freePort();
@@ -429,6 +432,22 @@ describe("deduplication", () => {
       invalidReason: "invalid_transaction_state",
       payer: PAYER,
     });
+  });
+
+  it("refuses a transaction id in the node's pending pool as invalid_transaction_state, and broadcasts nothing", async () => {
+    // java-tron's /wallet/gettransactionfrompending returns a transaction its pending pool holds, and {} otherwise.
+    await start({ pendingPool: () => ({ txID: TXID_V2, raw_data_hex: RAW_V2, signature: [signatureV2] }) });
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({
+      isValid: false,
+      invalidReason: "invalid_transaction_state",
+      payer: PAYER,
+    });
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(STATE_FAILED);
+    expect(node.calls.filter((c) => c.path === "/wallet/gettransactionfrompending").map((c) => c.body)).toEqual([
+      { value: TXID_V2 },
+      { value: TXID_V2 },
+    ]);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(0);
   });
 
   it("a facilitator with another store refuses a transaction id the node already holds, and broadcasts nothing", async () => {

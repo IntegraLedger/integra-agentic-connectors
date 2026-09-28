@@ -193,9 +193,12 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     return id.slice(16, 32) === hexOf(refHash) ? null : "invalid_transaction";
   }
 
-  /** The FullNode does not hold the transaction id in a block. */
-  async function unheld(c: Checked, deadline: number): Promise<InvalidReason | null> {
-    const tx = await ask(c, "/wallet/gettransactionbyid", { value: c.txid }, deadline);
+  /**
+   * The FullNode does not hold the transaction id at `path`: `/wallet/gettransactionbyid` for its blocks, or
+   * `/wallet/gettransactionfrompending` for its pending pool. Each answers `{}` for an id it does not hold.
+   */
+  async function unheld(c: Checked, path: string, deadline: number): Promise<InvalidReason | null> {
+    const tx = await ask(c, path, { value: c.txid }, deadline);
     if (!isObject(tx)) return "unexpected_verify_error";
     return Object.keys(tx).length === 0 ? null : "invalid_transaction_state";
   }
@@ -222,7 +225,7 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
 
   /**
    * The expiration window, then the node reads, made together: the owner's permission, TaPoS, the ids the node holds
-   * and the simulation. The first refusal in that order is the answer. Each call is bounded by the node call bound and
+   * in its blocks and in its pending pool, and the simulation. The first refusal in that order is the answer. Each call is bounded by the node call bound and
    * by `deadline`.
    */
   async function checkNow(c: Checked, deadline = Infinity): Promise<InvalidReason | null> {
@@ -233,7 +236,8 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     const reads = await Promise.all([
       permitted(c, deadline),
       tapos(c, deadline),
-      unheld(c, deadline),
+      unheld(c, "/wallet/gettransactionbyid", deadline),
+      unheld(c, "/wallet/gettransactionfrompending", deadline),
       simulated(c, deadline),
     ]);
     return reads.find((r) => r !== null) ?? null;

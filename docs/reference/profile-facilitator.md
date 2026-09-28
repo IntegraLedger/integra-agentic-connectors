@@ -46,7 +46,7 @@ controls, to the resource servers that use it.
 | `unexpected_verify_error` | yes | no | The node or the store could not be read. |
 | `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission. |
 | `settlement_pending` | no | yes | Submitted, and not yet final when the wait ended. |
-| `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node or the store already holds the transaction id. |
+| `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. |
 
 `unsupported_permission` and `invalid_transaction` are this facilitator's, for a Tron owner permission that does not
 accept the transaction's one signature and for a transaction the node refuses in simulation or validation. The
@@ -79,8 +79,9 @@ CREATE TABLE IF NOT EXISTS settlement (
 
 ## Bounds and logs
 
-- Each node call has a timeout of at most 5 seconds and an answer of at most 4 MiB. On Tron, `/verify` makes five
-  FullNode calls: the account, id and simulation reads and the head read at once, then the reference block read.
+- Each node call has a timeout of at most 5 seconds and an answer of at most 4 MiB. On Tron, `/verify` makes six
+  FullNode calls: the account, the two id reads, the simulation and the head read at once, then the reference block
+  read.
 - A request body is at most 64 KiB. The server's request timeout is `settleWaitMs` plus 60 seconds.
 - The facilitator writes one JSON line on standard error for what the operator should see and the answer does not
   carry: `settlement-failed` (with the events, or the receipt result and why the transfer does not count, that the

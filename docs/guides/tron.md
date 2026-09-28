@@ -21,9 +21,10 @@ network's memo fee.
 | `payload.transaction` | The serialized, signed `Transaction`, in lowercase hex |
 
 The facilitator needs a FullNode (it calls `/wallet/getaccount`, `/wallet/getnowblock`, `/wallet/getblock`,
-`/wallet/gettransactionbyid`, `/wallet/triggerconstantcontract`, `/wallet/broadcasthex` and
-`/wallet/gettransactioninfobyid`) and a Solidity node (`/walletsolidity/gettransactioninfobyid` and
-`/walletsolidity/getnowblock`). A java-tron node serves both, on HTTP ports 8090 and 8091 by default.
+`/wallet/gettransactionbyid`, `/wallet/gettransactionfrompending`, `/wallet/triggerconstantcontract`,
+`/wallet/broadcasthex` and `/wallet/gettransactioninfobyid`) and a Solidity node
+(`/walletsolidity/gettransactioninfobyid` and `/walletsolidity/getnowblock`). A java-tron node serves both, on HTTP
+ports 8090 and 8091 by default.
 
 ## What `/verify` checks
 
@@ -39,7 +40,7 @@ In order; the first failure is the answer.
    transaction's owner, else `invalid_payload`.
 6. The store does not hold the transaction id, else `invalid_transaction_state`.
 7. `expiration` is in the future and no later than now plus `maxTimeoutSeconds`, else `invalid_payload`.
-8. Four reads of the FullNode, made together. The first refusal in this order is the answer, and a node that does
+8. Five reads of the FullNode, made together. The first refusal in this order is the answer, and a node that does
    not answer gives `unexpected_verify_error`:
    - **The owner's permission.** `/wallet/getaccount` gives the owner permission, and the weight it gives the
      owner's key must be at least its threshold, else `unsupported_permission`. An account with no owner permission
@@ -50,7 +51,8 @@ In order; the first failure is the answer.
      block whose number's bytes 6–7 are `ref_block_bytes`. The facilitator reads the head with
      `/wallet/getnowblock`, then that block with `/wallet/getblock`, and makes the same comparison, else
      `invalid_transaction`.
-   - **The id.** `/wallet/gettransactionbyid` must not find the transaction in a block, else
+   - **The id.** `/wallet/gettransactionbyid` must not find the transaction in a block, and
+     `/wallet/gettransactionfrompending` must not find it in the node's pending pool, else
      `invalid_transaction_state`.
    - **The simulation.** `/wallet/triggerconstantcontract` simulates the transfer without failure, else
      `invalid_transaction`.

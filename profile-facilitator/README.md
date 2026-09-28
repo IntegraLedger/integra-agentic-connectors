@@ -224,7 +224,7 @@ In order; the first failure is the answer.
    transaction's owner, else `invalid_payload`.
 6. The store does not hold the transaction id, else `invalid_transaction_state`.
 7. `expiration` is in the future and no later than now plus `maxTimeoutSeconds`, else `invalid_payload`.
-8. Four reads of the FullNode, made together. The first refusal in this order is the answer, and a node that does
+8. Five reads of the FullNode, made together. The first refusal in this order is the answer, and a node that does
    not answer gives `unexpected_verify_error`:
    - **The owner's permission.** `/wallet/getaccount` gives the owner permission, and the weight it gives the
      owner's key must be at least its threshold, else `unsupported_permission`. An account with no owner permission
@@ -235,7 +235,8 @@ In order; the first failure is the answer.
      block whose number's bytes 6–7 are `ref_block_bytes`. The facilitator reads the head with
      `/wallet/getnowblock`, then that block with `/wallet/getblock`, and makes the same comparison, else
      `invalid_transaction`.
-   - **The id.** `/wallet/gettransactionbyid` must not find the transaction in a block, else
+   - **The id.** `/wallet/gettransactionbyid` must not find the transaction in a block, and
+     `/wallet/gettransactionfrompending` must not find it in the node's pending pool, else
      `invalid_transaction_state`.
    - **The simulation.** `/wallet/triggerconstantcontract` simulates the transfer without failure, else
      `invalid_transaction`.
@@ -348,7 +349,7 @@ controls, to the resource servers that use it.
 | `unexpected_verify_error` | yes | no | The node or the store could not be read. |
 | `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission. |
 | `settlement_pending` | no | yes | Submitted, and not yet final when the wait ended. |
-| `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node or the store already holds the transaction id. |
+| `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. |
 
 `unsupported_permission` and `invalid_transaction` are this facilitator's, for a Tron owner permission that does not
 accept the transaction's one signature and for a transaction the node refuses in simulation or validation. The
@@ -381,8 +382,9 @@ CREATE TABLE IF NOT EXISTS settlement (
 
 ### Bounds and logs
 
-- Each node call has a timeout of at most 5 seconds and an answer of at most 4 MiB. On Tron, `/verify` makes five
-  FullNode calls: the account, id and simulation reads and the head read at once, then the reference block read.
+- Each node call has a timeout of at most 5 seconds and an answer of at most 4 MiB. On Tron, `/verify` makes six
+  FullNode calls: the account, the two id reads, the simulation and the head read at once, then the reference block
+  read.
 - A request body is at most 64 KiB. The server's request timeout is `settleWaitMs` plus 60 seconds.
 - The facilitator writes one JSON line on standard error for what the operator should see and the answer does not
   carry: `settlement-failed` (with the events, or the receipt result and why the transfer does not count, that the
@@ -419,7 +421,7 @@ java-tron's HTTP answers and its signature and TaPoS checks. They cover two conc
 submission), repeated settles while the node is down, a settle that finds its id claimed and unanswered, the end of
 each validity window (Tron's expiration and Polkadot's mortal era), and a Polkadot remark that spells H with
 upper-case digits, refused before the node is asked. On Tron they also cover the owner's permission, TaPoS, a
-transaction id the node or the store already holds, a consumed payment, and a `SUCCESS` receipt with and without the
+transaction id the node (in a block or its pending pool) or the store already holds, a consumed payment, and a `SUCCESS` receipt with and without the
 token's `Transfer` log, including the live USDT-TRC20 receipt whose `transfer` returned false. They need
 `INTEGRA_DATABASE_URL` set to a Postgres database.
 
@@ -428,9 +430,9 @@ token's `Transfer` log, including the live USDT-TRC20 receipt whose `transfer` r
 - Node.js `>=26.10.0`.
 - Postgres; the tests run on Postgres 18.
 - For Tron, a FullNode and a Solidity node with java-tron's HTTP API: the FullNode serves `/wallet/getaccount`,
-  `/wallet/getnowblock`, `/wallet/getblock`, `/wallet/gettransactionbyid`, `/wallet/triggerconstantcontract`,
-  `/wallet/broadcasthex` and `/wallet/gettransactioninfobyid`. For Polkadot, an Asset Hub RPC node that serves
-  JSON-RPC over HTTP.
+  `/wallet/getnowblock`, `/wallet/getblock`, `/wallet/gettransactionbyid`, `/wallet/gettransactionfrompending`,
+  `/wallet/triggerconstantcontract`, `/wallet/broadcasthex` and `/wallet/gettransactioninfobyid`. For Polkadot, an
+  Asset Hub RPC node that serves JSON-RPC over HTTP.
 
 ## Contributing
 
