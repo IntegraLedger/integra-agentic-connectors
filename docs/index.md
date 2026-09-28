@@ -1,6 +1,6 @@
 ---
 title: Integra agentic connectors
-description: The seller door contract that connectors speak, and an x402 facilitator for the LCP profiles on Tron and Polkadot.
+description: The seller door contract that connectors speak, and an x402 facilitator for the LCP profiles on Tron, Polkadot and Casper.
 ---
 
 # Integra agentic connectors
@@ -17,7 +17,7 @@ Two packages live here:
 | Package | What it is |
 |---|---|
 | [`@integraledger/agentic-connectors`](../contract/README.md) | The seller door's contract: an OpenAPI 3.1 document, its TypeScript types, its refusal table and its vectors. A connector (a commerce platform plugin, or a seller's own payment stack) speaks it to issue an ATR, claim a presented payment, report a settlement and read a record's status. |
-| [`@integraledger/profile-facilitator`](../profile-facilitator/README.md) | An x402 facilitator for two LCP profiles, `x402/exact/tron/lcp-trc20-memo` and `x402/exact/polkadot/lcp-assets-remark`. It verifies and settles payments whose signed transaction carries H. |
+| [`@integraledger/profile-facilitator`](../profile-facilitator/README.md) | An x402 facilitator for three LCP profiles, `x402/exact/tron/lcp-trc20-memo`, `x402/exact/polkadot/lcp-assets-remark` and `x402/exact/casper/lcp-runtime-arg`. It verifies and settles payments whose signed transaction carries H. |
 
 ```mermaid
 flowchart LR
@@ -34,7 +34,7 @@ flowchart LR
   [concepts](./concepts/proof-of-agreement.md), then [Getting started](./getting-started.md), then
   [the connector rules](./guides/connector-rules.md).
 - **You serve an x402 resource beside your own stack:** read [x402 beside a seller's stack](./guides/x402.md).
-- **You accept x402 payments on Tron or Polkadot:** read [Run the profile facilitator](./guides/facilitator.md).
+- **You accept x402 payments on Tron, Polkadot or Casper:** read [Run the profile facilitator](./guides/facilitator.md).
 - **You implement the seller door, or a test double of it:** read [the vectors guide](./guides/vectors.md) and the
   [seller door API](./reference/seller-door-api.md).
 

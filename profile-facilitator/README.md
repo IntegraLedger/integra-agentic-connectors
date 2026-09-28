@@ -1,8 +1,8 @@
 # @integraledger/profile-facilitator
 
-An x402 facilitator for two LCP profiles: `x402/exact/tron/lcp-trc20-memo` and
-`x402/exact/polkadot/lcp-assets-remark`. It verifies and settles payments whose payer-signed transaction carries the
-ATR hash, and it holds no key and pays no fee.
+An x402 facilitator for three LCP profiles: `x402/exact/tron/lcp-trc20-memo`,
+`x402/exact/polkadot/lcp-assets-remark` and `x402/exact/casper/lcp-runtime-arg`. It verifies and settles payments whose
+payer-signed transaction carries the ATR hash, and it holds no key and pays no fee.
 
 **Documentation:** [connectors.integraledger.com/guides/facilitator](https://connectors.integraledger.com/guides/facilitator)
 
@@ -18,6 +18,7 @@ Paying is then agreeing to that exact record, and the proof is on chain.
 |---|---|---|---|
 | `x402/exact/tron/lcp-trc20-memo` | `tron:<chain id in decimal>` | `lcp-trc20-memo` | The transaction's `raw_data.data`: the 77 ASCII bytes `lcp:sha256:` followed by H, beside one TRC-20 `transfer(payTo, amount)`. |
 | `x402/exact/polkadot/lcp-assets-remark` | `polkadot:68d56f15f85d3136970ec16946040bc1` (Polkadot Asset Hub) or `polkadot:67f9723393ef76214df0118c34bbbd3d` (Westend Asset Hub) | `lcp-assets-remark` | `system.remark_with_event(R)`, where R is `lcp:sha256:` followed by H, batched with `assets.transfer_keep_alive` in one `utility.batch_all`. |
+| `x402/exact/casper/lcp-runtime-arg` | `casper:casper` (mainnet) or `casper:casper-test` (testnet) | `lcp-runtime-arg` | The named runtime argument `lcp_atr_hash` of the signed `Version1` transaction: a `ByteArray(32)` holding H's 32 bytes, beside the native `Transfer` or a CEP-18 `transfer`. |
 
 This package implements each profile's rule 5, the facilitator's duties. The profiles themselves are published with
 `@integraledger/lcp`, in [integra-protocol](https://github.com/IntegraLedger/integra-protocol).
@@ -31,9 +32,10 @@ validate or simulate it, submits exactly the bytes the payer signed, deduplicate
 - **ATR hash (H):** SHA-256 over the ATR's exact bytes.
 - **Legal Context Protocol (LCP):** the pattern these profiles implement: the payment carries H, so paying is agreeing
   to that exact record.
-- **Pairing:** a payment protocol, scheme and rail combination. This facilitator serves two:
-  `x402/exact/tron/lcp-trc20-memo` and `x402/exact/polkadot/lcp-assets-remark`.
-- **Binding:** how H rides in a pairing's payment: here, the Tron memo and the Polkadot remark.
+- **Pairing:** a payment protocol, scheme and rail combination. This facilitator serves three:
+  `x402/exact/tron/lcp-trc20-memo`, `x402/exact/polkadot/lcp-assets-remark` and `x402/exact/casper/lcp-runtime-arg`.
+- **Binding:** how H rides in a pairing's payment: here, the Tron memo, the Polkadot remark and the Casper runtime
+  argument.
 - **Seller:** the party serving the resource. It calls this facilitator from its x402 resource server.
 - **Facilitator:** the x402 role that verifies and settles.
 - **Deduplication:** each payment is settled at most once, keyed by its network and transaction id, in Postgres.
@@ -79,6 +81,7 @@ const facilitator = await serveProfileFacilitator({
   listen: "127.0.0.1:4020",
   tron: [{ network: "tron:728126428", fullNode: "http://127.0.0.1:8090", solidityNode: "http://127.0.0.1:8091" }],
   polkadot: [{ network: "polkadot:68d56f15f85d3136970ec16946040bc1", rpc: "http://127.0.0.1:9944" }],
+  casper: [{ network: "casper:casper", rpc: "https://x402-facilitator.cspr.cloud/rpc" }],
   store: { url: process.env.DATABASE_URL ?? "postgres://postgres@127.0.0.1:5432/postgres" },
   settleWaitMs: 30_000,
 });
@@ -105,6 +108,14 @@ await facilitator.close();
       "network": "polkadot:68d56f15f85d3136970ec16946040bc1",
       "extra": {
         "assetTransferMethod": "lcp-assets-remark"
+      }
+    },
+    {
+      "x402Version": 2,
+      "scheme": "exact",
+      "network": "casper:casper",
+      "extra": {
+        "assetTransferMethod": "lcp-runtime-arg"
       }
     }
   ],
@@ -158,6 +169,7 @@ open connections, disconnects from the Polkadot nodes and closes the Postgres po
 | `listen` | `string` | `"host:port"`; an IPv6 host may be written in brackets. |
 | `tron` | `{ network, fullNode, solidityNode }[]`, optional | One entry per Tron network. `network` is `tron:<chain id in decimal>`. `fullNode` serves `/wallet/…` and `solidityNode` serves `/walletsolidity/…`; give each its base URL. |
 | `polkadot` | `{ network, rpc }[]`, optional | One entry per network, `polkadot:68d56f15f85d3136970ec16946040bc1` or `polkadot:67f9723393ef76214df0118c34bbbd3d`. `rpc` is an HTTP JSON-RPC endpoint that serves `state_call` and `author_submitExtrinsic`. |
+| `casper` | `{ network, rpc }[]`, optional | One entry per Casper network. `network` is `casper:` and the chainspec name, `casper:casper` or `casper:casper-test`. `rpc` is an HTTP JSON-RPC endpoint that serves `speculative_exec`, `account_put_transaction` and `info_get_transaction`. |
 | `store` | `{ url }` | The Postgres connection string. Postgres holds the deduplication table only. |
 | `settleWaitMs` | `number` | How long `/settle` waits for inclusion before it answers `settlement_pending`. A value that is not a positive finite number means 30 000. |
 
@@ -275,6 +287,42 @@ Success is `{success: true, transaction, network, payer}`, where `transaction` i
 While the extrinsic is broadcast but not yet in a block, the answer is `settlement_pending` with `transaction` set to
 the extrinsic's hash.
 
+### What `/verify` checks on Casper
+
+1. The network is configured, and the requirements are ones the profile admits, else `invalid_network` or
+   `invalid_payment_requirements`.
+2. `payload.transaction` holds a `Version1` transaction whose `chain_name` is the network's chainspec name, else
+   `invalid_payload`.
+3. The call is the one the requirements name: the native `Transfer` when `asset` is `native`, else `transfer` on the
+   CEP-18 package `asset` names. Its payee argument is `payTo` and its `amount` argument is `amount` as a `U512`, in
+   the asset's atomic units. Otherwise `invalid_payload`.
+4. There is an `lcp_atr_hash` argument, a `ByteArray(32)` whose 32 bytes are a well-formed ATR hash, else
+   `invalid_payload`.
+5. The transaction carries exactly one approval, else `unsupported_permission`. Its signer is the initiator and its
+   signature verifies over the transaction hash, ed25519 or secp256k1, else `invalid_payload`.
+6. The validity window, `timestamp` plus `ttl`, ends in the future and no later than now plus `maxTimeoutSeconds`,
+   else `invalid_payload`.
+7. `speculative_exec` executes the transaction without an error, else `invalid_transaction`. A node that cannot be read
+   gives `unexpected_verify_error`.
+
+The answer is `{isValid: true, payer}`, with `payer` the initiator's public key in tagged hex.
+
+### What `/settle` does on Casper
+
+1. Repeats every check of `/verify`.
+2. Reads the stored answer for the transaction hash, and returns a final one as it is.
+3. Claims the transaction hash with one conditional insert, so concurrent settles submit once.
+4. Submits the payer's bytes with `account_put_transaction`. A refusal that says the node already holds the transaction
+   counts as submitted.
+5. Reads `info_get_transaction` every second. An `execution_info` with no `error_message` is success; an error is
+   `invalid_transaction_state`. A transaction no node shows once its validity window has passed can never execute, and
+   is answered `invalid_transaction_state` too.
+6. Stores the answer and returns it.
+
+Success is `{success: true, transaction, network, payer}`, where `transaction` is the transaction hash in lowercase hex.
+The facilitator converts no decimals: `amount` is compared with the `U512` the transaction carries, in the asset's own
+atomic units, so native CSPR is in motes and a CEP-18 token is in its own units.
+
 ### Pending and repeated settles
 
 When the wait ends first, `/settle` answers `{success: false, errorReason: "settlement_pending", transaction}` with
@@ -317,7 +365,7 @@ controls, to the resource servers that use it.
 | `invalid_network` | yes | yes | The network is not one this facilitator is configured with. |
 | `invalid_payment_requirements` | yes | yes | The requirements are not ones the profile admits. |
 | `invalid_payload` | yes | yes | The payload does not match the profile or the requirements, or its signature or expiration fails. |
-| `unsupported_permission` | yes | yes | Tron: the transaction carries more than one signature. |
+| `unsupported_permission` | yes | yes | Tron: the transaction carries more than one signature. Casper: the transaction carries more than one approval. |
 | `invalid_transaction` | yes | yes | The node refuses the transaction in simulation or validation. |
 | `unexpected_verify_error` | yes | no | The node could not be read. |
 | `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission. |

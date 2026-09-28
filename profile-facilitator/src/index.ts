@@ -1,13 +1,14 @@
 /**
- * A reference x402 facilitator for two LCP profiles, `x402/exact/tron/lcp-trc20-memo` and
- * `x402/exact/polkadot/lcp-assets-remark`: `GET /supported`, `POST /verify` and `POST /settle` over `node:http`. It
- * holds no key and pays no fee; it checks, submits what the payer signed, deduplicates, and reports what the network
- * shows.
+ * A reference x402 facilitator for three LCP profiles, `x402/exact/tron/lcp-trc20-memo`,
+ * `x402/exact/polkadot/lcp-assets-remark` and `x402/exact/casper/lcp-runtime-arg`: `GET /supported`, `POST /verify` and
+ * `POST /settle` over `node:http`. It holds no key and pays no fee; it checks, submits what the payer signed,
+ * deduplicates, and reports what the network shows.
  */
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { LCP_ASSETS_REMARK, type PolkadotNetwork } from "@integraledger/lcp/polkadot";
 import { LCP_TRC20_MEMO } from "@integraledger/lcp/tron";
 import { failed, readRequest, type FacilitatorRequest, type SettleAnswer, type VerifyAnswer } from "./answers.js";
+import { createCasper, LCP_RUNTIME_ARG, type CasperNetwork } from "./casper.js";
 import { readRequestJson, sendJson } from "./http.js";
 import { createPolkadot } from "./polkadot.js";
 import { openStore, type SettlementStore } from "./store.js";
@@ -21,6 +22,8 @@ export interface ProfileFacilitatorConfig {
   tron?: { network: `tron:${number}`; fullNode: string; solidityNode: string }[];
   /** An RPC node that serves `state_call` and `author_submitExtrinsic`. */
   polkadot?: { network: PolkadotNetwork; rpc: string }[];
+  /** An RPC node that serves `speculative_exec`, `account_put_transaction` and `info_get_transaction`. */
+  casper?: { network: CasperNetwork; rpc: string }[];
   /** Postgres, for deduplication only. */
   store: { url: string };
   /** How long `/settle` waits for inclusion before answering `settlement_pending`; default 30 000. */
@@ -55,6 +58,11 @@ export async function serveProfileFacilitator(c: ProfileFacilitatorConfig): Prom
     store,
     settleWaitMs,
   );
+  const casper = createCasper(
+    (c.casper ?? []).map((n) => ({ ...n, rpc: trimmed(n.rpc) })),
+    store,
+    settleWaitMs,
+  );
 
   const supported = {
     kinds: [
@@ -70,6 +78,12 @@ export async function serveProfileFacilitator(c: ProfileFacilitatorConfig): Prom
         network,
         extra: { assetTransferMethod: LCP_ASSETS_REMARK },
       })),
+      ...casper.networks.map((network) => ({
+        x402Version: 2,
+        scheme: "exact",
+        network,
+        extra: { assetTransferMethod: LCP_RUNTIME_ARG },
+      })),
     ],
     extensions: [],
     signers: {},
@@ -79,6 +93,7 @@ export async function serveProfileFacilitator(c: ProfileFacilitatorConfig): Prom
     const n = r.paymentRequirements.network;
     if (tron.networks.includes(n)) return tron;
     if (polkadot.networks.includes(n)) return polkadot;
+    if (casper.networks.includes(n)) return casper;
     return undefined;
   }
 
