@@ -20,7 +20,8 @@ network's memo fee.
 | `extra.assetTransferMethod` | `lcp-trc20-memo` |
 | `payload.transaction` | The serialized, signed `Transaction`, in lowercase hex |
 
-The facilitator needs a FullNode (it calls `/wallet/triggerconstantcontract`, `/wallet/broadcasthex` and
+The facilitator needs a FullNode (it calls `/wallet/getaccount`, `/wallet/getnowblock`, `/wallet/getblock`,
+`/wallet/gettransactionbyid`, `/wallet/triggerconstantcontract`, `/wallet/broadcasthex` and
 `/wallet/gettransactioninfobyid`) and a Solidity node (`/walletsolidity/gettransactioninfobyid` and
 `/walletsolidity/getnowblock`). A java-tron node serves both, on HTTP ports 8090 and 8091 by default.
 
@@ -35,25 +36,47 @@ In order; the first failure is the answer.
 3. `asset` and `payTo` are Tron addresses, else `invalid_payment_requirements`.
 4. The contract called is `asset`, and the call data is exactly `transfer(payTo, amount)`, else `invalid_payload`.
 5. The transaction carries exactly one signature, else `unsupported_permission`. That signature recovers to the
-   transaction's owner, else `invalid_payload`. A multi-signature owner permission is not served.
-6. `expiration` is in the future and no later than now plus `maxTimeoutSeconds`, else `invalid_payload`.
-7. The FullNode's `/wallet/triggerconstantcontract` simulates the transfer without failure, else
-   `invalid_transaction`. A node that does not answer gives `unexpected_verify_error`.
+   transaction's owner, else `invalid_payload`.
+6. The store does not hold the transaction id, else `invalid_transaction_state`.
+7. `expiration` is in the future and no later than now plus `maxTimeoutSeconds`, else `invalid_payload`.
+8. Four reads of the FullNode, made together. The first refusal in this order is the answer, and a node that does
+   not answer gives `unexpected_verify_error`:
+   - **The owner's permission.** `/wallet/getaccount` gives the owner permission, and the weight it gives the
+     owner's key must be at least its threshold, else `unsupported_permission`. An account with no owner permission
+     set, or one the node does not hold, has the network's default: its own key, weight 1, threshold 1. So a
+     multi-signature owner, or an owner whose permission does not hold the address's own key, is refused here
+     rather than at broadcast.
+   - **TaPoS.** The node accepts a transaction only when `ref_block_hash` equals bytes 8–15 of the id of the latest
+     block whose number's bytes 6–7 are `ref_block_bytes`. The facilitator reads the head with
+     `/wallet/getnowblock`, then that block with `/wallet/getblock`, and makes the same comparison, else
+     `invalid_transaction`.
+   - **The id.** `/wallet/gettransactionbyid` must not find the transaction in a block, else
+     `invalid_transaction_state`.
+   - **The simulation.** `/wallet/triggerconstantcontract` simulates the transfer without failure, else
+     `invalid_transaction`.
 
 The answer is `{isValid: true, payer}`, with `payer` the owner in base58check.
 
 ## What `/settle` does
 
-1. Repeats every check of `/verify`.
-2. Reads the stored answer for the transaction id. A final one is returned as it is, so a repeated `/settle` gets the
-   first answer.
-3. Claims the transaction id with one conditional insert, so concurrent settles of one payment broadcast once.
-4. Broadcasts the signed bytes with `/wallet/broadcasthex`. A `DUP_TRANSACTION_ERROR` counts as broadcast.
-5. Reads the receipt with `gettransactioninfobyid` every second. `SUCCESS` at the FullNode is success. Any other
-   result is a failure only once the Solidity node, which serves solidified blocks alone, shows it. A transaction
-   whose expiration has passed and that no node shows once the solidified head is two slots past it can never be
-   included, and is answered `invalid_transaction_state`.
-6. Stores the answer and returns it.
+1. Repeats the checks of `/verify` that read neither the store nor the node (steps 1 to 5).
+2. Reads the stored answer for the transaction id. A stored success means the payment is consumed: the answer is
+   `invalid_transaction_state` with the transaction id, never a second success. Any other final answer is returned
+   as it is. A claimed id, or a stored `settlement_pending`, goes on to step 6 and broadcasts nothing.
+3. For an id the store does not hold, repeats the expiration check and the node reads of `/verify`. An id the node
+   already holds is a consumed payment, answered `invalid_transaction_state` with the id.
+4. Claims the transaction id with one conditional insert, so concurrent settles of one payment broadcast once.
+5. Broadcasts the signed bytes with `/wallet/broadcasthex`. A `DUP_TRANSACTION_ERROR` counts as broadcast.
+6. Reads the transaction's status every second with `@integraledger/lcp`'s `tronStatus`: the Solidity node's
+   `gettransactioninfobyid` first, then the FullNode's. Success requires receipt result `SUCCESS` **and** a
+   `Transfer` log emitted by `asset`. The value the call returned is not read: a TRC-20 token may return false from
+   `transfer` and still transfer, and USDT-TRC20 does. A receipt with another result, or `SUCCESS` with no such log,
+   is a failure only once the Solidity node, which serves solidified blocks alone, shows it. A transaction whose
+   expiration has passed and that no node shows once the solidified head is two slots past it can never be included.
+   Each failure is answered `invalid_transaction_state`.
+7. Stores the answer and returns it. A success is returned only by the settle whose write stored it, so of two
+   concurrent settles of one payment, one answers success and the other `invalid_transaction_state` with the id. A
+   success whose write fails is answered `settlement_pending` with the id.
 
 Success is `{success: true, transaction, network, payer}`, where `transaction` is the transaction id in hex.
 
