@@ -175,19 +175,25 @@ with the transaction id, because x402's `exact` family requires that a consumed 
 never a success. An answer with an empty `transaction` means nothing was submitted. When the store cannot be read,
 the facilitator cannot know whether the payment was submitted, so it answers `settlement_pending` with the id.
 
+A payment whose success has been answered is consumed. On Polkadot, a repeated `/settle` for it answers
+`invalid_transaction_state` with the success's `transaction`, never a second success, as x402's `exact` family
+requires: *"A consumed primitive MUST produce a settlement failure, never a success."* Of two concurrent settles of
+one payment, one answers success and the other that failure.
+
 ## Security
 
 - **No key, no fee.** The facilitator signs nothing. It submits exactly the bytes the payer signed, and the payer pays
   every fee, as both profiles require.
 - **Settled once.** Settlements are deduplicated by transaction id or extrinsic hash, atomically, until the validity
-  window ends and for 24 hours after. On Tron a payment is answered success once, across every process that shares
-  the store, and a transaction id the node already holds is refused.
+  window ends and for 24 hours after. A payment is answered success once, across every process that shares
+  the store, to the `/settle` whose write stores it, on Tron and on Polkadot. On Tron, a transaction id the node
+  already holds is refused.
 - **Success only from the chain.** `success: true` is given only when a node shows the transaction in a block with
   the profile's success conditions: on Tron, receipt result `SUCCESS` and a `Transfer` log from the token.
 - **What it does not check.** It checks that the payment carries H in the profile's form, not which H the seller
-  issued. Its store claims a payment's id once, so the payment is submitted once. On Tron, a success is answered only
-  by the settle whose write stored it, and a repeated `/settle` of that payment answers `invalid_transaction_state`
-  with the transaction; on Polkadot, a repeated `/settle` gets the stored answer. Each profile's rule 6 puts the
+  issued. Its store claims a payment's id once, so the payment is submitted once. On Tron and on Polkadot, a success is
+  answered only by the settle whose write stored it, and a repeated `/settle` of that payment answers
+  `invalid_transaction_state` with the transaction. Each profile's rule 6 puts the
   remaining checks on the resource server: it accepts a payment only when the payment's H is one it issued for that
   request and has not seen claimed. The seller door's `claim` makes both checks. It answers `404 claim/unknown` for an
   H it holds no record of, `409 claim/not-this-request` for a payment of another request, and `409 claim/in-progress`

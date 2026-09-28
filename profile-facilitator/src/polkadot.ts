@@ -27,7 +27,7 @@ import {
   type SettleAnswer,
   type VerifyAnswer,
 } from "./answers.js";
-import { NODE_TIMEOUT_MS, NodeError, postJson, sleep, within } from "./http.js";
+import { NODE_MAX_BYTES, NODE_TIMEOUT_MS, NodeError, postJson, sleep, within } from "./http.js";
 import { answerReserve, inTime, type SettlementStore, type Stored } from "./store.js";
 
 export interface PolkadotNode {
@@ -71,8 +71,8 @@ function seenBefore(e: RpcError): boolean {
   return e.code === INVALID_TRANSACTION && /outdated|stale/i.test(`${e.message} ${e.data}`);
 }
 
-async function rpc(url: string, method: string, params: unknown[], timeoutMs?: number): Promise<unknown> {
-  const answer = await postJson(url, { jsonrpc: "2.0", id: 1, method, params }, timeoutMs);
+async function rpc(url: string, method: string, params: unknown[], timeoutMs?: number, maxBytes?: number): Promise<unknown> {
+  const answer = await postJson(url, { jsonrpc: "2.0", id: 1, method, params }, timeoutMs, maxBytes);
   if (!isObject(answer)) throw new NodeError("malformed", true, `${method}: not a JSON-RPC answer`);
   const error = answer["error"];
   if (isObject(error)) {
@@ -124,6 +124,36 @@ function blockNumber(header: unknown): number | undefined {
   return undefined;
 }
 
+/**
+ * The runtime's bounds, from its metadata. `blockAnswerBytes` is the most bytes a `chain_getBlock` answer can take for
+ * a block within `System.BlockLength`: an extrinsic of n encoded bytes (n >= 2: its length prefix and its version
+ * byte) is at most 2n + 5 JSON characters (`"0x…",`), so the body's largest class limit L takes at most 9L/2; a
+ * header digest item of n >= 1 bytes takes at most 7n, within `maxHeaderSize`; and `NODE_MAX_BYTES` more holds the
+ * header's fixed fields and the JSON-RPC envelope. `blockHashCount` is `System.BlockHashCount`.
+ */
+interface RuntimeBounds {
+  blockAnswerBytes: number;
+  blockHashCount: number;
+}
+
+function isCount(v: unknown): v is number {
+  return typeof v === "number" && Number.isSafeInteger(v) && v >= 0;
+}
+
+/** `System.BlockLength` and `System.BlockHashCount` from the metadata; undefined when either is missing or malformed. */
+function runtimeBounds(api: ApiPromise): RuntimeBounds | undefined {
+  const system = api.consts["system"];
+  const length = system?.["blockLength"]?.toJSON();
+  const count = Number(system?.["blockHashCount"]?.toString());
+  if (!isObject(length) || !isObject(length["max"]) || !isCount(count) || count === 0) return undefined;
+  const classes = [length["max"]["normal"], length["max"]["operational"], length["max"]["mandatory"]];
+  if (!classes.every(isCount)) return undefined;
+  const header = length["maxHeaderSize"];
+  const headerBytes = isCount(header) ? header : 0;
+  const body = Math.max(...classes);
+  return { blockAnswerBytes: NODE_MAX_BYTES + Math.ceil((9 * body) / 2) + 7 * headerBytes, blockHashCount: count };
+}
+
 interface EventRecordLike {
   phase: { isApplyExtrinsic: boolean; asApplyExtrinsic: { toNumber(): number } };
   event: { section: string; method: string; data: readonly { toString(): string; toHex(): string }[] };
@@ -141,6 +171,7 @@ interface Checked {
   era: { birth(current: number): number; death(current: number): number };
   /** The storage key of `System.Events`. */
   eventsKey: string;
+  bounds: RuntimeBounds;
 }
 
 /** What rule 5 checks from the request alone: the lcp profile, the requirements, and the extrinsic's hash. */
@@ -247,7 +278,8 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     }
     if (!xt.era.isMortalEra) return "invalid_payload";
     const eventsKey = api.query["system"]?.["events"]?.key();
-    if (eventsKey === undefined) return "unexpected_verify_error";
+    const bounds = runtimeBounds(api);
+    if (eventsKey === undefined || bounds === undefined) return "unexpected_verify_error";
     return {
       network: l.node.network,
       api,
@@ -258,12 +290,24 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       remarkHash: l.remarkHash,
       era: xt.era.asMortalEra,
       eventsKey,
+      bounds,
     };
   }
 
   /**
+   * The last block that can include the extrinsic, for a block `at` from its era's birth to that last block: the era's
+   * last block, and no later than `BlockHashCount` + 1 blocks after its birth. Each block's execution keeps the hashes of
+   * the `BlockHashCount` + 1 blocks before it in `System.BlockHash`, and `CheckMortality` refuses an extrinsic whose
+   * birth block's hash is not there.
+   */
+  function lastBlock(c: Checked, at: number): number {
+    const birth = c.era.birth(at);
+    return Math.min(c.era.death(at) - 1, birth + c.bounds.blockHashCount + 1);
+  }
+
+  /**
    * `TaggedTransactionQueue_validate_transaction` at the best block, within `timeoutMs`: the best block's height, and
-   * when the era ends.
+   * when the last block that can include the extrinsic ends.
    */
   async function validate(c: Checked, timeoutMs = 3 * NODE_TIMEOUT_MS): Promise<{ best: number; until: Date } | InvalidReason> {
     const url = byNetwork.get(c.network)!.rpc;
@@ -288,7 +332,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     const height = blockNumber(header);
     if (height === undefined || typeof validity !== "string") return "unexpected_verify_error";
     if (!validity.startsWith("0x00")) return "invalid_transaction";
-    const blocksLeft = Math.max(0, c.era.death(height) - height);
+    const blocksLeft = Math.max(0, lastBlock(c, height) + 1 - height);
     return { best: height, until: new Date(Date.now() + blocksLeft * SLOW_BLOCK_MS) };
   }
 
@@ -329,10 +373,16 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     return failed("invalid_transaction_state", timepoint, c.network);
   }
 
-  /** Where a scan has got to: `proven` is the first block from `since` not yet read at finality; `next`, at the head. */
+  /**
+   * Where a scan has got to: `proven` is the first block from `since` not yet read at finality; `next`, at the head;
+   * `unread`, the finalized blocks below `proven` that could not be read; `resolved`, blocks of the stored `unread` that
+   * this scan has read since.
+   */
   interface Scan {
     proven: number;
     next: number;
+    unread: number[];
+    resolved: number[];
   }
 
   /** The finalized head's height, read before `deadline`; undefined when the node does not give it. */
@@ -345,62 +395,110 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     }
   }
 
+  /** The head's height; undefined when the node does not give it. */
+  async function headHeight(url: string, left: () => number): Promise<number | undefined> {
+    try {
+      return blockNumber(await rpc(url, "chain_getHeader", [], left()));
+    } catch {
+      return undefined;
+    }
+  }
+
   /** The extrinsic's index in the block at `n`, and the block's hash; the index is -1 when the block does not hold it. */
   async function findIn(c: Checked, url: string, n: number, left: () => number): Promise<{ hash: string; index: number }> {
     const hash = await rpc(url, "chain_getBlockHash", [n], left());
-    const block = await rpc(url, "chain_getBlock", [hash], left());
+    const block = await rpc(url, "chain_getBlock", [hash], left(), c.bounds.blockAnswerBytes);
     const xts = isObject(block) && isObject(block["block"]) ? block["block"]["extrinsics"] : undefined;
     if (typeof hash !== "string" || !Array.isArray(xts)) throw new NodeError("malformed", true, `block ${n}`);
     return { hash, index: xts.findIndex((x) => isLowerHex(x) && extrinsicHash(Buffer.from(x.slice(2), "hex")) === c.id) };
   }
 
   /**
-   * One pass until `deadline`, no further than the era's last block. First the blocks from `at.proven` up to the
-   * finalized head, which are read at finality; once every block to the era's last is read so, the extrinsic can never
-   * be included, and the answer is `invalid_transaction_state` with its hash. Then the blocks above them, up to the head,
-   * where only a success is an answer: a failure there waits until its block is final. Gives the final answer, or where
-   * the scan has got to.
+   * Block `n` read for the extrinsic: the answer when the block holds it, `absent` when it does not, `unreadable` (with
+   * the node's reason) when the node gives neither the block nor, for the block that holds it, its events, and `stopped`
+   * when the deadline ends the read.
+   */
+  async function readBlock(
+    c: Checked,
+    url: string,
+    n: number,
+    left: () => number,
+    final: boolean,
+  ): Promise<SettleAnswer | "absent" | "stopped" | { unreadable: string }> {
+    try {
+      const found = await findIn(c, url, n, left);
+      if (found.index < 0) return "absent";
+      return await included(c, url, found.hash, found.index, left(), final);
+    } catch (e) {
+      if (left() <= 0) return "stopped";
+      return { unreadable: e instanceof Error ? e.message : String(e) };
+    }
+  }
+
+  /**
+   * One pass until `deadline`, no further than the last block that can include the extrinsic. First the blocks from
+   * `at.proven` up to the finalized head, read at finality: a block that cannot be read is recorded as unread and
+   * skipped, and the pass goes on to the blocks after it. Then the blocks above them, up to the head, where only a
+   * success is an answer: a failure there waits until its block is final, and a block that cannot be read is skipped,
+   * since it is read again at finality. Then, with the time left, the blocks recorded as unread before this pass are
+   * read again. Once every block to the last is read at finality, and none is unread, the extrinsic can never be
+   * included, and the answer is `invalid_transaction_state` with its hash. Gives the final answer, or where the scan has
+   * got to.
    */
   async function scanOnce(c: Checked, since: number, at: Scan, deadline: number): Promise<{ answer: SettleAnswer } | Scan> {
     const url = byNetwork.get(c.network)!.rpc;
     const left = () => deadline - performance.now();
-    const last = c.era.death(since) - 1;
+    const last = lastBlock(c, since);
     let { proven, next } = at;
-    try {
-      const finalized = await finalizedHeight(url, deadline);
-      while (finalized !== undefined && proven <= Math.min(finalized, last) && left() > 0) {
-        const found = await findIn(c, url, proven, left);
-        if (found.index >= 0) return { answer: await included(c, url, found.hash, found.index, left(), true) };
-        proven += 1;
+    const unread = new Set(at.unread);
+    const resolved = new Set(at.resolved);
+    const position = (): Scan => ({ proven, next, unread: [...unread].sort((a, b) => a - b), resolved: [...resolved] });
+    const finalized = await finalizedHeight(url, deadline);
+    while (finalized !== undefined && proven <= Math.min(finalized, last) && left() > 0) {
+      const read = await readBlock(c, url, proven, left, true);
+      if (read === "stopped") return position();
+      if (typeof read === "object" && "unreadable" in read) {
+        unread.add(proven);
+        operatorLog({ event: "block-unreadable", network: c.network, transaction: c.id, block: proven, reason: read.unreadable });
+      } else if (read !== "absent") {
+        return { answer: read };
       }
-      if (proven > last) {
-        operatorLog({ event: "settlement-expired", network: c.network, transaction: c.id });
-        return { answer: failed("invalid_transaction_state", c.id, c.network) };
-      }
-      next = Math.max(next, proven);
-      const head = blockNumber(await rpc(url, "chain_getHeader", [], left()));
-      while (head !== undefined && next <= Math.min(head, last) && left() > 0) {
-        const found = await findIn(c, url, next, left);
-        if (found.index >= 0) {
-          const answer = await included(c, url, found.hash, found.index, left(), false);
-          if (answer.success) return { answer };
-          break;
-        }
-        next += 1;
-      }
-    } catch {
-      // A failed read leaves the scan where it is; the next poll reads again.
+      proven += 1;
     }
-    return { proven, next };
+    next = Math.max(next, proven);
+    const head = await headHeight(url, left);
+    while (head !== undefined && next <= Math.min(head, last) && left() > 0) {
+      const read = await readBlock(c, url, next, left, false);
+      if (read === "stopped") return position();
+      if (typeof read === "object" && !("unreadable" in read)) {
+        if (read.success) return { answer: read };
+        break;
+      }
+      next += 1;
+    }
+    for (const n of at.unread) {
+      if (finalized === undefined || n > finalized || left() <= 0) break;
+      const read = await readBlock(c, url, n, left, true);
+      if (read === "stopped") return position();
+      if (typeof read === "object" && "unreadable" in read) continue;
+      unread.delete(n);
+      resolved.add(n);
+      if (read !== "absent") return { answer: read };
+    }
+    if (proven > last && unread.size === 0) {
+      operatorLog({ event: "settlement-expired", network: c.network, transaction: c.id });
+      return { answer: failed("invalid_transaction_state", c.id, c.network) };
+    }
+    return position();
   }
 
   /**
-   * Scans for the extrinsic from `since` every second until `deadline`, reading the stored answer too when `stored` is
-   * set, and answers with the first final answer either gives. Blocks read at finality that do not hold it move the
-   * stored `since` on. Submits nothing.
+   * Scans for the extrinsic from `since`, with the stored `unread` blocks, every second until `deadline`, reading the
+   * stored answer too when `stored` is set, and answers with the first final answer either gives. Where the scan got to
+   * at finality is stored: `since` moves on, and the blocks it could not read are recorded. Submits nothing.
    */
-  async function scan(c: Checked, since: number, deadline: number, stored: boolean): Promise<SettleAnswer> {
-    let at: Scan = { proven: since, next: since };
+  async function scan(c: Checked, since: number, unread: number[], deadline: number, stored: boolean): Promise<SettleAnswer> {
+    let at: Scan = { proven: since, next: since, unread, resolved: [] };
     for (;;) {
       if (stored) {
         const row = await inTime(s.read(c.network, c.id), deadline).catch(() => undefined);
@@ -410,7 +508,10 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       if ("answer" in step) return step.answer;
       at = step;
       if (performance.now() + POLL_MS > deadline) {
-        if (at.proven > since) void s.advance(c.network, c.id, at.proven).catch(() => {});
+        if (at.proven > since || at.unread.length > 0 || at.resolved.length > 0) {
+          const to = Math.min(at.proven, lastBlock(c, since));
+          void s.advance(c.network, c.id, { from: since, to, unread: at.unread, resolved: at.resolved }).catch(() => {});
+        }
         return pending(c.id, c.network);
       }
       await sleep(POLL_MS);
@@ -430,33 +531,55 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       if (e instanceof NodeError && !e.sent) return failed("unexpected_settle_error", "", c.network);
       if (!(e instanceof RpcError)) return pending(c.id, c.network);
     }
-    return scan(c, since, deadline, false);
+    return scan(c, since, [], deadline, false);
   }
 
-  /** Stores the answer, unless the row holds a final one; a failed write leaves the row for a later read of the chain. */
+  /**
+   * What a repeated `/settle` gets for a stored answer. A success is given once, to the settle that stored it, so the
+   * payment is consumed: a repeat gets `invalid_transaction_state` with the success's transaction (x402's `exact`
+   * family: a consumed primitive produces a settlement failure, never a success). Any other answer is given as stored.
+   */
+  function repeatOf(stored: SettleAnswer): SettleAnswer {
+    if (!stored.success) return stored;
+    operatorLog({ event: "settlement-consumed", network: stored.network, transaction: stored.transaction });
+    return failed("invalid_transaction_state", stored.transaction, stored.network);
+  }
+
+  /**
+   * Stores the answer, unless the row holds a final one. A success is given only by the settle whose write stored it:
+   * when the row already holds a final answer, the answer is what a repeat gets for it, and when the write fails, it is
+   * pending with the hash, for a later read of the chain. Any other answer is given whether or not it is stored; a
+   * failed write leaves the row for a later read of the chain.
+   */
   async function keep(c: { network: string; id: string }, answer: SettleAnswer, deadline: number): Promise<SettleAnswer> {
-    await inTime(s.answer(c.network, c.id, answer), deadline).catch(() => {
+    let wrote: boolean;
+    try {
+      wrote = await inTime(s.answer(c.network, c.id, answer), deadline);
+    } catch {
       operatorLog({ event: "answer-not-stored", network: c.network, transaction: c.id });
-    });
-    return answer;
+      return answer.success ? pending(c.id, c.network) : answer;
+    }
+    if (!answer.success || wrote) return answer;
+    const row = await inTime(s.read(c.network, c.id), deadline).catch(() => undefined);
+    return row?.state === "answered" && !isPending(row.answer) ? repeatOf(row.answer) : pending(c.id, c.network);
   }
 
   /**
    * Reads a claimed id, or a stored pending answer, again from the chain until the answer's reserve before `deadline`,
-   * then stores what it read.
+   * from the stored `since` and `unread`, then stores what it read.
    */
-  async function follow(l: Local, since: number | null, deadline: number): Promise<SettleAnswer> {
+  async function follow(l: Local, since: number | null, unread: number[], deadline: number): Promise<SettleAnswer> {
     const c = await decode(l, deadline - performance.now());
     if (typeof c === "string" || since === null) {
       const row = await inTime(s.read(l.node.network, l.id), deadline).catch(() => undefined);
-      return row?.state === "answered" ? row.answer : pending(l.id, l.node.network);
+      return row?.state === "answered" ? repeatOf(row.answer) : pending(l.id, l.node.network);
     }
-    return keep(c, await scan(c, since, deadline - answerReserve(settleWaitMs), true), deadline);
+    return keep(c, await scan(c, since, unread, deadline - answerReserve(settleWaitMs), true), deadline);
   }
 
   /**
    * Answers within `settleWaitMs`. The stored answer is read before the node is asked anything, and a final one is
-   * given as it is. A claimed id, or a stored pending answer, is read again from the chain. An answer with no
+   * given as a repeat gets it. A claimed id, or a stored pending answer, is read again from the chain. An answer with no
    * transaction says nothing was submitted, so it is given only for an id the store does not hold: a submission the node
    * refused releases the claim, and when nothing is released the answer is pending with its hash. When the store cannot
    * be read, the facilitator cannot know whether the extrinsic was submitted, so the answer is pending with its hash. The
@@ -476,8 +599,8 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     } catch {
       return pending(l.id, l.node.network);
     }
-    if (stored.state === "answered" && !isPending(stored.answer)) return stored.answer;
-    if (stored.state !== "none") return follow(l, stored.since, deadline);
+    if (stored.state === "answered" && !isPending(stored.answer)) return repeatOf(stored.answer);
+    if (stored.state !== "none") return follow(l, stored.since, stored.unread, deadline);
     const c = await decode(l, left());
     if (typeof c === "string") return failed(settleReason(c), "", network);
     const finalized = await finalizedHeight(l.node.rpc, deadline);
@@ -485,7 +608,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     if (typeof v === "string") return failed(settleReason(v), "", network);
     if (left() <= 0) return failed("unexpected_settle_error", "", network);
     const birth = c.era.birth(v.best);
-    const since = finalized === undefined ? birth : Math.max(birth, finalized + 1);
+    const since = Math.min(finalized === undefined ? birth : Math.max(birth, finalized + 1), lastBlock(c, v.best));
     let won: boolean;
     try {
       won = await inTime(s.claim(c.network, c.id, v.until, since), deadline);
@@ -494,7 +617,8 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     }
     if (!won) {
       const row = await inTime(s.read(c.network, c.id), deadline).catch(() => undefined);
-      return follow(l, row !== undefined && row.state !== "none" ? row.since : null, deadline);
+      const claimed = row !== undefined && row.state !== "none" ? row : undefined;
+      return follow(l, claimed?.since ?? null, claimed?.unread ?? [], deadline);
     }
     const answer = await submit(c, since, deadline - answerReserve(settleWaitMs));
     if (answer.success || answer.transaction !== "") return keep(c, answer, deadline);

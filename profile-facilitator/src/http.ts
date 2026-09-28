@@ -23,8 +23,13 @@ export class NodeError extends Error {
   }
 }
 
-/** POSTs a JSON body and reads a JSON answer within the timeout (at most 5 s) and the size bound. */
-export async function postJson(url: string, body: unknown, timeoutMs = NODE_TIMEOUT_MS): Promise<unknown> {
+/** POSTs a JSON body and reads a JSON answer within the timeout (at most 5 s) and `maxBytes` (4 MiB unless given). */
+export async function postJson(
+  url: string,
+  body: unknown,
+  timeoutMs = NODE_TIMEOUT_MS,
+  maxBytes = NODE_MAX_BYTES,
+): Promise<unknown> {
   const ms = Number.isFinite(timeoutMs) ? Math.max(1, Math.ceil(Math.min(timeoutMs, NODE_TIMEOUT_MS))) : NODE_TIMEOUT_MS;
   const signal = AbortSignal.timeout(ms);
   let res: Response;
@@ -41,7 +46,7 @@ export async function postJson(url: string, body: unknown, timeoutMs = NODE_TIME
     const unsent = typeof cause === "string" && UNSENT.has(cause);
     throw new NodeError("transport", !unsent, e instanceof Error ? e.message : String(e));
   }
-  const bytes = await readBounded(res, signal);
+  const bytes = await readBounded(res, signal, maxBytes);
   if (res.status < 200 || res.status > 299) throw new NodeError("http-status", true, `status ${res.status}`);
   try {
     return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
@@ -50,9 +55,9 @@ export async function postJson(url: string, body: unknown, timeoutMs = NODE_TIME
   }
 }
 
-async function readBounded(res: Response, signal: AbortSignal): Promise<Uint8Array> {
+async function readBounded(res: Response, signal: AbortSignal, maxBytes: number): Promise<Uint8Array> {
   const declared = Number(res.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > NODE_MAX_BYTES) {
+  if (Number.isFinite(declared) && declared > maxBytes) {
     await res.body?.cancel();
     throw new NodeError("too-large", true, `content-length ${declared}`);
   }
@@ -65,9 +70,9 @@ async function readBounded(res: Response, signal: AbortSignal): Promise<Uint8Arr
       const { done, value } = await reader.read();
       if (done) break;
       total += value.byteLength;
-      if (total > NODE_MAX_BYTES) {
+      if (total > maxBytes) {
         await reader.cancel();
-        throw new NodeError("too-large", true, `more than ${NODE_MAX_BYTES} bytes`);
+        throw new NodeError("too-large", true, `more than ${maxBytes} bytes`);
       }
       parts.push(value);
     }

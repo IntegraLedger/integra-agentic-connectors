@@ -46,7 +46,7 @@ controls, to the resource servers that use it.
 | `unexpected_verify_error` | yes | no | The node or the store could not be read. |
 | `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission. |
 | `settlement_pending` | no | yes | Submitted, and not yet final when the wait ended. |
-| `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. |
+| `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. On Polkadot, also a repeat of a payment whose success has been answered. |
 
 `unsupported_permission` and `invalid_transaction` are this facilitator's, for a Tron owner permission that does not
 accept the transaction's one signature and for a transaction the node refuses in simulation or validation. The
@@ -63,6 +63,7 @@ CREATE TABLE IF NOT EXISTS settlement (
   answer jsonb,
   until timestamptz NOT NULL,
   since bigint,
+  unread bigint[] NOT NULL DEFAULT '{}',
   PRIMARY KEY (network, id)
 )
 ```
@@ -70,20 +71,29 @@ CREATE TABLE IF NOT EXISTS settlement (
 - One row per settled payment, keyed by network and transaction id (Tron) or extrinsic hash (Polkadot).
 - `answer` is null while the row is claimed and the answer is not yet written. A final answer is never replaced; a
   pending one is replaced by what a later read of the chain shows.
-- `until` is the end of the payment's validity window: Tron's `expiration`, or the end of the Polkadot era. A row is
-  kept for 24 hours after it, so a repeat in that time reads the stored answer before anything is verified again. A
-  sweep every minute drops older rows.
-- `since` is, for Polkadot, the first block not yet shown at finality to lack the extrinsic.
+- `until` is the end of the payment's validity window: Tron's `expiration`, or, for Polkadot, the end of the last
+  block that can include the extrinsic (the era's last, and no later than `System.BlockHashCount` + 1 blocks after its
+  birth), counted from the best block at 12 seconds a block. A row is kept for 24 hours after it, so a repeat in that
+  time reads the stored answer before anything is verified again. A sweep every minute drops older rows.
+- `since` is, for Polkadot, the first block the scan has not yet read at finality.
+- `unread` is, for Polkadot, the finalized blocks below `since` that the node could not give. None of them is shown to
+  lack the extrinsic, so each is read again, and the answer that the extrinsic can never be included waits until the
+  list is empty. A scan's write keeps every block of the list that the scan did not read, so concurrent repeats lose
+  none. It holds at most one entry per block of the validity window.
 - The pool holds at most 10 connections. Acquiring a connection, each query and each statement are bounded by 5
   seconds.
 
 ## Bounds and logs
 
-- Each node call has a timeout of at most 5 seconds and an answer of at most 4 MiB. On Tron, `/verify` makes six
+- Each node call has a timeout of at most 5 seconds and an answer of at most 4 MiB, except Polkadot's
+  `chain_getBlock`. Its bound is sized from the runtime's `System.BlockLength`, read from the metadata: 4 MiB, plus
+  9/2 of the largest class limit (an extrinsic of n encoded bytes is at most 2n + 5 JSON characters), plus 7 times
+  `maxHeaderSize`. For Polkadot Asset Hub's runtime 2005000 that is 28,504,064 bytes. On Tron, `/verify` makes six
   FullNode calls: the account, the two id reads, the simulation and the head read at once, then the reference block
   read.
 - A request body is at most 64 KiB. The server's request timeout is `settleWaitMs` plus 60 seconds.
 - The facilitator writes one JSON line on standard error for what the operator should see and the answer does not
   carry: `settlement-failed` (with the events, or the receipt result and why the transfer does not count, that the
-  chain shows), `settlement-expired` and
-  `answer-not-stored`.
+  chain shows), `settlement-expired`, `answer-not-stored`, `block-unreadable` (a finalized Polkadot block recorded
+  as unread, with the node's reason) and `settlement-consumed` (a repeated `/settle` of a Polkadot payment whose
+  success has been answered).
