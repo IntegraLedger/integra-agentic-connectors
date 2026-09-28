@@ -119,3 +119,35 @@ export function fixture(name: string): unknown {
   const bytes = readFileSync(new URL(`./fixtures/${name}`, import.meta.url));
   return JSON.parse((name.endsWith(".gz") ? gunzipSync(bytes) : bytes).toString("utf8"));
 }
+
+/** The lcp vectors' V2 payer, as the 21 bytes a FullNode prints for an address. */
+export const V2_PAYER_HEX = "41f39fd6e51aad88f6f4ce6ab8827279cfffb92266";
+/** The lcp vectors' V2 reference block: solidified block 86542765 and its id, read live from Tron mainnet. */
+export const V2_REF_BLOCK = { number: 86542765, id: "00000000052889ad7d1ddbe0b0adbe87d02b3cdbba73a6d485ff0392ab0e5003" };
+/** The FullNode's head in these stubs: a block 25 after V2's reference block. */
+export const V2_HEAD = 86542790;
+
+/**
+ * A FullNode's answers to the reads `/verify` makes before it simulates, for V2's payer and reference block, in
+ * java-tron's HTTP shapes: `/wallet/getaccount` gives the default owner permission java-tron gives an account
+ * (`AccountCapsule.createDefaultOwnerPermission`: the address's own key, weight 1, threshold 1); `/wallet/getnowblock`
+ * the head; `/wallet/getblock` V2's reference block by number, and `{}` for a block it does not hold;
+ * `/wallet/gettransactionbyid` `{}`, the answer for an id the node does not hold. Undefined for any other path.
+ */
+export function tronChainReads(path: string, body: unknown): unknown {
+  if (path === "/wallet/getaccount") {
+    return {
+      address: V2_PAYER_HEX,
+      owner_permission: { permission_name: "owner", threshold: 1, keys: [{ address: V2_PAYER_HEX, weight: 1 }] },
+    };
+  }
+  if (path === "/wallet/getnowblock") return { block_header: { raw_data: { number: V2_HEAD } } };
+  if (path === "/wallet/getblock") {
+    const wanted = typeof body === "object" && body !== null ? (body as Record<string, unknown>)["id_or_num"] : undefined;
+    return wanted === String(V2_REF_BLOCK.number)
+      ? { blockID: V2_REF_BLOCK.id, block_header: { raw_data: { number: V2_REF_BLOCK.number } } }
+      : {};
+  }
+  if (path === "/wallet/gettransactionbyid") return {};
+  return undefined;
+}

@@ -39,8 +39,8 @@ export interface SettlementStore {
   read(network: string, id: string): Promise<Stored>;
   /** True when this call inserted the row, and so owns the submission. */
   claim(network: string, id: string, until: Date, since?: number): Promise<boolean>;
-  /** Writes the answer unless the row already holds a final one. */
-  answer(network: string, id: string, answer: SettleAnswer): Promise<void>;
+  /** Writes the answer unless the row already holds a final one. True when this call wrote it. */
+  answer(network: string, id: string, answer: SettleAnswer): Promise<boolean>;
   /** Removes a claim that has no answer: the claimant submitted nothing. True when a row was removed. */
   release(network: string, id: string): Promise<boolean>;
   /** Moves `since` on to `block`, never back. */
@@ -80,11 +80,12 @@ export async function openStore(url: string): Promise<SettlementStore> {
       return r.rowCount === 1;
     },
     async answer(network, id, answer) {
-      await pool.query(
+      const r = await pool.query(
         `UPDATE settlement SET answer = $3 WHERE network = $1 AND id = $2
            AND (answer IS NULL OR answer->>'errorReason' = 'settlement_pending')${isPending(answer) ? " AND answer IS NULL" : ""}`,
         [network, id, JSON.stringify(answer)],
       );
+      return r.rowCount === 1;
     },
     async release(network, id) {
       const r = await pool.query("DELETE FROM settlement WHERE network = $1 AND id = $2 AND answer IS NULL", [network, id]);

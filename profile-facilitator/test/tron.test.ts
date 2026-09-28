@@ -1,14 +1,27 @@
 // The Tron profile's rule 5 (x402/exact/tron/lcp-trc20-memo), as a facilitator's /verify and /settle. Expected values
-// come from the profile's rules, x402's facilitator answers, and the lcp vectors' V2 (raw_data, id, payer and signature
-// ends). The nodes are local stubs whose answers are Tron mainnet's live answers (fixtures/tron-mainnet-answers.json),
-// with V2's id and the receipt result the test names.
+// come from the profile's rules, x402's facilitator answers and its exact family's rules, java-tron's validation
+// (TransactionCapsule.validateSignature, Manager.validateTapos and updateRecentBlock), TRC-20's Transfer event, and the
+// lcp vectors' V2 (raw_data, id, payer, signature ends and reference block). The nodes are local stubs whose answers
+// are Tron mainnet's live answers (fixtures/tron-mainnet-answers.json), with V2's id and the receipt result the test
+// names, and java-tron's HTTP shapes for the account, block and transaction reads (support.ts).
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isRefusal } from "@integraledger/lcp";
 import { decodeTronTx, encodeTronRaw } from "@integraledger/lcp/tron";
 import { serveProfileFacilitator } from "../src/index.js";
-import { fixture, freePort, freshDatabase, HANG, post, stub, type Stub } from "./support.js";
+import {
+  fixture,
+  freePort,
+  freshDatabase,
+  HANG,
+  post,
+  stub,
+  tronChainReads,
+  V2_PAYER_HEX,
+  V2_REF_BLOCK,
+  type Stub,
+} from "./support.js";
 
 // The lcp vectors' V2.
 const RAW_V2 =
@@ -71,6 +84,18 @@ function info(result: string) {
   return { ...v1, id: TXID_V2, blockNumber: 86542790, receipt: { ...(v1["receipt"] as object), result } };
 }
 
+/** The same receipt with the given logs in place of the live answer's one Transfer log from USDT-TRC20. */
+function infoWithLogs(log: unknown[]) {
+  return { ...info("SUCCESS"), log };
+}
+
+/** Another key's Tron address, as a FullNode prints it: the lcp vectors' payTo bytes. */
+const OTHER_HEX = "41209693bc6afc0c5328ba36faf03c514ef312287c";
+
+const PENDING = { success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK };
+const STATE_FAILED = { success: false, errorReason: "invalid_transaction_state", transaction: TXID_V2, network: NETWORK };
+const SUCCESS = { success: true, transaction: TXID_V2, network: NETWORK, payer: PAYER };
+
 interface Node {
   trigger?: unknown;
   /** How long the simulation takes to answer. */
@@ -81,6 +106,14 @@ interface Node {
   info?: () => unknown;
   /** The Solidity node's receipt; the FullNode's when not given. */
   solidInfo?: () => unknown;
+  /** `/wallet/getaccount`'s answer. */
+  account?: unknown;
+  /** `/wallet/getblock`'s answer for the number asked. */
+  block?: (number: string) => unknown;
+  /** `/wallet/getnowblock`'s answer. */
+  head?: unknown;
+  /** `/wallet/gettransactionbyid`'s answer. */
+  held?: () => unknown;
 }
 
 let db: Awaited<ReturnType<typeof freshDatabase>>;
@@ -89,7 +122,7 @@ let base: string;
 let closeFacilitator: () => Promise<void>;
 
 async function start(n: Node = {}, settleWaitMs = 3_000): Promise<void> {
-  node = await stub(async (path) => {
+  node = await stub(async (path, sent) => {
     if (path === "/wallet/triggerconstantcontract") {
       if (n.triggerMs !== undefined) await new Promise((resolve) => setTimeout(resolve, n.triggerMs));
       return n.trigger ?? live["triggerSuccess"];
@@ -103,7 +136,11 @@ async function start(n: Node = {}, settleWaitMs = 3_000): Promise<void> {
       if (n.solidInfo) return n.solidInfo();
       return n.info ? n.info() : info("SUCCESS");
     }
-    return {};
+    if (path === "/wallet/getaccount" && n.account !== undefined) return n.account;
+    if (path === "/wallet/getnowblock" && n.head !== undefined) return n.head;
+    if (path === "/wallet/getblock" && n.block !== undefined) return n.block((sent as { id_or_num: string }).id_or_num);
+    if (path === "/wallet/gettransactionbyid" && n.held !== undefined) return n.held();
+    return tronChainReads(path, sent) ?? {};
   });
   const port = await freePort();
   const f = await serveProfileFacilitator({
@@ -211,7 +248,7 @@ describe("/verify, further", () => {
   it("simulates transfer(payTo, amount) from the owner on the asset", async () => {
     await start();
     await post(`${base}/verify`, body(TX_V2));
-    expect(node.calls).toEqual([
+    expect(node.calls.filter((c) => c.path === "/wallet/triggerconstantcontract")).toEqual([
       {
         path: "/wallet/triggerconstantcontract",
         body: {
@@ -226,14 +263,205 @@ describe("/verify, further", () => {
   });
 });
 
+describe("/verify, the owner's permission", () => {
+  // java-tron checks a transaction's signatures against the owner's permission: each signer's key must be in it, and
+  // their weights must sum to its threshold (TransactionCapsule.validateSignature and checkWeight). An account the node
+  // does not hold, or one with no owner permission set, has the default: the address's own key, weight 1, threshold 1.
+  it("reads the owner's permission from /wallet/getaccount by the owner's address", async () => {
+    await start();
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({ isValid: true, payer: PAYER });
+    expect(node.calls.filter((c) => c.path === "/wallet/getaccount").map((c) => c.body)).toEqual([{ address: V2_PAYER_HEX }]);
+  });
+
+  it("refuses a signature whose weight is below the threshold of a multi-signature owner, as unsupported_permission", async () => {
+    const account = {
+      address: V2_PAYER_HEX,
+      owner_permission: {
+        permission_name: "owner",
+        threshold: 2,
+        keys: [
+          { address: V2_PAYER_HEX, weight: 1 },
+          { address: OTHER_HEX, weight: 1 },
+        ],
+      },
+    };
+    await start({ account });
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({
+      isValid: false,
+      invalidReason: "unsupported_permission",
+      payer: PAYER,
+    });
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual({
+      success: false,
+      errorReason: "unsupported_permission",
+      transaction: "",
+      network: NETWORK,
+    });
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(0);
+  });
+
+  it("refuses the address's own key once the owner permission holds only another key, as unsupported_permission", async () => {
+    const account = {
+      address: V2_PAYER_HEX,
+      owner_permission: { permission_name: "owner", threshold: 1, keys: [{ address: OTHER_HEX, weight: 1 }] },
+    };
+    await start({ account });
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({
+      isValid: false,
+      invalidReason: "unsupported_permission",
+      payer: PAYER,
+    });
+  });
+
+  it("accepts a key whose weight meets the threshold", async () => {
+    const account = {
+      address: V2_PAYER_HEX,
+      owner_permission: {
+        permission_name: "owner",
+        threshold: 2,
+        keys: [
+          { address: V2_PAYER_HEX, weight: 2 },
+          { address: OTHER_HEX, weight: 1 },
+        ],
+      },
+    };
+    await start({ account });
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({ isValid: true, payer: PAYER });
+  });
+
+  it("accepts an account the node does not hold, under the default owner permission", async () => {
+    await start({ account: {} });
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({ isValid: true, payer: PAYER });
+  });
+
+  it("answers unexpected_verify_error for an owner permission it cannot read", async () => {
+    await start({ account: { address: V2_PAYER_HEX, owner_permission: { threshold: "one", keys: [] } } });
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({
+      isValid: false,
+      invalidReason: "unexpected_verify_error",
+      payer: PAYER,
+    });
+  });
+});
+
+describe("/verify, TaPoS", () => {
+  // java-tron keeps, for each value of a block number's bytes 6-7, bytes 8-15 of the latest such block's id
+  // (Manager.updateRecentBlock), and refuses a transaction whose ref_block_hash differs from the entry its
+  // ref_block_bytes name, or whose entry is missing ("Tapos failed", Manager.validateTapos). V2 refers to solidified
+  // block 86542765, whose number ends in 89ad and whose id's bytes 8-15 are 7d1ddbe0b0adbe87.
+  it("reads the latest block at or below the head whose number ends in ref_block_bytes, and accepts V2", async () => {
+    await start();
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({ isValid: true, payer: PAYER });
+    expect(node.calls.filter((c) => c.path === "/wallet/getblock").map((c) => c.body)).toEqual([
+      { id_or_num: String(V2_REF_BLOCK.number), detail: false },
+    ]);
+  });
+
+  it("refuses a reference block whose id differs in bytes 8-15, as invalid_transaction", async () => {
+    const id = `${V2_REF_BLOCK.id.slice(0, 16)}${"00".repeat(8)}${V2_REF_BLOCK.id.slice(32)}`;
+    await start({ block: (n) => ({ blockID: id, block_header: { raw_data: { number: Number(n) } } }) });
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({
+      isValid: false,
+      invalidReason: "invalid_transaction",
+      payer: PAYER,
+    });
+  });
+
+  it("reads the newer block once the head has passed 65 536 more blocks, and refuses V2's reference as invalid_transaction", async () => {
+    const later = V2_REF_BLOCK.number + 65_536;
+    const laterId = `${later.toString(16).padStart(16, "0")}${"11".repeat(24)}`;
+    await start({
+      head: { block_header: { raw_data: { number: later + 3 } } },
+      block: (n) => (n === String(later) ? { blockID: laterId, block_header: { raw_data: { number: later } } } : {}),
+    });
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({
+      isValid: false,
+      invalidReason: "invalid_transaction",
+      payer: PAYER,
+    });
+    expect(node.calls.filter((c) => c.path === "/wallet/getblock").map((c) => c.body)).toEqual([
+      { id_or_num: String(later), detail: false },
+    ]);
+  });
+
+  it("refuses a reference block the node does not hold, as invalid_transaction", async () => {
+    await start({ block: () => ({}) });
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({
+      isValid: false,
+      invalidReason: "invalid_transaction",
+      payer: PAYER,
+    });
+  });
+
+  it("refuses a transaction whose ref_block_bytes are not two bytes, as invalid_transaction", async () => {
+    const decoded = decodeTronTx(TX_V2);
+    if ("refused" in decoded) throw new Error("V2 did not decode");
+    const raw = Buffer.from(encodeTronRaw({ ...decoded.raw, refBlockBytes: Uint8Array.of(0x05, 0x28, 0x89, 0xad) })).toString("hex");
+    await start();
+    const res = await post(`${base}/verify`, body(transaction(raw, [sign(raw)])));
+    expect(res.json).toEqual({ isValid: false, invalidReason: "invalid_transaction", payer: PAYER });
+  });
+});
+
 describe("deduplication", () => {
-  it("two concurrent /settle calls for V2 broadcast once and give two equal answers", async () => {
-    // The simulation answers slowly, so both settles have read no stored answer before either claims.
+  it("two concurrent /settle calls for V2 broadcast once, and only one of them answers success", async () => {
+    // x402's exact family: settlements are deduplicated atomically across every process serving /settle, and a
+    // consumed primitive produces a settlement failure, never a success. The simulation answers slowly, so both settles
+    // have read no stored answer before either claims.
     await start({ triggerMs: 300 }, 5_000);
-    const [a, b] = await Promise.all([post(`${base}/settle`, body(TX_V2)), post(`${base}/settle`, body(TX_V2))]);
+    const answers = await Promise.all([post(`${base}/settle`, body(TX_V2)), post(`${base}/settle`, body(TX_V2))]);
     expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
-    expect(a.json).toEqual(b.json);
-    expect(a.json).toEqual({ success: true, transaction: TXID_V2, network: NETWORK, payer: PAYER });
+    expect(answers.map((a) => a.json)).toEqual(expect.arrayContaining([SUCCESS, STATE_FAILED]));
+  });
+
+  it("a repeated /settle of a consumed payment answers invalid_transaction_state with the id, never success", async () => {
+    await start();
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(SUCCESS);
+    for (let i = 0; i < 5; i++) expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(STATE_FAILED);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
+  });
+
+  it("a /verify of a transaction id the store holds is refused as invalid_transaction_state", async () => {
+    await start();
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(SUCCESS);
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({
+      isValid: false,
+      invalidReason: "invalid_transaction_state",
+      payer: PAYER,
+    });
+  });
+
+  it("a facilitator with another store refuses a transaction id the node already holds, and broadcasts nothing", async () => {
+    // Once the transaction is in a block, java-tron's /wallet/gettransactionbyid returns it; before, it returns {}.
+    let inBlock = false;
+    await start({
+      held: () => (inBlock ? { txID: TXID_V2, raw_data_hex: RAW_V2, signature: [signatureV2] } : {}),
+      onBroadcast: async () => {
+        inBlock = true;
+      },
+    });
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(SUCCESS);
+    const other = await freshDatabase();
+    const port = await freePort();
+    const second = await serveProfileFacilitator({
+      listen: `127.0.0.1:${port}`,
+      tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],
+      store: { url: other.url },
+      settleWaitMs: 3_000,
+    });
+    try {
+      expect((await post(`http://127.0.0.1:${port}/verify`, body(TX_V2))).json).toEqual({
+        isValid: false,
+        invalidReason: "invalid_transaction_state",
+        payer: PAYER,
+      });
+      expect((await post(`http://127.0.0.1:${port}/settle`, body(TX_V2))).json).toEqual(STATE_FAILED);
+      expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
+      expect(node.calls.filter((c) => c.path === "/wallet/gettransactionbyid").at(-1)?.body).toEqual({ value: TXID_V2 });
+    } finally {
+      await second.close();
+      await other.drop();
+    }
   });
 });
 
@@ -247,6 +475,31 @@ describe("settlement outcomes", () => {
       transaction: TXID_V2,
       network: NETWORK,
     });
+  });
+
+  it("a receipt reading SUCCESS whose transfer returned false settles, since it holds the asset's Transfer log", async () => {
+    // The live receipt of USDT-TRC20 transfer 40662c9c…: contractResult is the zero word (transfer returned false)
+    // with receipt result SUCCESS and the token's Transfer event.
+    expect(live["infoV1"]!["contractResult"]).toEqual(["0".repeat(64)]);
+    await start();
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(SUCCESS);
+  });
+
+  it("a receipt reading SUCCESS with no Transfer log is never success: invalid_transaction_state once solidified", async () => {
+    // TRC-20: a transfer MUST fire the Transfer event; without it there is no transfer to report.
+    await start({ info: () => infoWithLogs([]) });
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(STATE_FAILED);
+  });
+
+  it("a receipt reading SUCCESS whose Transfer log comes from another contract is never success", async () => {
+    const v1Log = (live["infoV1"]!["log"] as Record<string, unknown>[])[0]!;
+    await start({ info: () => infoWithLogs([{ ...v1Log, address: OTHER_HEX.slice(2) }]) });
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(STATE_FAILED);
+  });
+
+  it("a receipt reading SUCCESS with no Transfer log at the FullNode, not yet at the Solidity node, stays settlement_pending", async () => {
+    await start({ info: () => infoWithLogs([]), solidInfo: () => live["infoNotFound"] }, 1_000);
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(PENDING);
   });
 
   it("a receipt reading REVERT at the FullNode, not yet at the Solidity node, stays settlement_pending", async () => {
@@ -310,26 +563,34 @@ describe("settlement outcomes", () => {
 });
 
 describe("repeated settles and node errors", () => {
-  it("a repeated /settle whose stored answer is settlement_pending re-reads the chain, broadcasts nothing more, and stores the final answer", async () => {
+  it("a repeated /settle whose stored answer is settlement_pending re-reads the chain, broadcasts nothing more, and stores the final answer, which is success once", async () => {
     let landed = false;
     await start({ info: () => (landed ? info("SUCCESS") : live["infoNotFound"]) }, 1_500);
     const first = await post(`${base}/settle`, body(TX_V2));
     expect(first.json).toEqual({ success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK });
     landed = true;
-    const success = { success: true, transaction: TXID_V2, network: NETWORK, payer: PAYER };
-    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(success);
-    const reads = node.calls.filter((c) => c.path === "/wallet/gettransactioninfobyid").length;
-    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(success);
-    expect(node.calls.filter((c) => c.path === "/wallet/gettransactioninfobyid")).toHaveLength(reads);
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(SUCCESS);
+    const reads = node.calls.filter((c) => c.path.endsWith("/gettransactioninfobyid")).length;
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(STATE_FAILED);
+    expect(node.calls.filter((c) => c.path.endsWith("/gettransactioninfobyid"))).toHaveLength(reads);
     expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
   });
 
-  it("a repeated /settle gives the stored answer, and broadcasts nothing more, after the expiration has passed", async () => {
-    await start();
+  it("a repeated /settle gives the stored failure as it is, and broadcasts nothing more, after the expiration has passed", async () => {
+    await start({ info: () => info("REVERT") });
     const first = await post(`${base}/settle`, body(TX_V2));
+    expect(first.json).toEqual(STATE_FAILED);
     vi.setSystemTime(EXPIRATION_V2 + 1);
     const second = await post(`${base}/settle`, body(TX_V2));
     expect(second.json).toEqual(first.json);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
+  });
+
+  it("a repeated /settle of a consumed payment after the expiration has passed answers invalid_transaction_state with the id", async () => {
+    await start();
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(SUCCESS);
+    vi.setSystemTime(EXPIRATION_V2 + 1);
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(STATE_FAILED);
     expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
   });
 
@@ -353,8 +614,7 @@ describe("a store that cannot answer", () => {
   // broadcast, so it never answers a failure with an empty transaction.
   it("a repeat whose store read fails gives settlement_pending with the id, and broadcasts nothing more", async () => {
     await start();
-    const success = { success: true, transaction: TXID_V2, network: NETWORK, payer: PAYER };
-    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(success);
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(SUCCESS);
     await db.pool.query("ALTER TABLE settlement RENAME TO settlement_unreadable");
     const res = await post(`${base}/settle`, body(TX_V2));
     expect(res.json).toEqual({ success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK });

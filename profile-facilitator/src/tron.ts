@@ -1,7 +1,8 @@
 /**
- * Rule 5 of `x402/exact/tron/lcp-trc20-memo` against one network's FullNode: `/verify` checks the signed transaction
- * against the requirements and simulates it; `/settle` repeats that, claims the transaction id, broadcasts, and polls
- * for the receipt.
+ * Rule 5 of `x402/exact/tron/lcp-trc20-memo` against one network's FullNode and Solidity node: `/verify` checks the
+ * signed transaction against the requirements, the owner's permission, its reference block and the ids already held,
+ * and simulates it; `/settle` repeats that, claims the transaction id, broadcasts, and reads the transaction's status
+ * until it is final.
  */
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
@@ -29,7 +30,7 @@ import {
   type VerifyAnswer,
 } from "./answers.js";
 import { base58check } from "./base58check.js";
-import { NODE_TIMEOUT_MS, NodeError, postJson, sleep } from "./http.js";
+import { NodeError, postJson, sleep } from "./http.js";
 import { answerReserve, inTime, type SettlementStore, type Stored } from "./store.js";
 
 export interface TronNode {
@@ -57,6 +58,11 @@ function settleReason(r: InvalidReason): string {
 
 function hexOf(b: Uint8Array): string {
   return Buffer.from(b).toString("hex");
+}
+
+/** A permission's threshold or a key's weight: java-tron prints an int64 as a JSON number, read as a safe one ≥ 0. */
+function int64(v: unknown): bigint | undefined {
+  return typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? BigInt(v) : undefined;
 }
 
 function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
@@ -128,27 +134,85 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     };
   }
 
-  /** The expiration window, then the node's simulation of the call, within `timeoutMs`. */
-  async function checkNow(c: Checked, timeoutMs = NODE_TIMEOUT_MS): Promise<InvalidReason | null> {
-    const now = BigInt(Date.now());
-    const expiration = c.raw.expiration;
-    if (expiration <= now || expiration > now + BigInt(c.maxTimeoutSeconds) * 1000n) return "invalid_payload";
-    if (timeoutMs <= 0) return "unexpected_verify_error";
-    let sim: unknown;
+  /** A FullNode call's JSON answer, bounded by `deadline` (a `performance.now()` time) and by the node call bound. */
+  async function ask(c: Checked, path: string, body: unknown, deadline: number): Promise<unknown> {
     try {
-      sim = await postJson(
-        `${byNetwork.get(c.network)!.fullNode}/wallet/triggerconstantcontract`,
-        {
-          owner_address: hexOf(c.raw.owner),
-          contract_address: hexOf(c.raw.contractAddress),
-          function_selector: "transfer(address,uint256)",
-          parameter: hexOf(c.raw.callData.subarray(4)),
-        },
-        timeoutMs,
-      );
+      return await postJson(`${byNetwork.get(c.network)!.fullNode}${path}`, body, deadline - performance.now());
     } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * The owner's permission accepts the one signature: the weight it gives the owner's own key is at least its
+   * threshold. An account the node does not hold, or one with no owner permission set, has java-tron's default owner
+   * permission: the address's own key, weight 1, threshold 1.
+   */
+  async function permitted(c: Checked, deadline: number): Promise<InvalidReason | null> {
+    const account = await ask(c, "/wallet/getaccount", { address: hexOf(c.raw.owner) }, deadline);
+    if (!isObject(account)) return "unexpected_verify_error";
+    const permission = account["owner_permission"];
+    if (permission === undefined) return null;
+    if (!isObject(permission) || !Array.isArray(permission["keys"])) return "unexpected_verify_error";
+    const threshold = int64(permission["threshold"]);
+    if (threshold === undefined) return "unexpected_verify_error";
+    const owner = hexOf(c.raw.owner);
+    let weight = 0n;
+    for (const key of permission["keys"] as unknown[]) {
+      if (!isObject(key) || typeof key["address"] !== "string") return "unexpected_verify_error";
+      const w = int64(key["weight"]);
+      if (w === undefined) return "unexpected_verify_error";
+      if (key["address"].toLowerCase() === owner) weight = w;
+    }
+    return weight >= threshold ? null : "unsupported_permission";
+  }
+
+  /**
+   * TaPoS as the node checks it: `ref_block_bytes` are bytes 6–7 of a block number, and `ref_block_hash` must equal
+   * bytes 8–15 of the id of the latest block at or below the FullNode's head whose number ends in those two bytes.
+   */
+  async function tapos(c: Checked, deadline: number): Promise<InvalidReason | null> {
+    const refBytes = c.raw.refBlockBytes;
+    const refHash = c.raw.refBlockHash;
+    if (refBytes.length !== 2 || refHash.length !== 8) return "invalid_transaction";
+    const now = await ask(c, "/wallet/getnowblock", {}, deadline);
+    const header = isObject(now) ? now["block_header"] : undefined;
+    const raw = isObject(header) ? header["raw_data"] : undefined;
+    const head = isObject(raw) ? raw["number"] : undefined;
+    if (typeof head !== "number" || !Number.isSafeInteger(head) || head < 0) return "unexpected_verify_error";
+    const low = (refBytes[0]! << 8) | refBytes[1]!;
+    const number = head - ((head % 65_536) - low + 65_536) % 65_536;
+    if (number < 0) return "invalid_transaction";
+    const block = await ask(c, "/wallet/getblock", { id_or_num: String(number), detail: false }, deadline);
+    if (!isObject(block)) return "unexpected_verify_error";
+    if (Object.keys(block).length === 0) return "invalid_transaction";
+    const id = block["blockID"];
+    if (typeof id !== "string" || !/^[0-9a-f]{64}$/.test(id) || BigInt(`0x${id.slice(0, 16)}`) !== BigInt(number)) {
       return "unexpected_verify_error";
     }
+    return id.slice(16, 32) === hexOf(refHash) ? null : "invalid_transaction";
+  }
+
+  /** The FullNode does not hold the transaction id in a block. */
+  async function unheld(c: Checked, deadline: number): Promise<InvalidReason | null> {
+    const tx = await ask(c, "/wallet/gettransactionbyid", { value: c.txid }, deadline);
+    if (!isObject(tx)) return "unexpected_verify_error";
+    return Object.keys(tx).length === 0 ? null : "invalid_transaction_state";
+  }
+
+  /** The node's simulation of `transfer(payTo, amount)` from the owner on the asset. */
+  async function simulated(c: Checked, deadline: number): Promise<InvalidReason | null> {
+    const sim = await ask(
+      c,
+      "/wallet/triggerconstantcontract",
+      {
+        owner_address: hexOf(c.raw.owner),
+        contract_address: hexOf(c.raw.contractAddress),
+        function_selector: "transfer(address,uint256)",
+        parameter: hexOf(c.raw.callData.subarray(4)),
+      },
+      deadline,
+    );
     if (!isObject(sim) || !isObject(sim["result"])) return "unexpected_verify_error";
     if (sim["result"]["result"] !== true) return "invalid_transaction";
     const ret = isObject(sim["transaction"]) ? sim["transaction"]["ret"] : undefined;
@@ -156,41 +220,38 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     return null;
   }
 
+  /**
+   * The expiration window, then the node reads, made together: the owner's permission, TaPoS, the ids the node holds
+   * and the simulation. The first refusal in that order is the answer. Each call is bounded by the node call bound and
+   * by `deadline`.
+   */
+  async function checkNow(c: Checked, deadline = Infinity): Promise<InvalidReason | null> {
+    const now = BigInt(Date.now());
+    const expiration = c.raw.expiration;
+    if (expiration <= now || expiration > now + BigInt(c.maxTimeoutSeconds) * 1000n) return "invalid_payload";
+    if (deadline - performance.now() <= 0) return "unexpected_verify_error";
+    const reads = await Promise.all([
+      permitted(c, deadline),
+      tapos(c, deadline),
+      unheld(c, deadline),
+      simulated(c, deadline),
+    ]);
+    return reads.find((r) => r !== null) ?? null;
+  }
+
+  /** Every check of `/verify`: the transaction, the store, which must not hold its id, and the node reads. */
   async function verify(r: FacilitatorRequest): Promise<VerifyAnswer> {
     const c = await check(r);
     if (typeof c === "string") return invalid(c);
+    let stored: Stored;
+    try {
+      stored = await inTime(s.read(c.network, c.txid), Infinity);
+    } catch {
+      return invalid("unexpected_verify_error", c.payer);
+    }
+    if (stored.state !== "none") return invalid("invalid_transaction_state", c.payer);
     const now = await checkNow(c);
     return now === null ? { isValid: true, payer: c.payer } : invalid(now, c.payer);
-  }
-
-  /** A receipt's block and result from `gettransactioninfobyid` at `url`; undefined when there is none or it is unreadable. */
-  async function infoAt(url: string, c: Checked, deadline: number): Promise<{ result: string } | undefined> {
-    let info: unknown;
-    try {
-      info = await postJson(`${url}/gettransactioninfobyid`, { value: c.txid }, deadline - performance.now());
-    } catch {
-      return undefined;
-    }
-    if (!isObject(info) || typeof info["blockNumber"] !== "number") return undefined;
-    const result = isObject(info["receipt"]) ? info["receipt"]["result"] : undefined;
-    return typeof result === "string" ? { result } : undefined;
-  }
-
-  /**
-   * One read of the transaction's receipt: success once the FullNode shows it in a block with `SUCCESS`; a failure only
-   * once the Solidity node, which serves solidified blocks alone, shows it with another result; else undefined.
-   */
-  async function receipt(c: Checked, deadline: number): Promise<SettleAnswer | undefined> {
-    const node = byNetwork.get(c.network)!;
-    const head = await infoAt(`${node.fullNode}/wallet`, c, deadline);
-    if (head === undefined) return undefined;
-    const success: SettleAnswer = { success: true, transaction: c.txid, network: c.network, payer: c.payer };
-    if (head.result === "SUCCESS") return success;
-    const solid = await infoAt(`${node.solidityNode}/walletsolidity`, c, deadline);
-    if (solid === undefined) return undefined;
-    if (solid.result === "SUCCESS") return success;
-    operatorLog({ event: "settlement-failed", network: c.network, transaction: c.txid, result: solid.result });
-    return failed("invalid_transaction_state", c.txid, c.network);
   }
 
   /** The profile's reads at the Solidity node and the FullNode, each bounded by `deadline`. */
@@ -233,44 +294,73 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
   }
 
   /**
-   * True once the reads prove the transaction can never be included: the profile's status finds it at no node, with the
-   * latest solidified block two slots past its expiration. Reads nothing while the local clock is before the expiration.
+   * One read of the transaction's status through the profile's `tronStatus`: settled, at the Solidity node or the
+   * FullNode, only with receipt result `SUCCESS` and a `Transfer` log from the asset, whatever the call returned (a
+   * TRC-20 token may return false from `transfer` and still transfer). A failed receipt, or one with no such log, is
+   * final only when the Solidity node, which serves solidified blocks alone, shows it. A transaction no node holds,
+   * with the latest solidified block two slots past its expiration, can never be included. Anything else gives
+   * undefined.
    */
-  async function expired(c: Checked, deadline: number): Promise<boolean> {
-    if (BigInt(Date.now()) < c.raw.expiration) return false;
-    const ref = {
-      network: c.network as TronReader["network"],
-      txid: `0x${c.txid}` as const,
-      asset: `0x${hexOf(c.raw.contractAddress)}` as const,
-      expiration: c.raw.expiration.toString(),
-    };
-    const st = await tronStatus(ref, reader(c, deadline));
-    return st.state === "failed" && st.why === "expired";
+  async function outcome(c: Checked, deadline: number): Promise<SettleAnswer | undefined> {
+    const reads = reader(c, deadline);
+    let found: "solid" | "head" | undefined;
+    const st = await tronStatus(
+      {
+        network: c.network as TronReader["network"],
+        txid: `0x${c.txid}`,
+        asset: `0x${hexOf(c.raw.contractAddress)}`,
+        expiration: c.raw.expiration.toString(),
+      },
+      {
+        ...reads,
+        async info(txid, level) {
+          const info = await reads.info(txid, level);
+          if (info !== null) found = level;
+          return info;
+        },
+      },
+    );
+    if (st.state === "settled") return { success: true, transaction: c.txid, network: c.network, payer: c.payer };
+    if (st.state === "pending") return undefined;
+    if (st.why === "expired") {
+      operatorLog({ event: "settlement-expired", network: c.network, transaction: c.txid });
+      return failed("invalid_transaction_state", c.txid, c.network);
+    }
+    if (found !== "solid") return undefined;
+    operatorLog({
+      event: "settlement-failed",
+      network: c.network,
+      transaction: c.txid,
+      why: st.why,
+      result: st.result,
+    });
+    return failed("invalid_transaction_state", c.txid, c.network);
+  }
+
+  /** The answer to a `/settle` of a payment whose success has already been answered: a consumed payment fails. */
+  function consumed(c: Checked): SettleAnswer {
+    return failed("invalid_transaction_state", c.txid, c.network);
   }
 
   /**
-   * Reads the receipt every second until `deadline`, and the stored answer too when `stored` is set, answering with the
-   * first final answer either gives, or with `invalid_transaction_state` once the transaction can never be included.
-   * Broadcasts nothing.
+   * Reads the transaction's status every second until `deadline`, and the stored answer too when `stored` is set,
+   * answering with the first final answer either gives. A stored success is another settle's, so it gives the consumed
+   * answer. Broadcasts nothing.
    */
   async function watch(c: Checked, deadline: number, stored: boolean): Promise<SettleAnswer> {
     for (;;) {
       if (stored) {
         const row = await inTime(s.read(c.network, c.txid), deadline).catch(() => undefined);
-        if (row?.state === "answered" && !isPending(row.answer)) return row.answer;
+        if (row?.state === "answered" && !isPending(row.answer)) return row.answer.success ? consumed(c) : row.answer;
       }
-      const final = await receipt(c, deadline);
+      const final = await outcome(c, deadline);
       if (final !== undefined) return final;
-      if (await expired(c, deadline)) {
-        operatorLog({ event: "settlement-expired", network: c.network, transaction: c.txid });
-        return failed("invalid_transaction_state", c.txid, c.network);
-      }
       if (performance.now() + POLL_MS > deadline) return pending(c.txid, c.network);
       await sleep(POLL_MS);
     }
   }
 
-  /** Broadcasts, then reads the receipt until `deadline`. */
+  /** Broadcasts, then reads the transaction's status until `deadline`. */
   async function submit(c: Checked, deadline: number): Promise<SettleAnswer> {
     const node = byNetwork.get(c.network)!;
     let sent: unknown;
@@ -286,20 +376,31 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     return watch(c, deadline, false);
   }
 
-  /** Stores the answer, unless the row holds a final one; a failed write leaves the row for a later read of the chain. */
+  /**
+   * Stores the answer unless the row holds a final one. A success is given only by the settle whose write stored it,
+   * so one payment is answered success once: a success another settle stored first gives the consumed answer, and a
+   * success whose write fails gives `settlement_pending` with the id. A failed write of any other answer leaves the row
+   * for a later read of the chain.
+   */
   async function keep(c: Checked, answer: SettleAnswer, deadline: number): Promise<SettleAnswer> {
-    await inTime(s.answer(c.network, c.txid, answer), deadline).catch(() => {
+    let wrote: boolean;
+    try {
+      wrote = await inTime(s.answer(c.network, c.txid, answer), deadline);
+    } catch {
       operatorLog({ event: "answer-not-stored", network: c.network, transaction: c.txid });
-    });
-    return answer;
+      return answer.success ? pending(c.txid, c.network) : answer;
+    }
+    return answer.success && !wrote ? consumed(c) : answer;
   }
 
   /**
-   * Answers within `settleWaitMs`. A stored final answer is given as it is. A claimed id, or a stored pending answer, is
-   * read again from the chain. An answer with no transaction says nothing was broadcast, so it is given only for an id
-   * the store does not hold: a broadcast the node refused releases the claim, and when nothing is released the answer
-   * is pending with its id. A refusal as a duplicate is read as broadcast. When the store cannot be read, the
-   * facilitator cannot know whether the transaction was broadcast, so the answer is pending with its id.
+   * Answers within `settleWaitMs`. A stored success means the payment is consumed, and gives
+   * `invalid_transaction_state` with the id; any other stored final answer is given as it is. A claimed id, or a stored
+   * pending answer, is read again from the chain. An id the node already holds is consumed too. An answer with no
+   * transaction says nothing was broadcast, so it is given only for an id the store does not hold: a broadcast the node
+   * refused releases the claim, and when nothing is released the answer is pending with its id. A refusal as a
+   * duplicate is read as broadcast. When the store cannot be read, the facilitator cannot know whether the transaction
+   * was broadcast, so the answer is pending with its id.
    */
   async function settle(r: FacilitatorRequest): Promise<SettleAnswer> {
     const deadline = performance.now() + settleWaitMs;
@@ -313,10 +414,13 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     } catch {
       return pending(c.txid, c.network);
     }
-    if (stored.state === "answered" && !isPending(stored.answer)) return stored.answer;
+    if (stored.state === "answered" && !isPending(stored.answer)) {
+      return stored.answer.success ? consumed(c) : stored.answer;
+    }
     const waitUntil = deadline - answerReserve(settleWaitMs);
     if (stored.state !== "none") return keep(c, await watch(c, waitUntil, true), deadline);
-    const now = await checkNow(c, left());
+    const now = await checkNow(c, deadline);
+    if (now === "invalid_transaction_state") return consumed(c);
     if (now !== null) return failed(settleReason(now), "", network);
     if (left() <= 0) return failed("unexpected_settle_error", "", network);
     let won: boolean;

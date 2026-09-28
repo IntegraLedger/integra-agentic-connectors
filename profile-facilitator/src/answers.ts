@@ -21,9 +21,10 @@ export interface FacilitatorRequest {
 }
 
 /**
- * The reasons a payment is refused. The x402 codes are the x402 specification's (§9); `unsupported_permission` and
- * `invalid_transaction` are this facilitator's, for a multi-signature Tron owner and for a transaction the node
- * refuses in simulation or validation.
+ * The reasons a payment is refused. The x402 codes are the x402 specification's (§9); `invalid_transaction_state` in
+ * a verify answer is a Tron transaction id the node or the store already holds. `unsupported_permission` and
+ * `invalid_transaction` are this facilitator's: a Tron owner permission that does not accept the transaction's one
+ * signature, and a transaction the node refuses in simulation or validation.
  */
 export type InvalidReason =
   | "invalid_x402_version"
@@ -33,6 +34,7 @@ export type InvalidReason =
   | "invalid_payload"
   | "unsupported_permission"
   | "invalid_transaction"
+  | "invalid_transaction_state"
   | "unexpected_verify_error";
 
 export type VerifyAnswer = { isValid: true; payer: string } | { isValid: false; invalidReason: InvalidReason; payer?: string };
