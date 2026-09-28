@@ -1,6 +1,7 @@
 // The Polkadot profile's rule 5 (x402/exact/polkadot/lcp-assets-remark), as a facilitator's /verify and /settle.
-// Expected values come from the profile's rules, x402's facilitator answers, and the lcp vectors (V2's call, V3's
-// extrinsic and hash, V4's remark hash). The node is a local JSON-RPC stub: its metadata answers are
+// Expected values come from the profile's rules, x402's facilitator answers and its `exact` family ("A consumed
+// primitive MUST produce a settlement failure, never a success"), and the lcp vectors (V2's call, V3's extrinsic and
+// hash, V4's remark hash). The node is a local JSON-RPC stub: its metadata answers are
 // Polkadot Asset Hub's live answers (fixtures/polkadot-asset-hub-2005000.json.gz); its events are SCALE bytes written
 // here from the SDK's event layouts, and the test decodes them with the live metadata before using them.
 import { readFileSync } from "node:fs";
@@ -326,13 +327,15 @@ describe("/settle", () => {
     });
   });
 
-  it("two concurrent settles submit once and give equal answers", async () => {
+  it("two concurrent settles submit once, and exactly one of them answers success", async () => {
     // Validation answers slowly, so both settles have read no stored answer before either claims.
     await start({ validityMs: 300 });
     const [a, b] = await Promise.all([post(`${base}/settle`, body()), post(`${base}/settle`, body())]);
     const submits = node.calls.filter((c) => (c.body as { method: string }).method === "author_submitExtrinsic");
     expect(submits).toHaveLength(1);
-    expect(a.json).toEqual(b.json);
+    const success = { success: true, transaction: `${BLOCK_HASH}-2`, network: NETWORK, payer: PAYER };
+    const consumed = { success: false, errorReason: "invalid_transaction_state", transaction: `${BLOCK_HASH}-2`, network: NETWORK };
+    expect([a.json, b.json]).toEqual(expect.arrayContaining([success, consumed]));
   });
 
   it("a Transferred event of another asset, read above the finalized head, stays settlement_pending", async () => {
@@ -380,7 +383,7 @@ describe("/settle", () => {
     });
   });
 
-  it("a repeated /settle whose stored answer is settlement_pending scans the era again, submits nothing more, and stores the final answer", async () => {
+  it("a repeated /settle whose stored answer is settlement_pending scans the era again, submits nothing more, and stores the final answer; a later repeat of the consumed payment fails", async () => {
     let landed = false;
     await start({ included: () => landed }, NETWORK, 1_500);
     expect((await post(`${base}/settle`, body())).json).toEqual({
@@ -390,9 +393,18 @@ describe("/settle", () => {
       network: NETWORK,
     });
     landed = true;
-    const success = { success: true, transaction: `${BLOCK_HASH}-2`, network: NETWORK, payer: PAYER };
-    expect((await post(`${base}/settle`, body())).json).toEqual(success);
-    expect((await post(`${base}/settle`, body())).json).toEqual(success);
+    expect((await post(`${base}/settle`, body())).json).toEqual({
+      success: true,
+      transaction: `${BLOCK_HASH}-2`,
+      network: NETWORK,
+      payer: PAYER,
+    });
+    expect((await post(`${base}/settle`, body())).json).toEqual({
+      success: false,
+      errorReason: "invalid_transaction_state",
+      transaction: `${BLOCK_HASH}-2`,
+      network: NETWORK,
+    });
     const submits = node.calls.filter((c) => (c.body as { method: string }).method === "author_submitExtrinsic");
     expect(submits).toHaveLength(1);
   });

@@ -285,16 +285,28 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
 ### What `/settle` does on Polkadot
 
 1. Repeats every check of `/verify`.
-2. Reads the stored answer for the extrinsic's BLAKE2b-256 hash, and returns a final one as it is.
+2. Reads the stored answer for the extrinsic's BLAKE2b-256 hash. A stored success means the payment is consumed: the
+   repeat answers `invalid_transaction_state` with the success's `transaction`, never a second success. Any other
+   final answer is returned as it is.
 3. Claims the hash, with the first block to scan: the block after the finalized head read before validation, never
    before the era's birth.
 4. Submits with `author_submitExtrinsic`. A refusal that says the node has already seen the extrinsic or its nonce is
    read as possibly included, and the scan runs.
-5. Scans every second: first the finalized blocks, then the blocks up to the head. In the block that holds the
-   extrinsic, success needs `System.ExtrinsicSuccess`, `System.Remarked` for R's BLAKE2b-256 and `Assets.Transferred`
-   for `asset`. A failure counts only in a finalized block. Once every block to the era's last is finalized without
-   the extrinsic, it can never be included: `invalid_transaction_state`.
-6. Stores the answer and returns it.
+5. Scans every second, up to the last block that can include the extrinsic: the era's last block, and no later than
+   `System.BlockHashCount` + 1 blocks after the era's birth. Each block's execution keeps only the hashes of the
+   `BlockHashCount` + 1 blocks before it, and the chain refuses an extrinsic whose birth block's hash is gone. The scan
+   reads first the finalized blocks, then the blocks up to the head. In the block that holds the extrinsic, success
+   needs `System.ExtrinsicSuccess`, `System.Remarked` for R's BLAKE2b-256 and `Assets.Transferred` for `asset`. A
+   failure counts only in a finalized block.
+6. A finalized block the node cannot give, its body or, for the block that holds the extrinsic, its events, is
+   recorded as unread and skipped. The scan goes on to the blocks after it, so a success in a later block is still
+   found, and the unread block is read again on each later pass and on each repeat. A block read that cannot start
+   before the deadline, because the process's 4 block reads are all running, is recorded the same way. A block above the finalized head
+   that cannot be read is skipped, since it is read again at finality.
+7. Once every block to the last is finalized without the extrinsic, and no block is unread, it can never be included:
+   `invalid_transaction_state`.
+8. Stores the answer and returns it. A success is given only by the `/settle` that stores it. When it cannot be stored,
+   the answer is `settlement_pending` with the extrinsic's hash, and a later `/settle` reads the chain again.
 
 Success is `{success: true, transaction, network, payer}`, where `transaction` is `<block hash>-<extrinsic index>`.
 While the extrinsic is broadcast but not yet in a block, the answer is `settlement_pending` with `transaction` set to
@@ -309,6 +321,11 @@ is one. On Tron a payment is answered success once: every later `/settle` of it 
 with the transaction id, because x402's `exact` family requires that a consumed payment produce a settlement failure,
 never a success. An answer with an empty `transaction` means nothing was submitted. When the store cannot be read,
 the facilitator cannot know whether the payment was submitted, so it answers `settlement_pending` with the id.
+
+A payment whose success has been answered is consumed. On Polkadot, a repeated `/settle` for it answers
+`invalid_transaction_state` with the success's `transaction`, never a second success, as x402's `exact` family
+requires: *"A consumed primitive MUST produce a settlement failure, never a success."* Of two concurrent settles of
+one payment, one answers success and the other that failure.
 
 ## API reference
 
@@ -349,7 +366,7 @@ controls, to the resource servers that use it.
 | `unexpected_verify_error` | yes | no | The node or the store could not be read. |
 | `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission. |
 | `settlement_pending` | no | yes | Submitted, and not yet final when the wait ended. |
-| `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. |
+| `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. On Polkadot, also a repeat of a payment whose success has been answered. |
 
 `unsupported_permission` and `invalid_transaction` are this facilitator's, for a Tron owner permission that does not
 accept the transaction's one signature and for a transaction the node refuses in simulation or validation. The
@@ -366,6 +383,7 @@ CREATE TABLE IF NOT EXISTS settlement (
   answer jsonb,
   until timestamptz NOT NULL,
   since bigint,
+  unread bigint[] NOT NULL DEFAULT '{}',
   PRIMARY KEY (network, id)
 )
 ```
@@ -373,37 +391,49 @@ CREATE TABLE IF NOT EXISTS settlement (
 - One row per settled payment, keyed by network and transaction id (Tron) or extrinsic hash (Polkadot).
 - `answer` is null while the row is claimed and the answer is not yet written. A final answer is never replaced; a
   pending one is replaced by what a later read of the chain shows.
-- `until` is the end of the payment's validity window: Tron's `expiration`, or the end of the Polkadot era. A row is
-  kept for 24 hours after it, so a repeat in that time reads the stored answer before anything is verified again. A
-  sweep every minute drops older rows.
-- `since` is, for Polkadot, the first block not yet shown at finality to lack the extrinsic.
+- `until` is the end of the payment's validity window: Tron's `expiration`, or, for Polkadot, the end of the last
+  block that can include the extrinsic (the era's last, and no later than `System.BlockHashCount` + 1 blocks after its
+  birth), counted from the best block at 12 seconds a block. A row is kept for 24 hours after it, so a repeat in that
+  time reads the stored answer before anything is verified again. A sweep every minute drops older rows.
+- `since` is, for Polkadot, the first block the scan has not yet read at finality.
+- `unread` is, for Polkadot, the finalized blocks below `since` that the node could not give. None of them is shown to
+  lack the extrinsic, so each is read again, and the answer that the extrinsic can never be included waits until the
+  list is empty. A scan's write keeps every block of the list that the scan did not read, so concurrent repeats lose
+  none. It holds at most one entry per block of the validity window.
 - The pool holds at most 10 connections. Acquiring a connection, each query and each statement are bounded by 5
   seconds.
 
 ### Bounds and logs
 
-- Each node call has a timeout of at most 5 seconds and an answer of at most 4 MiB. On Tron, `/verify` makes six
-  FullNode calls: the account, the two id reads, the simulation and the head read at once, then the reference block
-  read.
+- Each node call has a timeout of at most 5 seconds and an answer of at most 4 MiB, except Polkadot's
+  `chain_getBlock`. Its bound is sized from the runtime's `System.BlockLength`, read from the metadata: 4 MiB, plus
+  9/2 of the largest class limit (an extrinsic of n encoded bytes is at most 2n + 5 JSON characters), plus 7 times
+  `maxHeaderSize`. For Polkadot Asset Hub's runtime 2005000 that is 28,504,064 bytes. At most 4 of these reads run at
+  once in one process, so block answers take at most 114,016,256 bytes for that runtime. A read waits for a free slot
+  until the scan's deadline; one that cannot start by then is recorded as unread, like a block the node cannot give,
+  and read again later. Every other node call has no such limit. On Tron, `/verify` makes six FullNode calls:
+  the account, the two id reads, the simulation and the head read at once, then the reference block read.
 - A request body is at most 64 KiB. The server's request timeout is `settleWaitMs` plus 60 seconds.
 - The facilitator writes one JSON line on standard error for what the operator should see and the answer does not
   carry: `settlement-failed` (with the events, or the receipt result and why the transfer does not count, that the
-  chain shows), `settlement-expired` and
-  `answer-not-stored`.
+  chain shows), `settlement-expired`, `answer-not-stored`, `block-unreadable` (a finalized Polkadot block recorded
+  as unread, with the node's reason) and `settlement-consumed` (a repeated `/settle` of a Polkadot payment whose
+  success has been answered).
 
 ## Security model and guarantees
 
 - **No key, no fee.** The facilitator signs nothing. It submits exactly the bytes the payer signed, and the payer pays
   every fee, as both profiles require.
 - **Settled once.** Settlements are deduplicated by transaction id or extrinsic hash, atomically, until the validity
-  window ends and for 24 hours after. On Tron a payment is answered success once, across every process that shares
-  the store, and a transaction id the node already holds is refused.
+  window ends and for 24 hours after. A payment is answered success once, across every process that shares
+  the store, to the `/settle` whose write stores it, on Tron and on Polkadot. On Tron, a transaction id the node
+  already holds is refused.
 - **Success only from the chain.** `success: true` is given only when a node shows the transaction in a block with
   the profile's success conditions: on Tron, receipt result `SUCCESS` and a `Transfer` log from the token.
 - **What it does not check.** It checks that the payment carries H in the profile's form, not which H the seller
-  issued. Its store claims a payment's id once, so the payment is submitted once. On Tron, a success is answered only
-  by the settle whose write stored it, and a repeated `/settle` of that payment answers `invalid_transaction_state`
-  with the transaction; on Polkadot, a repeated `/settle` gets the stored answer. Each profile's rule 6 puts the
+  issued. Its store claims a payment's id once, so the payment is submitted once. On Tron and on Polkadot, a success is
+  answered only by the settle whose write stored it, and a repeated `/settle` of that payment answers
+  `invalid_transaction_state` with the transaction. Each profile's rule 6 puts the
   remaining checks on the resource server: it accepts a payment only when the payment's H is one it issued for that
   request and has not seen claimed. The seller door's `claim` makes both checks. It answers `404 claim/unknown` for an
   H it holds no record of, `409 claim/not-this-request` for a payment of another request, and `409 claim/in-progress`
@@ -419,10 +449,13 @@ and the Polkadot stub with Polkadot Asset Hub's recorded runtime metadata
 (`test/fixtures/polkadot-asset-hub-2005000.json.gz`); the Tron account, block and transaction reads follow
 java-tron's HTTP answers and its signature and TaPoS checks. They cover two concurrent settles of one payment (one
 submission), repeated settles while the node is down, a settle that finds its id claimed and unanswered, the end of
-each validity window (Tron's expiration and Polkadot's mortal era), and a Polkadot remark that spells H with
-upper-case digits, refused before the node is asked. On Tron they also cover the owner's permission, TaPoS, a
-transaction id the node (in a block or its pending pool) or the store already holds, a consumed payment, and a `SUCCESS` receipt with and without the
-token's `Transfer` log, including the live USDT-TRC20 receipt whose `transfer` returned false. They need
+each validity window (Tron's expiration and Polkadot's mortal era, capped by `System.BlockHashCount`), and a
+Polkadot remark that spells H with upper-case digits, refused before the node is asked. On Tron they also cover the
+owner's permission, TaPoS, a transaction id the node (in a block or its pending pool) or the store already holds, a
+consumed payment, and a `SUCCESS` receipt with and without the token's `Transfer` log, including the live
+USDT-TRC20 receipt whose `transfer` returned false. On Polkadot they also cover a repeat of a consumed payment, a
+block answer over 4 MiB and one over the `System.BlockLength` bound, and a block the node cannot give, before and
+after the era's end. They need
 `INTEGRA_DATABASE_URL` set to a Postgres database.
 
 ## Requirements

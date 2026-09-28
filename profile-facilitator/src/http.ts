@@ -23,8 +23,13 @@ export class NodeError extends Error {
   }
 }
 
-/** POSTs a JSON body and reads a JSON answer within the timeout (at most 5 s) and the size bound. */
-export async function postJson(url: string, body: unknown, timeoutMs = NODE_TIMEOUT_MS): Promise<unknown> {
+/** POSTs a JSON body and reads a JSON answer within the timeout (at most 5 s) and `maxBytes` (4 MiB unless given). */
+export async function postJson(
+  url: string,
+  body: unknown,
+  timeoutMs = NODE_TIMEOUT_MS,
+  maxBytes = NODE_MAX_BYTES,
+): Promise<unknown> {
   const ms = Number.isFinite(timeoutMs) ? Math.max(1, Math.ceil(Math.min(timeoutMs, NODE_TIMEOUT_MS))) : NODE_TIMEOUT_MS;
   const signal = AbortSignal.timeout(ms);
   let res: Response;
@@ -41,7 +46,7 @@ export async function postJson(url: string, body: unknown, timeoutMs = NODE_TIME
     const unsent = typeof cause === "string" && UNSENT.has(cause);
     throw new NodeError("transport", !unsent, e instanceof Error ? e.message : String(e));
   }
-  const bytes = await readBounded(res, signal);
+  const bytes = await readBounded(res, signal, maxBytes);
   if (res.status < 200 || res.status > 299) throw new NodeError("http-status", true, `status ${res.status}`);
   try {
     return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
@@ -50,9 +55,9 @@ export async function postJson(url: string, body: unknown, timeoutMs = NODE_TIME
   }
 }
 
-async function readBounded(res: Response, signal: AbortSignal): Promise<Uint8Array> {
+async function readBounded(res: Response, signal: AbortSignal, maxBytes: number): Promise<Uint8Array> {
   const declared = Number(res.headers.get("content-length"));
-  if (Number.isFinite(declared) && declared > NODE_MAX_BYTES) {
+  if (Number.isFinite(declared) && declared > maxBytes) {
     await res.body?.cancel();
     throw new NodeError("too-large", true, `content-length ${declared}`);
   }
@@ -65,9 +70,9 @@ async function readBounded(res: Response, signal: AbortSignal): Promise<Uint8Arr
       const { done, value } = await reader.read();
       if (done) break;
       total += value.byteLength;
-      if (total > NODE_MAX_BYTES) {
+      if (total > maxBytes) {
         await reader.cancel();
-        throw new NodeError("too-large", true, `more than ${NODE_MAX_BYTES} bytes`);
+        throw new NodeError("too-large", true, `more than ${maxBytes} bytes`);
       }
       parts.push(value);
     }
@@ -126,5 +131,50 @@ export async function within<T>(p: Promise<T>, ms: number): Promise<T> {
     ]);
   } finally {
     clearTimeout(timer);
+  }
+}
+
+/**
+ * A fixed number of slots shared by the callers that hold one. `take` gives a slot within `ms`, as the function that
+ * gives it back (a second call does nothing), or undefined when none is free in time. A slot given back goes to the
+ * longest waiter first.
+ */
+export class Slots {
+  #free: number;
+  readonly #waiting: ((release: () => void) => void)[] = [];
+
+  constructor(count: number) {
+    this.#free = count;
+  }
+
+  take(ms: number): Promise<(() => void) | undefined> {
+    if (this.#free > 0) {
+      this.#free -= 1;
+      return Promise.resolve(this.#release());
+    }
+    if (!(ms > 0)) return Promise.resolve(undefined);
+    return new Promise((resolve) => {
+      const wake = (release: () => void) => {
+        clearTimeout(timer);
+        resolve(release);
+      };
+      const timer = setTimeout(() => {
+        const at = this.#waiting.indexOf(wake);
+        if (at >= 0) this.#waiting.splice(at, 1);
+        resolve(undefined);
+      }, ms);
+      this.#waiting.push(wake);
+    });
+  }
+
+  #release(): () => void {
+    let given = false;
+    return () => {
+      if (given) return;
+      given = true;
+      const next = this.#waiting.shift();
+      if (next === undefined) this.#free += 1;
+      else next(this.#release());
+    };
   }
 }

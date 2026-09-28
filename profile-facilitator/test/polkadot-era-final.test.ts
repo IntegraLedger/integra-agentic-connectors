@@ -130,10 +130,9 @@ describe("the end of a Polkadot extrinsic's era", () => {
   });
 
   it("a block finalized at the validated height, not the best block validation read, holds it: the answer is success", async () => {
-    forked = true;
     await start();
-    const first = (await post(`${base}/settle`, body())).json as { errorReason?: string };
-    expect(first.errorReason).not.toBe("invalid_transaction_state");
+    expect((await post(`${base}/settle`, body())).json).toEqual(PENDING);
+    forked = true;
     head = ERA_LAST + 44;
     finalized = ERA_LAST + 2;
     expect((await post(`${base}/settle`, body())).json).toEqual({

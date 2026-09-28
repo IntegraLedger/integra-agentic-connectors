@@ -15,6 +15,7 @@ export const SCHEMA = `CREATE TABLE IF NOT EXISTS settlement (
   answer jsonb,
   until timestamptz NOT NULL,
   since bigint,
+  unread bigint[] NOT NULL DEFAULT '{}',
   PRIMARY KEY (network, id)
 )`;
 
@@ -26,14 +27,15 @@ const DROP_EVERY_MS = 60_000;
 
 /**
  * What the table holds for an id: nothing, a claim whose answer is not written yet, or the answer. `since` is, for a
- * Polkadot extrinsic, the first block not yet shown at finality to lack it: at the claim, the block after the finalized
- * head read before validation (never before the era's birth), and later moved on past blocks read at finality that do
- * not hold it. It is null for Tron.
+ * Polkadot extrinsic, the first block the scan has not yet read at finality: at the claim, the block after the finalized
+ * head read before validation (never before the era's birth), and later moved on past the blocks read at finality. It
+ * is null for Tron. `unread` is, for a Polkadot extrinsic, the finalized blocks below `since` that could not be read:
+ * none of them is shown to lack the extrinsic, so each is read again. It is empty for Tron.
  */
 export type Stored =
   | { state: "none" }
-  | { state: "claimed"; since: number | null }
-  | { state: "answered"; answer: SettleAnswer; since: number | null };
+  | { state: "claimed"; since: number | null; unread: number[] }
+  | { state: "answered"; answer: SettleAnswer; since: number | null; unread: number[] };
 
 export interface SettlementStore {
   read(network: string, id: string): Promise<Stored>;
@@ -43,8 +45,12 @@ export interface SettlementStore {
   answer(network: string, id: string, answer: SettleAnswer): Promise<boolean>;
   /** Removes a claim that has no answer: the claimant submitted nothing. True when a row was removed. */
   release(network: string, id: string): Promise<boolean>;
-  /** Moves `since` on to `block`, never back. */
-  advance(network: string, id: string, block: number): Promise<void>;
+  /**
+   * Moves `since` on to `to`, never back, after a scan that read every finalized block from `from` up to `to` except
+   * `unread`, and read `resolved`, blocks of the stored `unread` it read again. The stored `unread` gains `unread`,
+   * and keeps every block this scan did not read: a concurrent scan's record is never lost.
+   */
+  advance(network: string, id: string, scan: { from: number; to: number; unread: number[]; resolved: number[] }): Promise<void>;
   /** Drops the rows whose `until` is more than `KEEP_AFTER_UNTIL_MS` past. */
   drop(): Promise<void>;
   close(): Promise<void>;
@@ -63,14 +69,17 @@ export async function openStore(url: string): Promise<SettlementStore> {
 
   const store: SettlementStore = {
     async read(network, id) {
-      const r = await pool.query<{ answer: SettleAnswer | null; since: string | null }>(
-        "SELECT answer, since FROM settlement WHERE network = $1 AND id = $2",
+      const r = await pool.query<{ answer: SettleAnswer | null; since: string | null; unread: string[] }>(
+        "SELECT answer, since, unread FROM settlement WHERE network = $1 AND id = $2",
         [network, id],
       );
       const row = r.rows[0];
       if (row === undefined) return { state: "none" };
       const since = row.since === null ? null : Number(row.since);
-      return row.answer === null ? { state: "claimed", since } : { state: "answered", answer: row.answer, since };
+      const unread = row.unread.map(Number);
+      return row.answer === null
+        ? { state: "claimed", since, unread }
+        : { state: "answered", answer: row.answer, since, unread };
     },
     async claim(network, id, until, since) {
       const r = await pool.query(
@@ -91,12 +100,16 @@ export async function openStore(url: string): Promise<SettlementStore> {
       const r = await pool.query("DELETE FROM settlement WHERE network = $1 AND id = $2 AND answer IS NULL", [network, id]);
       return r.rowCount === 1;
     },
-    async advance(network, id, block) {
-      await pool.query("UPDATE settlement SET since = GREATEST(since, $3) WHERE network = $1 AND id = $2", [
-        network,
-        id,
-        block,
-      ]);
+    async advance(network, id, scan) {
+      await pool.query(
+        `UPDATE settlement SET since = GREATEST(since, $3),
+           unread = ARRAY(
+             SELECT DISTINCT u FROM unnest(unread || $5::bigint[]) AS u
+             WHERE u = ANY($5::bigint[]) OR NOT (u = ANY($6::bigint[]) OR (u >= $4 AND u < $3))
+             ORDER BY u)
+         WHERE network = $1 AND id = $2`,
+        [network, id, scan.to, scan.from, scan.unread, scan.resolved],
+      );
     },
     async drop() {
       await pool.query("DELETE FROM settlement WHERE until + $1 * interval '1 millisecond' < now()", [KEEP_AFTER_UNTIL_MS]);

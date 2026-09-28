@@ -1,6 +1,8 @@
-// Every answer to a repeated /settle for the same id is the stored one. The id is the extrinsic's BLAKE2b-256 (the
-// profile's rule 5 deduplicates by it), known from its bytes, so a repeated /settle while the node is unreachable still
-// gives the stored success. Expected values: that rule, and the lcp vectors' V2 and V3 (the call, the extrinsic).
+// A success is given once. A repeated /settle of a consumed payment is a settlement failure, never a success (x402's
+// `exact` family: "A consumed primitive MUST produce a settlement failure, never a success"). The id is the extrinsic's
+// BLAKE2b-256 (the profile's rule 5 deduplicates by it), known from its bytes, so a repeated /settle while the node is
+// unreachable gives the same failure. Expected values: those rules, and the lcp vectors' V2 and V3 (the call, the
+// extrinsic).
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
 import { fixture, freePort, freshDatabase, post, stub, type Stub } from "./support.js";
@@ -88,14 +90,19 @@ afterEach(async () => {
   await db.drop();
 }, 60_000);
 
-describe("a repeated Polkadot /settle while the node is unreachable", () => {
-  it("gives the stored success, as it does while the node answers", async () => {
+describe("a repeated Polkadot /settle of a consumed payment", () => {
+  it("fails with the success's transaction, while the node answers and while it is unreachable", async () => {
     await start();
-    const success = { success: true, transaction: `${BLOCK_HASH}-2`, network: NETWORK, payer: PAYER };
-    expect((await post(`${base}/settle`, body())).json).toEqual(success);
-    expect((await post(`${base}/settle`, body())).json).toEqual(success);
+    expect((await post(`${base}/settle`, body())).json).toEqual({
+      success: true,
+      transaction: `${BLOCK_HASH}-2`,
+      network: NETWORK,
+      payer: PAYER,
+    });
+    const consumed = { success: false, errorReason: "invalid_transaction_state", transaction: `${BLOCK_HASH}-2`, network: NETWORK };
+    expect((await post(`${base}/settle`, body())).json).toEqual(consumed);
     await node!.close();
     node = undefined;
-    expect((await post(`${base}/settle`, body())).json).toEqual(success);
+    expect((await post(`${base}/settle`, body())).json).toEqual(consumed);
   });
 });
