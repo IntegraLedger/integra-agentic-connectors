@@ -133,3 +133,48 @@ export async function within<T>(p: Promise<T>, ms: number): Promise<T> {
     clearTimeout(timer);
   }
 }
+
+/**
+ * A fixed number of slots shared by the callers that hold one. `take` gives a slot within `ms`, as the function that
+ * gives it back (a second call does nothing), or undefined when none is free in time. A slot given back goes to the
+ * longest waiter first.
+ */
+export class Slots {
+  #free: number;
+  readonly #waiting: ((release: () => void) => void)[] = [];
+
+  constructor(count: number) {
+    this.#free = count;
+  }
+
+  take(ms: number): Promise<(() => void) | undefined> {
+    if (this.#free > 0) {
+      this.#free -= 1;
+      return Promise.resolve(this.#release());
+    }
+    if (!(ms > 0)) return Promise.resolve(undefined);
+    return new Promise((resolve) => {
+      const wake = (release: () => void) => {
+        clearTimeout(timer);
+        resolve(release);
+      };
+      const timer = setTimeout(() => {
+        const at = this.#waiting.indexOf(wake);
+        if (at >= 0) this.#waiting.splice(at, 1);
+        resolve(undefined);
+      }, ms);
+      this.#waiting.push(wake);
+    });
+  }
+
+  #release(): () => void {
+    let given = false;
+    return () => {
+      if (given) return;
+      given = true;
+      const next = this.#waiting.shift();
+      if (next === undefined) this.#free += 1;
+      else next(this.#release());
+    };
+  }
+}

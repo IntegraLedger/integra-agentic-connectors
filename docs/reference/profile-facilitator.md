@@ -88,9 +88,11 @@ CREATE TABLE IF NOT EXISTS settlement (
 - Each node call has a timeout of at most 5 seconds and an answer of at most 4 MiB, except Polkadot's
   `chain_getBlock`. Its bound is sized from the runtime's `System.BlockLength`, read from the metadata: 4 MiB, plus
   9/2 of the largest class limit (an extrinsic of n encoded bytes is at most 2n + 5 JSON characters), plus 7 times
-  `maxHeaderSize`. For Polkadot Asset Hub's runtime 2005000 that is 28,504,064 bytes. On Tron, `/verify` makes six
-  FullNode calls: the account, the two id reads, the simulation and the head read at once, then the reference block
-  read.
+  `maxHeaderSize`. For Polkadot Asset Hub's runtime 2005000 that is 28,504,064 bytes. At most 4 of these reads run at
+  once in one process, so block answers take at most 114,016,256 bytes for that runtime. A read waits for a free slot
+  until the scan's deadline; one that cannot start by then is recorded as unread, like a block the node cannot give,
+  and read again later. Every other node call has no such limit. On Tron, `/verify` makes six FullNode calls:
+  the account, the two id reads, the simulation and the head read at once, then the reference block read.
 - A request body is at most 64 KiB. The server's request timeout is `settleWaitMs` plus 60 seconds.
 - The facilitator writes one JSON line on standard error for what the operator should see and the answer does not
   carry: `settlement-failed` (with the events, or the receipt result and why the transfer does not count, that the

@@ -62,7 +62,8 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
    failure counts only in a finalized block.
 6. A finalized block the node cannot give, its body or, for the block that holds the extrinsic, its events, is
    recorded as unread and skipped. The scan goes on to the blocks after it, so a success in a later block is still
-   found, and the unread block is read again on each later pass and on each repeat. A block above the finalized head
+   found, and the unread block is read again on each later pass and on each repeat. A block read that cannot start
+   before the deadline, because the process's 4 block reads are all running, is recorded the same way. A block above the finalized head
    that cannot be read is skipped, since it is read again at finality.
 7. Once every block to the last is finalized without the extrinsic, and no block is unread, it can never be included:
    `invalid_transaction_state`.

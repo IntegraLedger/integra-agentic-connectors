@@ -27,7 +27,7 @@ import {
   type SettleAnswer,
   type VerifyAnswer,
 } from "./answers.js";
-import { NODE_MAX_BYTES, NODE_TIMEOUT_MS, NodeError, postJson, sleep, within } from "./http.js";
+import { NODE_MAX_BYTES, NODE_TIMEOUT_MS, NodeError, Slots, postJson, sleep, within } from "./http.js";
 import { answerReserve, inTime, type SettlementStore, type Stored } from "./store.js";
 
 export interface PolkadotNode {
@@ -42,6 +42,13 @@ const INIT_TIMEOUT_MS = 30_000;
 const SLOW_BLOCK_MS = 12_000;
 /** `TransactionSource::External`. */
 const EXTERNAL = "02";
+/**
+ * How many `chain_getBlock` reads, each bounded by the runtime's `System.BlockLength`, run at once in this process:
+ * for Polkadot Asset Hub's runtime 2005000, at most 4 × 28,504,064 = 114,016,256 bytes of block answers.
+ */
+export const BLOCK_READS = 4;
+/** The slots of `BLOCK_READS`, shared by every network and every scan in this process. */
+export const blockReads = new Slots(BLOCK_READS);
 /** The JSON-RPC error `author_submitExtrinsic` gives for an extrinsic already in the pool. */
 const ALREADY_IMPORTED = 1013;
 /** The JSON-RPC error for an extrinsic the pool refuses as invalid; its message or data names the reason. */
@@ -50,6 +57,13 @@ const INVALID_TRANSACTION = 1010;
 const TEMPORARILY_BANNED = 1012;
 
 type Provider = NonNullable<ApiOptions["provider"]>;
+
+/** No slot of `blockReads` came free before the pass's deadline, so block `n` was not read. */
+class NoBlockReadSlot extends Error {
+  constructor(n: number) {
+    super(`block ${n}: no block read slot before the deadline`);
+  }
+}
 
 /** A JSON-RPC error answer: the node read the call and refused it. */
 class RpcError extends Error {
@@ -404,10 +418,21 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     }
   }
 
-  /** The extrinsic's index in the block at `n`, and the block's hash; the index is -1 when the block does not hold it. */
+  /**
+   * The extrinsic's index in the block at `n`, and the block's hash; the index is -1 when the block does not hold it.
+   * The block is read in one of `blockReads`' slots, waited for until `left()` ends; a read that cannot start by then
+   * throws `NoBlockReadSlot`.
+   */
   async function findIn(c: Checked, url: string, n: number, left: () => number): Promise<{ hash: string; index: number }> {
     const hash = await rpc(url, "chain_getBlockHash", [n], left());
-    const block = await rpc(url, "chain_getBlock", [hash], left(), c.bounds.blockAnswerBytes);
+    const release = await blockReads.take(left());
+    if (release === undefined) throw new NoBlockReadSlot(n);
+    let block: unknown;
+    try {
+      block = await rpc(url, "chain_getBlock", [hash], left(), c.bounds.blockAnswerBytes);
+    } finally {
+      release();
+    }
     const xts = isObject(block) && isObject(block["block"]) ? block["block"]["extrinsics"] : undefined;
     if (typeof hash !== "string" || !Array.isArray(xts)) throw new NodeError("malformed", true, `block ${n}`);
     return { hash, index: xts.findIndex((x) => isLowerHex(x) && extrinsicHash(Buffer.from(x.slice(2), "hex")) === c.id) };
@@ -415,8 +440,8 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
 
   /**
    * Block `n` read for the extrinsic: the answer when the block holds it, `absent` when it does not, `unreadable` (with
-   * the node's reason) when the node gives neither the block nor, for the block that holds it, its events, and `stopped`
-   * when the deadline ends the read.
+   * the reason) when the node gives neither the block nor, for the block that holds it, its events, or when no block
+   * read slot comes free before the deadline, and `stopped` when the deadline ends a read that started.
    */
   async function readBlock(
     c: Checked,
@@ -430,7 +455,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       if (found.index < 0) return "absent";
       return await included(c, url, found.hash, found.index, left(), final);
     } catch (e) {
-      if (left() <= 0) return "stopped";
+      if (!(e instanceof NoBlockReadSlot) && left() <= 0) return "stopped";
       return { unreadable: e instanceof Error ? e.message : String(e) };
     }
   }
