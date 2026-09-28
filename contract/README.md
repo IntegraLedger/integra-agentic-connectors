@@ -41,8 +41,9 @@ It contains no client and no server. It is the contract both sides build to.
   `{type, value, legalContextUrl}` and `{type, value, legal_context_url}`.
 - **Mint request id:** `mintRequestId` names one state of one checkout. The same id with the same input returns the
   same ATR, byte for byte.
-- **Record:** the door's state for one ATR: `issued`, `settling`, `paid` or `closed`, with `proves`, the statement of
-  what it shows.
+- **Record:** the door's state for one ATR: `issued`, `settling`, `paid`, `closed` or `stale`, with `proves`, the
+  statement of what it shows. `stale` is terminal: the payment was claimed, and 604 800 seconds after its `settleBy`
+  no read has shown it settled or unable to settle; the record carries a notice and is never paid after that.
 - **Seller:** the party serving the resource. **Facilitator:** the x402 role that verifies and settles.
 - **Vectors:** the shared test cases that fix the contract byte for byte.
 
@@ -257,7 +258,8 @@ answers with `agreement: {url, network, pairing}`. Before the full payment, the 
 - Place `agreement.url` beside the carriers: on MPP as `opaque.legalContextAgreementUrl`; elsewhere as
   `legalContextAgreementUrl` beside `legalContextUrl`, or in the protocol's own place beside the link.
 - Never start or accept the full payment before `status` shows `agreement.state` `recorded`. Until then `claim`
-  answers `409 claim/agreement-first`.
+  answers `409 claim/agreement-first`. An agreement leg whose claimed payment shows neither settlement nor failure
+  604 800 seconds after its `settleBy` becomes `stale`, which is terminal: that agreement is never recorded.
 - A payment reported before the agreement is recorded is still recorded, and its record says that no agreement was
   recorded before it and that nothing public carries this ATR's hash (vector `CV10`).
 

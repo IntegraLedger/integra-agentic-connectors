@@ -5,6 +5,7 @@
  */
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
+import { isRefusal } from "@integraledger/lcp";
 import {
   decodeTronTx,
   pairingOf,
@@ -52,10 +53,6 @@ interface Checked {
 /** A verify reason as a settle answer's: a node that could not be read before submission is a settle error. */
 function settleReason(r: InvalidReason): string {
   return r === "unexpected_verify_error" ? "unexpected_settle_error" : r;
-}
-
-function refused(v: unknown): v is { refused: true; code: string } {
-  return isObject(v) && v["refused"] === true;
 }
 
 function hexOf(b: Uint8Array): string {
@@ -109,12 +106,12 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     const hex = r.paymentPayload.payload["transaction"];
     if (typeof hex !== "string") return "invalid_payload";
     const tx = decodeTronTx(hex);
-    if (refused(tx)) return "invalid_payload";
+    if (isRefusal(tx)) return "invalid_payload";
     const carried = await tronCarrier(tx);
-    if (refused(carried)) return "invalid_payload";
+    if (isRefusal(carried)) return "invalid_payload";
     const asset = await tronAddress(req.asset);
     const payTo = await tronAddress(req.payTo);
-    if (refused(asset) || refused(payTo)) return "invalid_payment_requirements";
+    if (isRefusal(asset) || isRefusal(payTo)) return "invalid_payment_requirements";
     if (!sameBytes(tx.raw.contractAddress, asset)) return "invalid_payload";
     if (!sameBytes(tx.raw.callData, transferCall(payTo, BigInt(req.amount)))) return "invalid_payload";
     if (tx.signatures.length !== 1) return "unsupported_permission";

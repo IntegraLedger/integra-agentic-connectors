@@ -8,7 +8,7 @@ import { Ajv2020 } from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
 import { describe, expect, it } from "vitest";
 import { exactEip3009, exactErc7710 } from "@integraledger/lcp/x402";
-import { OPENAPI_BYTES, REFUSALS, VECTORS } from "../src/index.js";
+import { OPENAPI_BYTES, REFUSALS, VECTORS, type AgreementView, type RecordView } from "../src/index.js";
 
 const addFormats = addFormatsModule as unknown as (a: Ajv2020) => Ajv2020;
 const OAS_SCHEMA_SHA256 = "da01ba28852cac0de53893797cb8d1942bc3b05084f526dcc216717dec314ed0";
@@ -76,6 +76,15 @@ describe("the OpenAPI document", () => {
 
   it("the refusal schema's codes are exactly the closed table", () => {
     expect([...doc.components.schemas.Refusal.properties.code.enum].sort()).toEqual(Object.keys(REFUSALS).sort());
+  });
+
+  it("the record's and the agreement leg's states are the same closed lists in the types and the document", () => {
+    // The states the seller door defines, `stale` the terminal one for a claimed leg that reached its cap. A key
+    // missing from or added to either object is a type error against the union it is typed by.
+    const record: Record<RecordView["state"], true> = { issued: true, settling: true, paid: true, closed: true, stale: true };
+    const agreement: Record<AgreementView["state"], true> = { required: true, settling: true, recorded: true, stale: true };
+    expect(doc.components.schemas.RecordView.properties.state.enum).toEqual(Object.keys(record));
+    expect(doc.components.schemas.Agreement.properties.state.enum).toEqual(Object.keys(agreement));
   });
 
   it("states the bounds the door enforces", () => {

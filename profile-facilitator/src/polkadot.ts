@@ -6,6 +6,7 @@
 import { ApiPromise } from "@polkadot/api";
 import type { ApiOptions } from "@polkadot/api/types";
 import { blake2b } from "@noble/hashes/blake2.js";
+import { isRefusal } from "@integraledger/lcp";
 import {
   decodeProfileCall,
   exactPolkadotRemark,
@@ -203,7 +204,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     if (typeof bound !== "string") return "invalid_payload";
     const profile = decodeProfileCall(Buffer.from(call.slice(2), "hex"));
     const dest = ss58Decode(req.payTo);
-    if ("refused" in profile || "refused" in dest) return "invalid_payload";
+    if (isRefusal(profile) || isRefusal(dest)) return "invalid_payload";
     if (profile.assetId !== Number(req.asset) || profile.amount !== BigInt(req.amount)) return "invalid_payload";
     if (hexOf(profile.dest) !== hexOf(dest)) return "invalid_payload";
     return {

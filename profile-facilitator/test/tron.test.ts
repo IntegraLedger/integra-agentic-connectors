@@ -5,6 +5,7 @@
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { isRefusal } from "@integraledger/lcp";
 import { decodeTronTx, encodeTronRaw } from "@integraledger/lcp/tron";
 import { serveProfileFacilitator } from "../src/index.js";
 import { fixture, freePort, freshDatabase, HANG, post, stub, type Stub } from "./support.js";
@@ -162,7 +163,7 @@ describe("/verify", () => {
   it("refuses the same transaction with data = 提现, V1's memo", async () => {
     await start();
     const decoded = decodeTronTx(TX_V2);
-    if ("refused" in decoded) throw new Error("V2 did not decode");
+    if (isRefusal(decoded)) throw new Error("V2 did not decode");
     const raw = Buffer.from(encodeTronRaw({ ...decoded.raw, data: Buffer.from("提现", "utf8") })).toString("hex");
     const res = await post(`${base}/verify`, body(transaction(raw, [sign(raw)])));
     expect(res.json).toEqual({ isValid: false, invalidReason: "invalid_payload" });

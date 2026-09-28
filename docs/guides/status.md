@@ -13,7 +13,7 @@ a connector keeps none of its own.
 | Field | Meaning |
 |---|---|
 | `atrHash` | H. |
-| `state` | `issued`, `settling`, `paid` or `closed`. See [records](../concepts/records.md). |
+| `state` | `issued`, `settling`, `paid`, `closed` or `stale`. See [records](../concepts/records.md). |
 | `expiresAt` | When the challenge lapses. |
 | `settlement` | `{pairing, network?, reference?}` once a payment is recorded, else `null`. |
 | `proves` | `{claimed, pattern, settledBy}`: what the record proves. |

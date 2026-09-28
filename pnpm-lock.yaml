@@ -21,8 +21,8 @@ importers:
   contract:
     dependencies:
       '@integraledger/lcp':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.2.0
+        version: 0.2.0
     devDependencies:
       ajv:
         specifier: 8.20.0
@@ -40,8 +40,8 @@ importers:
   profile-facilitator:
     dependencies:
       '@integraledger/lcp':
-        specifier: 0.1.0
-        version: 0.1.0
+        specifier: 0.2.0
+        version: 0.2.0
       '@noble/curves':
         specifier: 2.4.0
         version: 2.4.0
@@ -217,8 +217,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@integraledger/lcp@0.1.0':
-    resolution: {integrity: sha512-5cy6QGu53WGZMu6P+ZHeO6hvoQYpTSdgMO7NDfZ1R/66dPxydcAksR8Qfmiz2Y2VX1tXy7Re3LU7l6NrbWv+0g==}
+  '@integraledger/lcp@0.2.0':
+    resolution: {integrity: sha512-CPdy2Kxj2PN0LJlmzb82wY7joktK0kmXxiIYzyh0YZZvGinAksJqdTSUOPUwUrZnxQ/eKqWIDnf4l3UPPutCuQ==}
     engines: {node: '>=26.10.0'}
     peerDependencies:
       '@mysten/sui': 2.31.3
@@ -1206,7 +1206,7 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@integraledger/lcp@0.1.0':
+  '@integraledger/lcp@0.2.0':
     dependencies:
       '@noble/curves': 2.4.0
       '@noble/hashes': 2.4.0
