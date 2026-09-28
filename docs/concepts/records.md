@@ -26,7 +26,7 @@ stateDiagram-v2
 | `settling` | A payment was claimed, or reported, and its settlement is not yet read. The door finishes the record. |
 | `paid` | The payment is recorded as settled. |
 | `closed` | A channel pairing's close was reported and read. |
-| `stale` | A payment was claimed, and 604 800 seconds after its `settleBy` no read has shown it settled or unable to settle. Terminal: the record carries a notice and is never paid after that. |
+| `stale` | A payment was claimed, and 604 800 seconds after its `settleBy` no read has shown it settled or unable to settle. Terminal: the record carries a notice and is never paid after that. A claim of it answers 410 `claim/lapsed`, and a report 409 `settle/not-settling`. |
 
 ## `proves`
 
