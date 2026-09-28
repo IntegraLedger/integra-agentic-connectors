@@ -370,10 +370,16 @@ CREATE TABLE IF NOT EXISTS settlement (
   window ends and for 24 hours after.
 - **Success only from the chain.** `success: true` is given only when a node shows the transaction in a block with
   the profile's success conditions.
-- **What it does not check.** It checks that the payment carries an LCP `sha256` string, not which H the seller
-  issued. The resource server refuses a payment whose H it did not issue for that request (each profile's rule 6),
-  for example through the seller door's `claim`. It checks the amount, asset and payee against the requirements it
-  is given because x402 requires that of a facilitator, and carries no business or legal logic beyond that.
+- **What it does not check.** It checks that the payment carries H in the profile's form, not which H the seller
+  issued, and not whether the resource server has seen the payment before. Its store claims a payment's id once, so
+  the payment is submitted once, and a repeated `/settle` of that payment gets the stored answer: a payment that
+  settled answers `success: true` again for as long as its row is kept. Each profile's rule 6 puts both checks on the
+  resource server: it accepts a payment only when the payment's H is one it issued for that request and has not seen
+  claimed. The seller door's `claim` makes both checks. It answers `404 claim/unknown` for an H it holds no record
+  of, `409 claim/not-this-request` for a payment of another request, and `409 claim/in-progress` or
+  `409 claim/paid` once the ATR's payment has been claimed. The facilitator checks the amount, asset and payee
+  against the requirements it is given because x402 requires that of a facilitator, and carries no business or legal
+  logic beyond that.
 
 ## Test vectors and conformance
 

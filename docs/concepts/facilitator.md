@@ -29,8 +29,9 @@ transaction carries H:
 
 [`@integraledger/profile-facilitator`](../../profile-facilitator/README.md) is a facilitator for those two profiles.
 It holds no key and pays no fee: it checks, submits exactly the bytes the payer signed, deduplicates settlements in
-Postgres, and reports what the network shows. It checks that the payment carries an LCP `sha256` string; which H the
-seller issued is the seller door's `claim` to check.
+Postgres, and reports what the network shows. It checks that the payment carries H in the profile's form; which H
+the seller issued, and whether the seller has seen the payment claimed before, is the seller door's `claim` to check
+(each profile's rule 6).
 
 See [Run the profile facilitator](../guides/facilitator.md), and the [Tron](../guides/tron.md) and
 [Polkadot](../guides/polkadot.md) guides.
