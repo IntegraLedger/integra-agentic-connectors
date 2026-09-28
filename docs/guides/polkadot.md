@@ -7,7 +7,7 @@ description: What the profile facilitator verifies and settles for x402/exact/po
 
 On Polkadot Asset Hub, H rides in a remark the payer signs, batched with the transfer:
 `utility.batch_all([assets.transfer_keep_alive(asset, Id(payTo), amount), system.remark_with_event(R)])`, where R is
-the 77 ASCII bytes `lcp:sha256:` followed by H. The payer pays every fee, in DOT or in an asset its wallet selects.
+the 77 ASCII bytes `lcp:sha256:` followed by H in lowercase hex. The payer pays every fee, in DOT or in an asset its wallet selects.
 
 | Requirement | Value |
 |---|---|
@@ -31,7 +31,9 @@ payment, and again whenever the node's runtime version changes.
    `invalid_payment_requirements`.
 2. `payload.extrinsic` and `payload.call` are lowercase hex; the call is exactly
    `utility.batch_all([assets.transfer_keep_alive(asset, Id(payTo), amount), system.remark_with_event(R)])` for this
-   `asset`, `payTo` and `amount`, and R carries an LCP `sha256` string, else `invalid_payload`.
+   `asset`, `payTo` and `amount`, and R is exactly the 77 bytes `lcp:sha256:` followed by H in lowercase hex, else
+   `invalid_payload`. `System.Remarked` carries the BLAKE2b-256 of the remark's bytes as signed, so a remark that
+   spells H any other way, such as with upper-case digits, is refused.
 3. With the network's runtime metadata, the extrinsic decodes as a signed v4 extrinsic whose call is `payload.call`
    byte for byte, with a mortal era, else `invalid_payload`. The node must serve the chain the network names (its
    genesis hash), else `unexpected_verify_error`.

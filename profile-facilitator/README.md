@@ -17,7 +17,7 @@ Paying is then agreeing to that exact record, and the proof is on chain.
 | Profile | `network` | `extra.assetTransferMethod` | Where H rides |
 |---|---|---|---|
 | `x402/exact/tron/lcp-trc20-memo` | `tron:<chain id in decimal>` | `lcp-trc20-memo` | The transaction's `raw_data.data`: the 77 ASCII bytes `lcp:sha256:` followed by H, beside one TRC-20 `transfer(payTo, amount)`. |
-| `x402/exact/polkadot/lcp-assets-remark` | `polkadot:68d56f15f85d3136970ec16946040bc1` (Polkadot Asset Hub) or `polkadot:67f9723393ef76214df0118c34bbbd3d` (Westend Asset Hub) | `lcp-assets-remark` | `system.remark_with_event(R)`, where R is `lcp:sha256:` followed by H, batched with `assets.transfer_keep_alive` in one `utility.batch_all`. |
+| `x402/exact/polkadot/lcp-assets-remark` | `polkadot:68d56f15f85d3136970ec16946040bc1` (Polkadot Asset Hub) or `polkadot:67f9723393ef76214df0118c34bbbd3d` (Westend Asset Hub) | `lcp-assets-remark` | `system.remark_with_event(R)`, where R is exactly `lcp:sha256:` followed by H in lowercase hex, batched with `assets.transfer_keep_alive` in one `utility.batch_all`. |
 
 This package implements each profile's rule 5, the facilitator's duties. The profiles themselves are published with
 `@integraledger/lcp`, in [integra-protocol](https://github.com/IntegraLedger/integra-protocol).
@@ -249,7 +249,9 @@ Success is `{success: true, transaction, network, payer}`, where `transaction` i
    `invalid_payment_requirements`.
 2. `payload.extrinsic` and `payload.call` are lowercase hex; the call is exactly
    `utility.batch_all([assets.transfer_keep_alive(asset, Id(payTo), amount), system.remark_with_event(R)])` for this
-   `asset`, `payTo` and `amount`, and R carries an LCP `sha256` string, else `invalid_payload`.
+   `asset`, `payTo` and `amount`, and R is exactly the 77 bytes `lcp:sha256:` followed by H in lowercase hex, else
+   `invalid_payload`. `System.Remarked` carries the BLAKE2b-256 of the remark's bytes as signed, so a remark that
+   spells H any other way, such as with upper-case digits, is refused.
 3. With the network's runtime metadata, the extrinsic decodes as a signed v4 extrinsic whose call is `payload.call`
    byte for byte, with a mortal era, else `invalid_payload`. The node must serve the chain the network names (its
    genesis hash), else `unexpected_verify_error`.
@@ -380,8 +382,9 @@ shared vectors. The Tron stubs answer with Tron mainnet's recorded answers (`tes
 and the Polkadot stub with Polkadot Asset Hub's recorded runtime metadata
 (`test/fixtures/polkadot-asset-hub-2005000.json.gz`). They cover two concurrent settles of one payment (one
 submission, equal answers), repeated settles while the node is down, a settle that finds its id claimed and
-unanswered, and the end of each validity window: Tron's expiration and Polkadot's mortal era. They need
-`INTEGRA_DATABASE_URL` set to a Postgres database.
+unanswered, the end of each validity window (Tron's expiration and Polkadot's mortal era), and a Polkadot remark that
+spells H with upper-case digits, refused before the node is asked. They need `INTEGRA_DATABASE_URL` set to a
+Postgres database.
 
 ## Requirements
 

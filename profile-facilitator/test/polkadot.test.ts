@@ -3,12 +3,18 @@
 // extrinsic and hash, V4's remark hash). The node is a local JSON-RPC stub: its metadata answers are
 // Polkadot Asset Hub's live answers (fixtures/polkadot-asset-hub-2005000.json.gz); its events are SCALE bytes written
 // here from the SDK's event layouts, and the test decodes them with the live metadata before using them.
+import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { ApiPromise } from "@polkadot/api";
+import { exactPolkadotRemark } from "@integraledger/lcp/polkadot";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
 import { HANG, fixture, freePort, freshDatabase, post, stub, type Stub } from "./support.js";
 
 const NETWORK = "polkadot:68d56f15f85d3136970ec16946040bc1";
+/** SHA-256("abc"), FIPS 180-2's first example: the H of the lcp vectors. */
+const H = "0xba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad";
 // The lcp vectors' V2 and V3.
 const CALL_V2 =
   "0x2802083209e51400d43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d419c000735016c63703a7368613235363a307862613738313662663866303163666561343134313430646535646165323232336230303336316133393631373761396362343130666636316632303031356164";
@@ -78,7 +84,8 @@ interface Chain {
 let db: Awaited<ReturnType<typeof freshDatabase>>;
 let node: Stub;
 let base: string;
-let closeFacilitator: () => Promise<void>;
+/** Closes the facilitator the current test started; unset once called, so a test that starts none closes nothing. */
+let closeFacilitator: (() => Promise<void>) | undefined;
 
 async function start(chain: Chain = {}, network: string = NETWORK, settleWaitMs = 3_000): Promise<void> {
   node = await stub(async (_path, body) => {
@@ -140,7 +147,9 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await closeFacilitator?.();
+  const close = closeFacilitator;
+  closeFacilitator = undefined;
+  await close?.();
   await node?.close();
   await db.drop();
 }, 60_000);
@@ -218,6 +227,48 @@ describe("/verify", () => {
     await start();
     const call = `${CALL_V2.slice(0, -2)}${CALL_V2.endsWith("64") ? "65" : "64"}`;
     expect((await post(`${base}/verify`, body(XT_V3, call))).json).toEqual({ isValid: false, invalidReason: "invalid_payload" });
+  });
+});
+
+describe("a remark whose hash digits are upper case", () => {
+  // The profile's rule 3: R is the 77 ASCII bytes `lcp:sha256:` followed by H, which its rule 1 writes as `0x` and
+  // lowercase hex. System.Remarked carries the BLAKE2b-256 of the remark's bytes as signed, so R must be exactly
+  // utf8(toLcpString(H)).
+  const lower = Buffer.from(`lcp:sha256:${H}`).toString("hex");
+  const upper = Buffer.from(`lcp:sha256:0x${H.slice(2).toUpperCase()}`).toString("hex");
+  const xt = XT_V3.replace(lower, upper);
+  const call = CALL_V2.replace(lower, upper);
+  // @integraledger/lcp 0.2.0, docs/reference/refusals.md: "`polkadot/remark-not-lcp`: The Polkadot remark is not
+  // exactly an ATR hash's LCP string form with lowercase hex, byte for byte."
+  const REMARK_NOT_LCP = "polkadot/remark-not-lcp";
+
+  it("is the lcp vectors' V3 refusal row for that case, with the refusal refusals.md names", () => {
+    const lcpDir = dirname(dirname(createRequire(import.meta.url).resolve("@integraledger/lcp")));
+    const V = JSON.parse(readFileSync(join(lcpDir, "vectors", "x402-exact-polkadot-lcp-assets-remark.json"), "utf8")) as {
+      V3: { refusals: { case: string; extrinsic: string; call: string; expect: string }[] };
+    };
+    const row = V.V3.refusals.find((r) => r.case === "a remark whose hash digits are upper case");
+    expect(xt).not.toBe(XT_V3);
+    expect(row).toMatchObject({ extrinsic: xt, call, expect: REMARK_NOT_LCP });
+  });
+
+  it("is refused by lcp's bound as polkadot/remark-not-lcp", async () => {
+    const presented = { x402Version: 2, accepted: O_P, payload: { extrinsic: xt, call } };
+    expect(await exactPolkadotRemark.bound(presented as never)).toEqual({ refused: true, code: REMARK_NOT_LCP });
+  });
+
+  it("is refused at /verify as invalid_payload, and /settle asks the node nothing and stores nothing", async () => {
+    await start();
+    expect((await post(`${base}/verify`, body(xt, call))).json).toEqual({ isValid: false, invalidReason: "invalid_payload" });
+    expect((await post(`${base}/settle`, body(xt, call))).json).toEqual({
+      success: false,
+      errorReason: "invalid_payload",
+      transaction: "",
+      network: NETWORK,
+    });
+    expect(node.calls).toEqual([]);
+    const rows = await db.pool.query("SELECT id FROM settlement");
+    expect(rows.rows).toEqual([]);
   });
 });
 
