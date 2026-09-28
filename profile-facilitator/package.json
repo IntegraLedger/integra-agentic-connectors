@@ -1,6 +1,6 @@
 {
   "name": "@integraledger/profile-facilitator",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "An x402 facilitator for the LCP profiles x402/exact/tron/lcp-trc20-memo and x402/exact/polkadot/lcp-assets-remark: verifies and settles payments whose signed transaction carries the ATR hash.",
   "license": "Apache-2.0",
   "engines": {
