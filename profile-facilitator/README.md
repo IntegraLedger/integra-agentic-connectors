@@ -475,9 +475,13 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   the settle's deadline ended) and `settlement-consumed` (a repeated `/settle` of a Polkadot payment whose success has
   been answered). Each error the facilitator turns into an answer or a retry is an entry with the error as its cause:
   `verify-error`, `settle-error` and `request-error` (an error the request's handling threw), `node-call-failed` and
-  `store-call-failed` (with the `call`), and `store-connection-error`. A request refused for its own bytes (a body that
-  is not JSON, a signature that recovers no key, an extrinsic that does not decode) is answered to its client and not
-  logged.
+  `store-call-failed` (with the `call`), and `store-connection-error`. Every `unexpected_verify_error` and
+  `unexpected_settle_error` answer has an entry that names why, with the call or the bound: an error's entry above;
+  `node-call-failed` for a node answer the facilitator cannot read, its cause a `malformed` error naming the part, and
+  for a Tron broadcast the node does not accept, its cause the node's `code` and `message`; and
+  `settle-deadline-passed` for a settle whose deadline passed before its node reads or its claim, with `before`, the
+  step it did not start, and `settleWaitMs`. A request refused for its own bytes (a body that is not JSON, a signature
+  that recovers no key, an extrinsic that does not decode) is answered to its client and not logged.
 
 ## Security model and guarantees
 
