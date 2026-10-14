@@ -52,7 +52,6 @@
     "@integraledger/lcp": "0.4.0",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
-    "esbuild": "0.28.2",
     "vitest": "5.0.1"
   }
 }
