@@ -781,17 +781,22 @@ describe("the operator log", () => {
       1_000,
     );
     const sent = body(XT_V3, CALL_V2, { ...O_P, network: OTHER });
-    const answer = post(`${base}/settle`, sent);
-    await reaches(answer, () => calls("state_call").some((b) => isMetadata(b.method, b.params)));
-    await clock.advanceTo(1_000);
-    expect((await answer).json).toEqual({ success: false, errorReason: "unexpected_settle_error", transaction: "", network: OTHER });
-    expect(entries.map((e) => e.entry)).toEqual([LOAD_ENTRY]);
-    expect(entries[0]!.cause).toBeInstanceOf(NodeError);
-    expect((entries[0]!.cause as NodeError).code).toBe("timeout");
-    metadata.open();
-    expect((await post(`${base}/verify`, sent)).json).toEqual({ isValid: false, invalidReason: "unexpected_verify_error" });
-    expect(entries.map((e) => e.entry)).toEqual([LOAD_ENTRY, LOAD_ENTRY, LOAD_ENTRY]);
-    expect(entries.slice(1).map((e) => (e.cause as Error).message)).toEqual([ANOTHER_CHAIN, ANOTHER_CHAIN]);
+    try {
+      const answer = post(`${base}/settle`, sent);
+      await reaches(answer, () => calls("state_call").some((b) => isMetadata(b.method, b.params)));
+      await clock.advanceTo(1_000);
+      expect((await answer).json).toEqual({ success: false, errorReason: "unexpected_settle_error", transaction: "", network: OTHER });
+      expect(entries.map((e) => e.entry)).toEqual([LOAD_ENTRY]);
+      expect(entries[0]!.cause).toBeInstanceOf(NodeError);
+      expect((entries[0]!.cause as NodeError).code).toBe("timeout");
+      metadata.open();
+      expect((await post(`${base}/verify`, sent)).json).toEqual({ isValid: false, invalidReason: "unexpected_verify_error" });
+      expect(entries.map((e) => e.entry)).toEqual([LOAD_ENTRY, LOAD_ENTRY, LOAD_ENTRY]);
+      expect(entries.slice(1).map((e) => (e.cause as Error).message)).toEqual([ANOTHER_CHAIN, ANOTHER_CHAIN]);
+    } finally {
+      // A test that stops early lets the held load answer, so the facilitator closes.
+      metadata.open();
+    }
   });
 
   it("a store call that fails reaches the log with the network, the hash and the call, and the answer is pending with the hash", async () => {
