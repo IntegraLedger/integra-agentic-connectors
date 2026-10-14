@@ -36,7 +36,9 @@ export SELLER_DOOR_URL=http://127.0.0.1:4010
 export SELLER_CREDENTIAL=isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 ```
 
-The stand-in knows only the requests the vectors hold; anything else answers `501 stand-in/no-vector`.
+The stand-in knows only the requests the vectors hold, and `GET /openapi.json`, which serves the contract's document
+or, with an Origin header, answers `403 door/browser-origin` as the door does; anything else answers
+`501 stand-in/no-vector`.
 
 ## 3. Issue the ATR
 

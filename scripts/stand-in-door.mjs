@@ -3,7 +3,8 @@
 // A request is matched by its method, path, JSON body (in any member order), bearer credential and whether it carries an Origin header.
 // The answer is the one the first vector holding that request expects; a request that appears more than once in that
 // vector gets the vector's answers in order, and the last one after that. GET /openapi.json serves the contract's
-// document. Any other request is answered 501 with the code "stand-in/no-vector".
+// document, and with an Origin header is refused 403 door/browser-origin, as the contract lists it. Any other request is
+// answered 501 with the code "stand-in/no-vector".
 //
 // Usage: node scripts/stand-in-door.mjs [port]   (prints "listening <url>" once it accepts requests)
 import { createServer } from "node:http";
@@ -55,7 +56,12 @@ const server = createServer(async (req, res) => {
   const parts = [];
   for await (const chunk of req) parts.push(chunk);
   const path = (req.url ?? "").split("?")[0];
-  if (req.method === "GET" && path === "/openapi.json") return send(res, 200, Buffer.from(OPENAPI_BYTES).toString("utf8"));
+  if (req.method === "GET" && path === "/openapi.json") {
+    if (req.headers.origin !== undefined) {
+      return send(res, 403, { code: "door/browser-origin", sentence: "Refused: door/browser-origin.", correlationId: String(++correlation) });
+    }
+    return send(res, 200, Buffer.from(OPENAPI_BYTES).toString("utf8"));
+  }
   let body;
   if (parts.length > 0) {
     try {
