@@ -12,10 +12,13 @@ function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === "object" && v !== null;
 }
 
-/** Why a node call gave no answer. `sent` is false only when the request cannot have reached the node. */
+/**
+ * Why a node call gave no answer. `sent` is false only when the request cannot have reached the node. `spent` is a call
+ * whose deadline left it no time: it is not sent.
+ */
 export class NodeError extends Error {
   constructor(
-    readonly code: "timeout" | "transport" | "http-status" | "too-large" | "malformed",
+    readonly code: "timeout" | "transport" | "http-status" | "too-large" | "malformed" | "spent",
     readonly sent: boolean,
     detail: string,
     options?: ErrorOptions,
@@ -24,14 +27,28 @@ export class NodeError extends Error {
   }
 }
 
-/** POSTs a JSON body and reads a JSON answer within the timeout (at most 5 s) and `maxBytes` (4 MiB unless given). */
+/** A node call, by the name its caller gives it, that was not sent because its deadline left it no time. */
+export interface Spent {
+  spent: string;
+}
+
+/** True for a node call that was not sent because its deadline left it no time. */
+export function isSpent(e: unknown): boolean {
+  return e instanceof NodeError && e.code === "spent";
+}
+
+/**
+ * POSTs a JSON body and reads a JSON answer within the timeout (at most 5 s) and `maxBytes` (4 MiB unless given). A
+ * timeout that leaves no time sends nothing: the call fails as `spent`.
+ */
 export async function postJson(
   url: string,
   body: unknown,
   timeoutMs = NODE_TIMEOUT_MS,
   maxBytes = NODE_MAX_BYTES,
 ): Promise<unknown> {
-  const ms = Number.isFinite(timeoutMs) ? Math.max(1, Math.ceil(Math.min(timeoutMs, NODE_TIMEOUT_MS))) : NODE_TIMEOUT_MS;
+  if (timeoutMs <= 0) throw new NodeError("spent", false, url);
+  const ms = Number.isFinite(timeoutMs) ? Math.ceil(Math.min(timeoutMs, NODE_TIMEOUT_MS)) : NODE_TIMEOUT_MS;
   const signal = AbortSignal.timeout(ms);
   let res: Response;
   try {

@@ -16,6 +16,7 @@ import { guarded, operatorLine } from "../src/answers.js";
 import { NodeError } from "../src/http.js";
 import { serveProfileFacilitator } from "../src/index.js";
 import {
+  asked,
   claimAttempts,
   controlledClock,
   fixture,
@@ -135,6 +136,8 @@ interface Node {
   block?: (number: string) => unknown;
   /** `/wallet/getnowblock`'s answer. */
   head?: unknown;
+  /** `/walletsolidity/getnowblock`'s answer; `{}` when not given. */
+  solidHead?: unknown;
   /** `/wallet/gettransactionbyid`'s answer. */
   held?: () => unknown;
   /** `/wallet/gettransactionfrompending`'s answer. */
@@ -168,6 +171,7 @@ async function start(n: Node = {}, settleWaitMs = 3_000): Promise<void> {
     }
     if (path === "/wallet/getaccount" && n.account !== undefined) return n.account;
     if (path === "/wallet/getnowblock" && n.head !== undefined) return n.head;
+    if (path === "/walletsolidity/getnowblock" && n.solidHead !== undefined) return n.solidHead;
     if (path === "/wallet/getblock" && n.block !== undefined) return n.block((sent as { id_or_num: string }).id_or_num);
     if (path === "/wallet/gettransactionbyid" && n.held !== undefined) return n.held();
     if (path === "/wallet/gettransactionfrompending" && n.pendingPool !== undefined) return n.pendingPool();
@@ -1305,9 +1309,81 @@ describe("the operator log", () => {
       expect((await answer).json).toEqual(PENDING);
       expect(entries).toEqual([]);
       expect(node.calls).toEqual([]);
+      expect(asked).toEqual([]);
       expect((await db.pool.query("SELECT answer FROM settlement")).rows).toEqual([{ answer: PENDING }]);
     },
   );
+
+  /** The paths of the node calls the facilitator has asked for since the `from`th. */
+  const pathsOf = (from: number) => asked.slice(from).map((a) => new URL(a.url).pathname);
+
+  it("a settle whose TaPoS head read answers once its deadline has passed sends no reference block read, and reaches the log once, as settle-deadline-passed naming it", async () => {
+    // TaPoS reads the head, then the reference block. The head's answer arrives within its bound, and the facilitator
+    // goes on with it once the clock is at settleWaitMs (1,000 ms), as after time spent elsewhere; the other node reads
+    // have answered by then. The reference block read is asked for and not sent.
+    await start({}, 1_000);
+    const head = resumeLate((url) => url.endsWith("/wallet/getnowblock"));
+    const answer = post(`${base}/settle`, body(TX_V2));
+    await reaches(answer, head.arrived);
+    const [sent, wanted] = [node.calls.length, asked.length];
+    await clock.advanceTo(1_000);
+    head.resume();
+    expect((await answer).json).toEqual(REFUSED);
+    expect(entries.map((e) => e.entry)).toEqual([
+      { event: "settle-deadline-passed", ...ABOUT, before: "/wallet/getblock", settleWaitMs: 1_000 },
+    ]);
+    expect(entries[0]!.cause).toBeUndefined();
+    expect(pathsOf(wanted)).toEqual(["/wallet/getblock"]);
+    expect(node.calls).toHaveLength(sent);
+    expect((await db.pool.query("SELECT id FROM settlement")).rowCount).toBe(0);
+  });
+
+  it("a settle whose deadline passes between its check and its node reads sends only the reads started before it, and reaches the log once, as settle-deadline-passed naming the first read not sent", async () => {
+    // The node reads start together once the deadline check has passed. Here the clock reads 999 ms of settleWaitMs
+    // 1,000 until the facilitator asks for its first node read, and 1,000 ms from then on: that read has 1 ms and is
+    // sent, and each read asked for after it finds no time left and is not sent.
+    await start({}, 1_000);
+    const read = resumeLate((call) => call === "store.read");
+    const answer = post(`${base}/settle`, body(TX_V2));
+    await reaches(answer, read.arrived);
+    const wanted = asked.length;
+    const now = vi.spyOn(performance, "now").mockImplementation(() => (asked.length > wanted ? 1_000 : 999));
+    try {
+      read.resume();
+      expect((await answer).json).toEqual(REFUSED);
+    } finally {
+      now.mockRestore();
+    }
+    const [first, ...rest] = pathsOf(wanted);
+    expect(node.calls.map((c) => c.path)).toEqual([first]);
+    expect(rest).toHaveLength(4);
+    expect(entries.map((e) => e.entry)).toEqual([
+      { event: "settle-deadline-passed", ...ABOUT, before: rest[0], settleWaitMs: 1_000 },
+    ]);
+    expect((await db.pool.query("SELECT id FROM settlement")).rowCount).toBe(0);
+  });
+
+  it("a claimed id whose Solidity head read answers once the wait for the chain has ended sends no status read after it, writes no entry, and stores and gives settlement_pending", async () => {
+    // A pass of status reads starts with the Solidity node's head. Its answer goes on once the clock is at the wait's
+    // end, 750 ms of settleWaitMs 1,000: the pass's next reads are asked for and not sent, and give no final answer.
+    await start({ solidHead: tronChainReads("/wallet/getnowblock", {}) }, 1_000);
+    await db.pool.query("INSERT INTO settlement (network, id, answer, until) VALUES ($1, $2, NULL, $3)", [
+      NETWORK,
+      TXID_V2,
+      new Date(EXPIRATION_V2).toISOString(),
+    ]);
+    const head = resumeLate((url) => url.endsWith("/walletsolidity/getnowblock"));
+    const answer = post(`${base}/settle`, body(TX_V2));
+    await reaches(answer, head.arrived);
+    const [sent, wanted] = [node.calls.length, asked.length];
+    await clock.advanceTo(750);
+    head.resume();
+    expect((await answer).json).toEqual(PENDING);
+    expect(entries).toEqual([]);
+    expect(pathsOf(wanted)).toEqual(["/walletsolidity/getnowblock", "/walletsolidity/gettransactioninfobyid"]);
+    expect(node.calls).toHaveLength(sent);
+    expect((await db.pool.query("SELECT answer FROM settlement")).rows).toEqual([{ answer: PENDING }]);
+  });
 
   it("a broadcast the node does not accept reaches the log as the call that failed, its cause the node's code and message, and the answer is unchanged", async () => {
     // Tron mainnet's live answer to a broadcast of V2 past its expiration (fixtures/tron-mainnet-answers.json).

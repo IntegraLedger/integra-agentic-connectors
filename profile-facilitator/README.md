@@ -262,7 +262,8 @@ The answer is `{isValid: true, payer}`, with `payer` the owner in base58check.
    payment, answered `invalid_transaction_state` with the id, whatever the other checks give, an expiration outside
    the window among them. A node that does not answer the id reads gives `unexpected_settle_error`. Otherwise an
    expiration outside the window is answered `invalid_payload`, and for one inside it the facilitator makes the other
-   node reads of `/verify`; a refusal is answered with an empty `transaction`.
+   node reads of `/verify`; a refusal is answered with an empty `transaction`. Once the reads have started, one the
+   wait leaves no time for is not sent, and in its place among the refusals is answered `unexpected_settle_error`.
 4. Claims the transaction id with one conditional insert, so concurrent settles of one payment broadcast once.
 5. Broadcasts the signed bytes with `/wallet/broadcasthex`. A `DUP_TRANSACTION_ERROR` says the node already holds the
    transaction: the payment is consumed, answered `invalid_transaction_state` with the id. Any other refusal, or a
@@ -312,7 +313,8 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
    is submitted.
 3. For a hash the store does not hold, decodes the extrinsic and asks the node to validate it, as `/verify` does
    (steps 3 and 4), reading the finalized head before the validation. The settle's wait is checked before each of
-   these three node reads: once `settleWaitMs` has passed, it sends no node call and answers `unexpected_settle_error`.
+   these three node reads and before each node call they make: once `settleWaitMs` has passed, it sends no node call
+   and answers `unexpected_settle_error`.
    Step 1's refusals come first; the decode's refusals need the node's metadata, so they are given only while the wait
    leaves time for it. Then claims the hash, with the first block to scan: the block after the finalized head read
    before validation, never before the era's birth.
@@ -402,7 +404,7 @@ controls, to the resource servers that use it.
 | `unsupported_permission` | yes | yes | Tron: the transaction carries more than one signature, or the owner's permission does not accept its one signature (the key's weight is below the threshold). |
 | `invalid_transaction` | yes | yes | The node refuses the transaction in simulation or validation. On Tron this includes a reference block (TaPoS) that does not match the node's. |
 | `unexpected_verify_error` | yes | no | The node or the store could not be read. |
-| `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission, or the settle's `settleWaitMs` passed before its node reads or its claim. |
+| `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission, or the settle's `settleWaitMs` passed before a node read or its claim. |
 | `settlement_pending` | no | yes | Submitted, or possibly submitted (the store could not be read), and not yet final or not yet stored when the wait ended. |
 | `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. On Polkadot, also a repeat of a payment whose success has been answered, or a submission the node refuses as one it has already seen (already imported, temporarily banned, or an outdated nonce). |
 
@@ -466,7 +468,9 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   once in one process, so block answers take at most 114,016,256 bytes for that runtime. A read waits for a free slot
   until the scan's deadline; one that cannot start by then is recorded as unread, like a block the node cannot give,
   and read again later. Every other node call has no such limit. On Tron, `/verify` makes six FullNode calls:
-  the account, the two id reads, the simulation and the head read at once, then the reference block read.
+  the account, the two id reads, the simulation and the head read at once, then the reference block read. A node call
+  is sent only while its bound leaves it time, and in `/settle` that bound ends at the settle's deadline: a call it
+  leaves no time for is not sent.
 - A request body is at most 64 KiB. The server's request timeout is `settleWaitMs` plus 60 seconds.
 - The table holds a row with a final answer until 24 hours after its validity window ends. A row with no final answer
   stays until a repeated `/settle` for it gives one. Each such row is a payment that passed every check and was
@@ -486,9 +490,12 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   gets the stored answer), with the call or the bound: an error's entry above;
   `node-call-failed` for a node answer the facilitator cannot read, its cause a `malformed` error naming the part, and
   for a Tron broadcast the node does not accept, its cause the node's `code` and `message`; and
-  `settle-deadline-passed` for a settle whose deadline passed before its node reads or its claim, with `before`, the
-  step it did not start (`node reads` or `claim`, and on Polkadot, once the extrinsic is decoded, `finalized head` or
-  `validation`), and `settleWaitMs`. A request refused for its own bytes (a body that is not JSON, a signature
+  `settle-deadline-passed` for a settle whose deadline passed before its node reads, one of their node calls, or its
+  claim, with `before`, the step it did not start (`node reads` or `claim`, and on Polkadot, once the extrinsic is
+  decoded, `finalized head` or `validation`) or the call it did not send, named as `node-call-failed` names it, and
+  `settleWaitMs`. A read made while following the chain (a Tron status read, a Polkadot head or block read) that the
+  wait for the chain leaves no time for is not sent and writes no entry: the answer is the one the wait's end gives.
+  A request refused for its own bytes (a body that is not JSON, a signature
   that recovers no key, an extrinsic that does not decode) is answered to its client and not logged, and a client that
   leaves before its request body is complete writes no entry: the connection is destroyed.
   `@polkadot/api`, which loads each Polkadot network's metadata, also writes its own lines (not JSON) on standard error

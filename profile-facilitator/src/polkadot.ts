@@ -26,7 +26,7 @@ import {
   type SettleAnswer,
   type VerifyAnswer,
 } from "./answers.js";
-import { NODE_MAX_BYTES, NODE_TIMEOUT_MS, NodeError, Slots, postJson, sleep, within } from "./http.js";
+import { NODE_MAX_BYTES, NODE_TIMEOUT_MS, NodeError, Slots, isSpent, postJson, sleep, within, type Spent } from "./http.js";
 import { answerReserve, inTime, type SettlementStore, type Stored } from "./store.js";
 import { settleReason, unexpectedSettle, unexpectedVerify } from "./unexpected.js";
 
@@ -224,6 +224,12 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     before,
     settleWaitMs,
   });
+  /**
+   * `unexpected_verify_error` for a `/verify` step whose own bound left no time for its call `call`: the call was not
+   * sent, and the entry is a failed call's, its cause a `spent` NodeError.
+   */
+  const notSent = (c: { network: string; id: string; payer?: string }, call: string) =>
+    unexpectedVerify(log, { event: "node-call-failed", ...about(c), call }, new NodeError("spent", false, call));
   /** The stored row, or undefined when the store does not answer by `deadline`; the failure goes to the operator log. */
   const readStored = (c: { network: string; id: string; payer?: string }, deadline: number) =>
     inTime(s.read(c.network, c.id), deadline).catch((e: unknown) => {
@@ -236,7 +242,8 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
    * the version read, the wait for a load another request started, and the wait for a new load. One failed load is one
    * failure, with one operator entry. A load that fails while the request that started it waits is that request's
    * failure, which it reports; one that fails once that request has stopped waiting goes to the operator log from the
-   * handler below, with that request's payment `fields` and the load's cause.
+   * handler below, with that request's payment `fields` and the load's cause. A new load is not started once
+   * `timeoutMs` is spent: that is a `spent` NodeError.
    */
   async function apiFor(node: PolkadotNode, fields: Record<string, string>, timeoutMs: number): Promise<ApiPromise> {
     const deadline = performance.now() + timeoutMs;
@@ -253,6 +260,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       apis.delete(node.network);
       void api?.disconnect();
     }
+    if (left() <= 0) throw new NodeError("spent", false, "metadata");
     const fresh = load(node);
     apis.set(node.network, fresh);
     let waiting = true;
@@ -308,13 +316,17 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     };
   }
 
-  /** The checks of rule 5 that decode the extrinsic with the network's metadata, within `timeoutMs`. */
-  async function decode(l: Local, timeoutMs: number): Promise<Checked | InvalidReason> {
+  /**
+   * The checks of rule 5 that decode the extrinsic with the network's metadata, within `timeoutMs`. A metadata read that
+   * `timeoutMs` leaves no time for is not made, and the answer is `{ spent: "metadata" }`.
+   */
+  async function decode(l: Local, timeoutMs: number): Promise<Checked | InvalidReason | Spent> {
     const fields = about({ network: l.node.network, id: l.id });
     let api: ApiPromise;
     try {
       api = await apiFor(l.node, fields, timeoutMs);
     } catch (e) {
+      if (isSpent(e)) return { spent: "metadata" };
       return unexpectedVerify(log, { event: "node-call-failed", ...fields, call: "metadata" }, e);
     }
     let xt;
@@ -372,9 +384,13 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
 
   /**
    * `TaggedTransactionQueue_validate_transaction` at the best block, within `timeoutMs`: the best block's height, and
-   * when the last block that can include the extrinsic ends.
+   * when the last block that can include the extrinsic ends. A call `timeoutMs` leaves no time for is not sent, and the
+   * answer names it.
    */
-  async function validate(c: Checked, timeoutMs = 3 * NODE_TIMEOUT_MS): Promise<{ best: number; until: Date } | InvalidReason> {
+  async function validate(
+    c: Checked,
+    timeoutMs = 3 * NODE_TIMEOUT_MS,
+  ): Promise<{ best: number; until: Date } | InvalidReason | Spent> {
     const url = byNetwork.get(c.network)!.rpc;
     const deadline = performance.now() + timeoutMs;
     const left = () => deadline - performance.now();
@@ -395,6 +411,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
         left(),
       );
     } catch (e) {
+      if (isSpent(e)) return { spent: call };
       return unexpectedVerify(log, { event: "node-call-failed", ...about(c), call }, e);
     }
     const height = blockNumber(header);
@@ -410,8 +427,11 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     if (typeof l === "string") return invalid(l);
     const c = await decode(l, INIT_TIMEOUT_MS);
     if (typeof c === "string") return invalid(c);
+    if ("spent" in c) return invalid(notSent({ network: l.node.network, id: l.id }, c.spent));
     const v = await validate(c);
-    return typeof v === "string" ? invalid(v, c.payer) : { isValid: true, payer: c.payer };
+    if (typeof v === "string") return invalid(v, c.payer);
+    if ("spent" in v) return invalid(notSent(c, v.spent), c.payer);
+    return { isValid: true, payer: c.payer };
   }
 
   /**
@@ -456,9 +476,10 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
 
   /**
    * The finalized head's height, read before `deadline`. Undefined when a read fails or the header names no number, a
-   * node answer this facilitator cannot read; either is a `node-call-failed` entry with the call.
+   * node answer this facilitator cannot read; either is a `node-call-failed` entry with the call. A read `deadline`
+   * leaves no time for is not sent, and the answer names it.
    */
-  async function finalizedHeight(c: Checked, url: string, deadline: number): Promise<number | undefined> {
+  async function finalizedHeight(c: Checked, url: string, deadline: number): Promise<number | undefined | Spent> {
     let call = "chain_getFinalizedHead";
     try {
       const hash = await rpc(url, call, [], deadline - performance.now());
@@ -467,6 +488,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       if (height === undefined) throw new NodeError("malformed", true, `${call}: number`);
       return height;
     } catch (e) {
+      if (isSpent(e)) return { spent: call };
       log({ event: "node-call-failed", ...about(c), call }, e);
       return undefined;
     }
@@ -474,7 +496,8 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
 
   /**
    * The head's height. Undefined when the read fails or the header names no number, a node answer this facilitator
-   * cannot read; either is a `node-call-failed` entry with the call.
+   * cannot read; either is a `node-call-failed` entry with the call. Undefined too, with no entry, when `left()` leaves
+   * no time for the read, which is not sent.
    */
   async function headHeight(c: Checked, url: string, left: () => number): Promise<number | undefined> {
     try {
@@ -482,7 +505,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       if (height === undefined) throw new NodeError("malformed", true, "chain_getHeader: number");
       return height;
     } catch (e) {
-      log({ event: "node-call-failed", ...about(c), call: "chain_getHeader" }, e);
+      if (!isSpent(e)) log({ event: "node-call-failed", ...about(c), call: "chain_getHeader" }, e);
       return undefined;
     }
   }
@@ -510,8 +533,9 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
   /**
    * Block `n` read for the extrinsic: the answer when the block holds it, `absent` when it does not, `unreadable` (with
    * the reason) when the node gives neither the block nor, for the block that holds it, its events, or when no block
-   * read slot comes free before the deadline, and `stopped` when the deadline ends a read that started. Each read that
-   * gives no block goes to the operator log, with what stopped it.
+   * read slot comes free before the deadline, and `stopped` when the deadline ends a read that started. A call the
+   * deadline leaves no time for is not sent, and the read is `stopped` with no entry; each other read that gives no
+   * block goes to the operator log, with what stopped it.
    */
   async function readBlock(
     c: Checked,
@@ -525,6 +549,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       if (found.index < 0) return "absent";
       return await included(c, url, found.hash, found.index, left(), final);
     } catch (e) {
+      if (isSpent(e)) return "stopped";
       if (!(e instanceof NoBlockReadSlot) && left() <= 0) {
         log({ event: "block-read-stopped", ...about(c), block: n }, e);
         return "stopped";
@@ -553,7 +578,8 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     const unread = new Set(at.unread);
     const resolved = new Set(at.resolved);
     const position = (): Scan => ({ proven, next, unread: [...unread].sort((a, b) => a - b), resolved: [...resolved] });
-    const finalized = await finalizedHeight(c, url, deadline);
+    const read = await finalizedHeight(c, url, deadline);
+    const finalized = typeof read === "number" ? read : undefined;
     while (finalized !== undefined && proven <= Math.min(finalized, last) && left() > 0) {
       const read = await readBlock(c, url, proven, left, true);
       if (read === "stopped") return position();
@@ -681,11 +707,12 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
   async function follow(l: Local, since: number | null, unread: number[], deadline: number): Promise<SettleAnswer> {
     const waitUntil = deadline - answerReserve(settleWaitMs);
     const c = waitUntil - performance.now() > 0 ? await decode(l, deadline - performance.now()) : undefined;
-    if (typeof c !== "object" || since === null) {
-      const row = await readStored(typeof c === "object" ? c : { network: l.node.network, id: l.id }, deadline);
+    const decoded = typeof c === "object" && !("spent" in c) ? c : undefined;
+    if (decoded === undefined || since === null) {
+      const row = await readStored(decoded ?? { network: l.node.network, id: l.id }, deadline);
       return row?.state === "answered" ? repeatOf(row.answer) : pending(l.id, l.node.network);
     }
-    return keep(c, await scan(c, since, unread, waitUntil, true), deadline);
+    return keep(decoded, await scan(decoded, since, unread, waitUntil, true), deadline);
   }
 
   /**
@@ -697,8 +724,9 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
    * answer. When the store cannot be read, the facilitator cannot know whether the extrinsic was submitted, so the
    * answer is pending with its hash. For a hash the store does not hold, the deadline is checked before each node read:
    * the decode, the finalized head read and the validation. A deadline spent there sends no node call, and gives
-   * `unexpected_settle_error`; a refusal the client's own bytes give comes first, so the decode's refusals, which need
-   * the metadata, are given when the deadline leaves time for it. The scan starts after the finalized head read before
+   * `unexpected_settle_error`; so does a call inside one of them that the deadline leaves no time for, which is not sent,
+   * with its entry naming the call. A refusal the client's own bytes give comes first, so the decode's refusals, which
+   * need the metadata, are given when the deadline leaves time for it. The scan starts after the finalized head read before
    * validation (never before the era's birth): validation at the best block shows the extrinsic absent from that
    * block's ancestry, and the finalized head is in every later best chain.
    */
@@ -717,14 +745,18 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     }
     if (stored.state === "answered" && !isPending(stored.answer)) return repeatOf(stored.answer);
     if (stored.state !== "none") return follow(l, stored.since, stored.unread, deadline);
-    if (left() <= 0) return unexpectedSettle(log, deadlinePassed({ network: l.node.network, id: l.id }, "node reads"));
+    const hashed = { network: l.node.network, id: l.id };
+    if (left() <= 0) return unexpectedSettle(log, deadlinePassed(hashed, "node reads"));
     const c = await decode(l, left());
     if (typeof c === "string") return failed(settleReason(c), "", network);
+    if ("spent" in c) return unexpectedSettle(log, deadlinePassed(hashed, c.spent));
     if (left() <= 0) return unexpectedSettle(log, deadlinePassed(c, "finalized head"));
     const finalized = await finalizedHeight(c, l.node.rpc, deadline);
+    if (typeof finalized === "object") return unexpectedSettle(log, deadlinePassed(c, finalized.spent));
     if (left() <= 0) return unexpectedSettle(log, deadlinePassed(c, "validation"));
     const v = await validate(c, left());
     if (typeof v === "string") return failed(settleReason(v), "", network);
+    if ("spent" in v) return unexpectedSettle(log, deadlinePassed(c, v.spent));
     if (left() <= 0) return unexpectedSettle(log, deadlinePassed(c, "claim"));
     const birth = c.era.birth(v.best);
     const since = Math.min(finalized === undefined ? birth : Math.max(birth, finalized + 1), lastBlock(c, v.best));

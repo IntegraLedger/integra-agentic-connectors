@@ -1114,4 +1114,94 @@ describe("the operator log", () => {
       expect((await db.pool.query("SELECT answer FROM settlement")).rows).toEqual([{ answer: kept }]);
     },
   );
+
+  // A node call inside one of a settle's steps is sent only while the deadline leaves it time. Each row holds the answer
+  // to the call before it until the clock is at settleWaitMs (1,000 ms), as after time spent elsewhere: the next call is
+  // asked for and not sent, or, for the metadata, the load is not started, and the settle answers as its deadline check
+  // before a step does, with one settle-deadline-passed entry naming the call.
+  const methodsOf = (from: number) => asked.slice(from).map((a) => (a.body as { method: string }).method);
+  const isBestHashRead = (_url: string, sent: unknown) => {
+    const b = sent as { method: string; params: unknown[] };
+    return b.method === "chain_getBlockHash" && b.params.length === 0;
+  };
+  const IN_STEP: { before: string; held: string; holds: (call: string, sent: unknown) => boolean; asks: string[]; payer: boolean }[] = [
+    { before: "metadata", held: "runtime version read", holds: isCall("state_getRuntimeVersion"), asks: [], payer: false },
+    { before: "chain_getHeader", held: "finalized head's hash read", holds: isCall("chain_getFinalizedHead"), asks: ["chain_getHeader"], payer: true },
+    { before: "chain_getHeader", held: "best block's hash read", holds: isBestHashRead, asks: ["chain_getHeader"], payer: true },
+    { before: "state_call", held: "best block's header read", holds: isCall("chain_getHeader", BEST_HASH), asks: ["state_call"], payer: true },
+  ];
+
+  it.each(IN_STEP)(
+    "a settle whose $held answers once its deadline has passed sends no $before call after it, and reaches the log once, as settle-deadline-passed naming it",
+    async ({ before, holds, asks, payer }) => {
+      await start({ finalized: () => BEST - 2 }, NETWORK, 1_000);
+      const held = resumeLate(holds);
+      const answer = post(`${base}/settle`, body());
+      await reaches(answer, held.arrived);
+      const [sent, wanted] = [node.calls.length, asked.length];
+      await clock.advanceTo(1_000);
+      held.resume();
+      expect((await answer).json).toEqual(REFUSED);
+      const about = payer ? ABOUT : { network: NETWORK, transaction: HASH_V3 };
+      expect(entries.map((e) => e.entry)).toEqual([{ event: "settle-deadline-passed", ...about, before, settleWaitMs: 1_000 }]);
+      expect(entries[0]!.cause).toBeUndefined();
+      expect(methodsOf(wanted)).toEqual(asks);
+      expect(node.calls).toHaveLength(sent);
+      expect((await db.pool.query("SELECT id FROM settlement")).rowCount).toBe(0);
+    },
+  );
+
+  it("a claimed hash whose block hash read answers once the wait for the chain has ended sends no block read after it, writes no entry, and stores and gives settlement_pending", async () => {
+    // The scan reads the head (BEST + 1), then that block: its hash, then the block. The hash's answer goes on once the
+    // clock is at the wait's end, 750 ms of settleWaitMs 1,000: the block is asked for and not sent.
+    await start({ finalized: () => BEST - 2 }, NETWORK, 1_000);
+    await db.pool.query("INSERT INTO settlement (network, id, answer, until, since) VALUES ($1, $2, NULL, $3, $4)", [
+      NETWORK,
+      HASH_V3,
+      new Date(Date.now() + 600_000).toISOString(),
+      BEST + 1,
+    ]);
+    const held = resumeLate((_url, sent) => {
+      const b = sent as { method: string; params: unknown[] };
+      return b.method === "chain_getBlockHash" && b.params[0] === BEST + 1;
+    });
+    const answer = post(`${base}/settle`, body());
+    await reaches(answer, held.arrived);
+    const [sent, wanted] = [node.calls.length, asked.length];
+    await clock.advanceTo(750);
+    held.resume();
+    expect((await answer).json).toEqual(PENDING_V3);
+    expect(entries).toEqual([]);
+    expect(methodsOf(wanted)).toEqual(["chain_getBlock"]);
+    expect(node.calls).toHaveLength(sent);
+    expect((await db.pool.query("SELECT answer FROM settlement")).rows).toEqual([{ answer: PENDING_V3 }]);
+  });
+
+  // A /verify's steps each have a bound of their own: 30 s for the decode, 15 s for the validation. A call one of them
+  // leaves no time for is not sent, and the answer is the step's failed call: node-call-failed, its cause a spent
+  // NodeError.
+  const VERIFY_SPENT: { call: string; held: string; holds: (call: string, sent: unknown) => boolean; at: number; asks: string[]; payer: boolean }[] = [
+    { call: "metadata", held: "runtime version read", holds: isCall("state_getRuntimeVersion"), at: 30_000, asks: [], payer: false },
+    { call: "state_call", held: "best block's header read", holds: isCall("chain_getHeader", BEST_HASH), at: 15_000, asks: ["state_call"], payer: true },
+  ];
+
+  it.each(VERIFY_SPENT)(
+    "a /verify whose $held answers once its step's bound has passed sends no $call call after it, and reaches the log as that call failed, its cause the spent bound",
+    async ({ call, holds, at, asks, payer }) => {
+      await start();
+      const held = resumeLate(holds);
+      const answer = post(`${base}/verify`, body());
+      await reaches(answer, held.arrived);
+      const [sent, wanted] = [node.calls.length, asked.length];
+      await clock.advanceTo(at);
+      held.resume();
+      expect((await answer).json).toEqual({ isValid: false, invalidReason: "unexpected_verify_error", ...(payer ? { payer: PAYER } : {}) });
+      const about = payer ? ABOUT : { network: NETWORK, transaction: HASH_V3 };
+      expect(entries.map((e) => e.entry)).toEqual([{ event: "node-call-failed", ...about, call }]);
+      expect(entries[0]!.cause).toBeInstanceOf(NodeError);
+      expect((entries[0]!.cause as NodeError).code).toBe("spent");
+      expect(methodsOf(wanted)).toEqual(asks);
+      expect(node.calls).toHaveLength(sent);
+    },
+  );
 });

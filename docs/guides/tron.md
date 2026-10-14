@@ -73,7 +73,8 @@ The answer is `{isValid: true, payer}`, with `payer` the owner in base58check.
    payment, answered `invalid_transaction_state` with the id, whatever the other checks give, an expiration outside
    the window among them. A node that does not answer the id reads gives `unexpected_settle_error`. Otherwise an
    expiration outside the window is answered `invalid_payload`, and for one inside it the facilitator makes the other
-   node reads of `/verify`; a refusal is answered with an empty `transaction`.
+   node reads of `/verify`; a refusal is answered with an empty `transaction`. Once the reads have started, one the
+   wait leaves no time for is not sent, and in its place among the refusals is answered `unexpected_settle_error`.
 4. Claims the transaction id with one conditional insert, so concurrent settles of one payment broadcast once.
 5. Broadcasts the signed bytes with `/wallet/broadcasthex`. A `DUP_TRANSACTION_ERROR` says the node already holds the
    transaction: the payment is consumed, answered `invalid_transaction_state` with the id. Any other refusal, or a
