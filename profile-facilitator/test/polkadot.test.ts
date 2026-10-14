@@ -3,7 +3,9 @@
 // primitive MUST produce a settlement failure, never a success"), and the lcp vectors (V2's call, V3's extrinsic and
 // hash, V4's remark hash). The node is a local JSON-RPC stub: its metadata answers are
 // Polkadot Asset Hub's live answers (fixtures/polkadot-asset-hub-2005000.json.gz); its events are SCALE bytes written
-// here from the SDK's event layouts, and the test decodes them with the live metadata before using them.
+// here from the SDK's event layouts, and the test decodes them with the live metadata before using them. Every wait the
+// facilitator makes runs on a clock the test moves (support.ts's `controlledClock`): a settle's wait ends when the test
+// moves the clock to its end, never because the machine is slow.
 import { readFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
@@ -11,7 +13,22 @@ import { ApiPromise } from "@polkadot/api";
 import { exactPolkadotRemark } from "@integraledger/lcp/polkadot";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
-import { HANG, fixture, freePort, freshDatabase, post, stub, type Call, type Stub } from "./support.js";
+import {
+  controlledClock,
+  fixture,
+  freePort,
+  freshDatabase,
+  gate,
+  post,
+  reaches,
+  stub,
+  until,
+  type Call,
+  type Clock,
+  type Stub,
+} from "./support.js";
+
+vi.mock("../src/http.js", async (original) => (await import("./support.js")).countingSleep(await original<typeof import("../src/http.js")>()));
 
 const NETWORK = "polkadot:68d56f15f85d3136970ec16946040bc1";
 /** SHA-256("abc"), FIPS 180-2's first example: the H of the lcp vectors. */
@@ -72,18 +89,17 @@ interface Chain {
   /** Whether block BEST + 1 holds V3; it does unless this says otherwise. */
   included?: () => boolean;
   validity?: string;
-  /** How long validate_transaction takes to answer. */
-  validityMs?: number;
   events?: string;
   submitError?: { code: number; message: string; data?: string };
   /** The finalized head's height; the node gives none when this is not set. */
   finalized?: () => number;
-  /** Whether the head read (`chain_getHeader` with no block) never answers. */
-  headHangs?: boolean;
   /** When the node stops listening, given the calls it has received (support.ts's `stub`). */
   leaves?: (calls: readonly Call[]) => boolean;
+  /** Awaited before the node answers a call: the test holds the answer until what it waits for has happened. */
+  hold?: (method: string, params: unknown[]) => Promise<void> | void;
 }
 
+let clock: Clock & { restore(): void };
 let db: Awaited<ReturnType<typeof freshDatabase>>;
 let node: Stub;
 let base: string;
@@ -94,6 +110,7 @@ async function start(chain: Chain = {}, network: string = NETWORK, settleWaitMs 
   node = await stub(async (_path, body) => {
     const { id, method, params } = body as { id: number; method: string; params: unknown[] };
     const answer = (result: unknown) => ({ jsonrpc: "2.0", id, result });
+    await chain.hold?.(method, params);
     const known = init.find((c) => c.method === method && JSON.stringify(c.params) === JSON.stringify(params));
     if (known !== undefined) return answer(known.result);
     const p = JSON.stringify(params);
@@ -103,14 +120,10 @@ async function start(chain: Chain = {}, network: string = NETWORK, settleWaitMs 
       return answer({ number: `0x${chain.finalized().toString(16)}` });
     }
     if (method === "chain_getHeader" && p === JSON.stringify([BEST_HASH])) return answer({ number: `0x${BEST.toString(16)}` });
-    if (method === "state_call") {
-      if (chain.validityMs !== undefined) await new Promise((resolve) => setTimeout(resolve, chain.validityMs));
-      return answer(chain.validity ?? VALID);
-    }
+    if (method === "state_call") return answer(chain.validity ?? VALID);
     if (method === "author_submitExtrinsic") {
       return chain.submitError ? { jsonrpc: "2.0", id, error: chain.submitError } : answer(HASH_V3);
     }
-    if (method === "chain_getHeader" && p === "[]" && chain.headHangs) return HANG;
     if (method === "chain_getHeader" && p === "[]") return answer({ number: `0x${(BEST + 1).toString(16)}` });
     if (method === "chain_getBlockHash" && p === JSON.stringify([BEST + 1])) return answer(BLOCK_HASH);
     if (method === "chain_getBlockHash" && typeof params[0] === "number") {
@@ -137,6 +150,18 @@ async function start(chain: Chain = {}, network: string = NETWORK, settleWaitMs 
   base = `http://127.0.0.1:${port}`;
 }
 
+/** The calls the node has received for `method`, or for validate_transaction. */
+const calls = (method: string) => node.calls.map((c) => c.body as { method: string; params: unknown[] }).filter((b) => b.method === method);
+const isValidation = (method: string, params: unknown[]) =>
+  method === "state_call" && params[0] === "TaggedTransactionQueue_validate_transaction";
+const validations = () => calls("state_call").filter((b) => isValidation(b.method, b.params)).length;
+
+/** A /settle's answer, waking its poll whenever it sleeps: a wait that ends pending ends at the end of settleWaitMs. */
+async function settle(sent = body()): Promise<unknown> {
+  const [res] = await clock.answered([post(`${base}/settle`, sent)]);
+  return res!.json;
+}
+
 function body(extrinsic = XT_V3, call = CALL_V2, requirements: Record<string, unknown> = O_P) {
   return {
     x402Version: 2,
@@ -146,10 +171,12 @@ function body(extrinsic = XT_V3, call = CALL_V2, requirements: Record<string, un
 }
 
 beforeEach(async () => {
+  clock = controlledClock();
   db = await freshDatabase();
 });
 
 afterEach(async () => {
+  clock.restore();
   const close = closeFacilitator;
   closeFacilitator = undefined;
   await close?.();
@@ -330,10 +357,22 @@ describe("/settle", () => {
   });
 
   it("two concurrent settles submit once, and exactly one of them answers success", async () => {
-    // Validation answers slowly, so both settles have read no stored answer before either claims.
-    await start({ validityMs: 300 });
+    // The node holds each validation until both settles have asked for it, so both have read no stored answer before
+    // either claims; and it holds each read of the events of the block holding the extrinsic until both settles have
+    // made it, so both find the success on chain before either stores it.
+    const eventReads = () => calls("state_getStorage").filter((b) => JSON.stringify(b.params) === JSON.stringify([EVENTS_KEY, BLOCK_HASH]));
+    await start({
+      hold: async (method, params) => {
+        if (isValidation(method, params)) await until(() => validations() === 2);
+        if (method === "state_getStorage" && JSON.stringify(params) === JSON.stringify([EVENTS_KEY, BLOCK_HASH])) {
+          await until(() => eventReads().length === 2);
+        }
+      },
+    });
     const [a, b] = await Promise.all([post(`${base}/settle`, body()), post(`${base}/settle`, body())]);
-    const submits = node.calls.filter((c) => (c.body as { method: string }).method === "author_submitExtrinsic");
+    expect(validations()).toBe(2);
+    expect(eventReads()).toHaveLength(2);
+    const submits = calls("author_submitExtrinsic");
     expect(submits).toHaveLength(1);
     const success = { success: true, transaction: `${BLOCK_HASH}-2`, network: NETWORK, payer: PAYER };
     const consumed = { success: false, errorReason: "invalid_transaction_state", transaction: `${BLOCK_HASH}-2`, network: NETWORK };
@@ -342,7 +381,7 @@ describe("/settle", () => {
 
   it("a Transferred event of another asset, read above the finalized head, stays settlement_pending", async () => {
     await start({ events: events(TRANSFERRED(1984), REMARKED, SUCCESS), finalized: () => BEST - 2 }, NETWORK, 1_500);
-    expect((await post(`${base}/settle`, body())).json).toEqual({
+    expect(await settle()).toEqual({
       success: false,
       errorReason: "settlement_pending",
       transaction: HASH_V3,
@@ -390,7 +429,7 @@ describe("/settle", () => {
   it("a repeated /settle whose stored answer is settlement_pending scans the era again, submits nothing more, and stores the final answer; a later repeat of the consumed payment fails", async () => {
     let landed = false;
     await start({ included: () => landed }, NETWORK, 1_500);
-    expect((await post(`${base}/settle`, body())).json).toEqual({
+    expect(await settle()).toEqual({
       success: false,
       errorReason: "settlement_pending",
       transaction: HASH_V3,
@@ -421,11 +460,30 @@ describe("/settle", () => {
       return (write as (c: string | Uint8Array, ...r: unknown[]) => boolean)(chunk, ...rest);
     });
     try {
-      await start({ included: () => false, headHangs: true }, NETWORK, 1_500);
+      // The node holds the head read (`chain_getHeader` with no block), the scan's first read after the submission. Its
+      // bound is the end of the wait for the chain, which keeps a quarter of a 1,500 ms wait for storing the answer:
+      // 1,125 ms. Once the clock is there the node answers, with the extrinsic in the block after the best block: too
+      // late, so the answer is settlement_pending, stored and given with the clock at 1,125 ms.
+      let landed = false;
+      const head = gate();
+      await start(
+        {
+          included: () => landed,
+          hold: async (method, params) => {
+            if (method === "chain_getHeader" && params.length === 0) await head.opened;
+          },
+        },
+        NETWORK,
+        1_500,
+      );
       const pendingAnswer = { success: false, errorReason: "settlement_pending", transaction: HASH_V3, network: NETWORK };
-      const began = performance.now();
-      expect((await post(`${base}/settle`, body())).json).toEqual(pendingAnswer);
-      expect(performance.now() - began).toBeLessThan(1_500 + 1_000);
+      const answer = post(`${base}/settle`, body());
+      await reaches(answer, () => calls("chain_getHeader").some((b) => b.params.length === 0));
+      await clock.advanceTo(1_125);
+      landed = true;
+      head.open();
+      expect((await answer).json).toEqual(pendingAnswer);
+      expect(clock.elapsed).toBe(1_125);
       const stored = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, HASH_V3]);
       expect(stored.rows[0]?.answer).toEqual(pendingAnswer);
     } finally {
@@ -436,7 +494,7 @@ describe("/settle", () => {
 
   it("events of another extrinsic in the block are not this one's", async () => {
     await start({ events: events(SUCCESS_AT_1, REMARKED, TRANSFERRED(1337)) });
-    expect((await post(`${base}/settle`, body())).json).toMatchObject({ success: false });
+    expect(await settle()).toMatchObject({ success: false });
   });
 
   it("a claimed id whose answer was never written is read again from the chain, submitting nothing", async () => {
@@ -459,17 +517,51 @@ describe("/settle", () => {
     expect(submits).toHaveLength(0);
   });
 
+  it("waits for the node's validation until settleWaitMs, and gives the node's answer when it comes before then", async () => {
+    // The node holds the validation; the clock moves to 1 ms before settleWaitMs (1,000 ms), and the node then refuses
+    // the extrinsic: the settle is waiting for that answer, and gives the node's refusal.
+    const refuse = gate();
+    await start(
+      {
+        validity: BAD_PROOF,
+        hold: async (method, params) => {
+          if (isValidation(method, params)) await refuse.opened;
+        },
+      },
+      NETWORK,
+      1_000,
+    );
+    const answer = post(`${base}/settle`, body());
+    await reaches(answer, () => validations() === 1);
+    await clock.advanceTo(999);
+    refuse.open();
+    expect((await answer).json).toEqual({ success: false, errorReason: "invalid_transaction", transaction: "", network: NETWORK });
+    expect(calls("author_submitExtrinsic")).toHaveLength(0);
+  });
+
   it("waits at most settleWaitMs when the node's validation does not answer, and submits nothing", async () => {
     // /settle waits at most settleWaitMs, and a node timeout before anything is submitted gives unexpected_settle_error
-    // with an empty transaction (x402: nothing was broadcast).
-    await start({ validityMs: 20_000 }, NETWORK, 1_000);
-    const started = performance.now();
-    const res = await post(`${base}/settle`, body());
-    expect(performance.now() - started).toBeLessThan(1_000 + 1_000);
-    expect(res.json).toEqual({ success: false, errorReason: "unexpected_settle_error", transaction: "", network: NETWORK });
-    const submits = node.calls.filter((c) => (c.body as { method: string }).method === "author_submitExtrinsic");
-    expect(submits).toHaveLength(0);
-  }, 30_000);
+    // with an empty transaction (x402: nothing was broadcast). The node holds the validation; the clock moves to
+    // settleWaitMs (1,000 ms), and the node's refusal then comes too late to be the answer.
+    const refuse = gate();
+    await start(
+      {
+        validity: BAD_PROOF,
+        hold: async (method, params) => {
+          if (isValidation(method, params)) await refuse.opened;
+        },
+      },
+      NETWORK,
+      1_000,
+    );
+    const answer = post(`${base}/settle`, body());
+    await reaches(answer, () => validations() === 1);
+    await clock.advanceTo(1_000);
+    refuse.open();
+    expect((await answer).json).toEqual({ success: false, errorReason: "unexpected_settle_error", transaction: "", network: NETWORK });
+    expect(clock.elapsed).toBe(1_000);
+    expect(calls("author_submitExtrinsic")).toHaveLength(0);
+  });
 
   it("an extrinsic the node refuses at submission gives unexpected_settle_error with no transaction, stored final: a repeat gets it and submits nothing", async () => {
     // A refused submission keeps its row with the stored answer, so the payment is submitted at most once: every answer
@@ -504,22 +596,28 @@ describe("/settle", () => {
   });
 
   it("two concurrent settles of an extrinsic the node refuses at submission submit once, and both give the stored refusal", async () => {
-    // Validation answers slowly, so both settles have read no stored answer before either claims; the one that loses the
-    // claim reads the row until the other's answer is stored.
+    // The node holds each validation until both settles have asked for it, so both have read no stored answer before
+    // either claims. It holds the submission until the settle that lost the claim has begun its scan, so that settle
+    // has read the row before the refusal is stored, and reads it again, on its poll, until it is; a second submission
+    // is let through, and counted.
+    let scanning = false;
     await start(
       {
-        validityMs: 300,
         included: () => false,
         submitError: { code: 1010, message: "Invalid Transaction", data: "Inability to pay some fees (e.g. account balance too low)" },
+        hold: async (method, params) => {
+          if (isValidation(method, params)) await until(() => validations() === 2);
+          if (method === "chain_getFinalizedHead" && validations() === 2) scanning = true;
+          if (method === "author_submitExtrinsic") await until(() => scanning || calls(method).length > 1);
+        },
       },
       NETWORK,
       5_000,
     );
     const refused = { success: false, errorReason: "unexpected_settle_error", transaction: "", network: NETWORK };
-    const [a, b] = await Promise.all([post(`${base}/settle`, body()), post(`${base}/settle`, body())]);
-    expect([a.json, b.json]).toEqual([refused, refused]);
-    const submits = node.calls.filter((c) => (c.body as { method: string }).method === "author_submitExtrinsic");
-    expect(submits).toHaveLength(1);
+    const [a, b] = await clock.answered([post(`${base}/settle`, body()), post(`${base}/settle`, body())]);
+    expect([a!.json, b!.json]).toEqual([refused, refused]);
+    expect(calls("author_submitExtrinsic")).toHaveLength(1);
   });
 
   it("an extrinsic the node refuses at submission, whose answer cannot be stored, gives settlement_pending with its hash and keeps the claim", async () => {
