@@ -12,7 +12,12 @@
 // address without it, whatever the Accept header asks for. Each response here is an asset response, so the rules in
 // _headers apply to it; a request carrying If-None-Match or another conditional header can be answered 304; and a
 // page address's response carries `Vary: Accept`.
+//
+// An HTML page is served with its own Content-Security-Policy from csp.json, which scripts/csp.mjs writes at build:
+// the policy in _headers with the SHA-256 hash of each of the page's inline scripts added to script-src. The 404 page
+// gets the 404 page's policy, and an HTML response no page of the build matches gets the policy with no hash.
 import { isMarkdownPreferred } from "fumadocs-core/negotiation";
+import policies from "./csp.json" with { type: "json" };
 
 /** The media types that ask for Markdown. `text/plain` is not one of them: it asks for any text. */
 const MARKDOWN_TYPES = ["text/markdown", "text/x-markdown"];
@@ -48,6 +53,16 @@ function varyOnAccept(response) {
   return out;
 }
 
+/** A page address's response: `Vary: Accept`, and an HTML page's own Content-Security-Policy. */
+function pageResponse(response, pathname) {
+  const out = varyOnAccept(response);
+  if (out.headers.get("content-type")?.startsWith("text/html")) {
+    const policy = out.status === 404 ? policies.notFound : (policies.pages[pathname] ?? policies.default);
+    out.headers.set("Content-Security-Policy", policy);
+  }
+  return out;
+}
+
 export default {
   async fetch(request, env) {
     if (request.method === "GET" || request.method === "HEAD") {
@@ -64,6 +79,6 @@ export default {
         if (found !== undefined) return varyOnAccept(found);
       }
     }
-    return varyOnAccept(await env.ASSETS.fetch(request));
+    return pageResponse(await env.ASSETS.fetch(request), new URL(request.url).pathname);
   },
 };

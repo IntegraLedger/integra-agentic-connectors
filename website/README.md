@@ -25,7 +25,8 @@ Then, in this folder:
 ```sh
 pnpm install --frozen-lockfile
 pnpm run api     # regenerate the API pages (reference/api/ in the documentation folder) from ../contract/src and ../profile-facilitator/src
-pnpm build       # write the static site to out/
+pnpm build       # write the static site to out/, and csp.json
+node scripts/check-pages.mjs   # load every page of out/ in Chrome, as the Worker serves it
 pnpm dev         # serve it locally with live reload
 ```
 
@@ -49,6 +50,9 @@ pnpm dev         # serve it locally with live reload
 - Writes `/llms.txt`, `/llms-full.txt`, each page as Markdown at `/md/<path>.md`, each page's social card (1200×630)
   at `/og/<path>/image.png` (`/og/image.png` for the home page), the search index, `sitemap.xml`, `robots.txt` and
   `/.well-known/security.txt`.
+- Then `scripts/csp.mjs` writes `csp.json`: each HTML page's Content-Security-Policy, which is the policy
+  `public/_headers` sets for every file with the SHA-256 hash of each of the page's own inline scripts added to
+  `script-src`.
 
 ## How it is served
 
@@ -64,6 +68,14 @@ pnpm dev         # serve it locally with live reload
 - Every other file is served directly, without the Worker: the Markdown copies, the scripts, and every `.txt` file,
   the RSC payload each page fetches among them. Every response the Worker returns is a static assets response, so the
   rules in `public/_headers` apply to all of them.
+
+`worker.js` also gives each HTML page its policy from `csp.json`, and the 404 page the 404 page's. A page runs its own
+inline scripts and the site's script files, and no other script. The other files carry the policy in `public/_headers`,
+which allows no inline script, as they run none; a missing file under an address the Worker does not run for (`/md/`,
+`/_next/` and the rest `run_worker_first` leaves out) is answered with the 404 page under that policy, which shows the
+page without running its scripts. `scripts/check-pages.mjs` serves `out/` on 127.0.0.1 through
+`worker.js` and the `_headers` rules, as `wrangler.toml` routes each address, and loads every page, the 404 page, a
+Twoslash popup and a search in Chrome; a policy violation, a script error or a console error fails it.
 
 Each page names `/llms.txt` with `<link rel="describedby">` and its Markdown with `<link rel="alternate"
 type="text/markdown">`. `pnpm dev` does not run `worker.js`.

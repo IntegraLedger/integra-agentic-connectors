@@ -8,7 +8,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build && node scripts/csp.mjs",
     "api": "API_PACKAGE=contract typedoc --options typedoc.config.mjs && API_PACKAGE=profile-facilitator typedoc --options typedoc.config.mjs",
     "typecheck": "fumadocs-mdx && tsc --noEmit",
     "postinstall": "fumadocs-mdx"

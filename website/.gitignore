@@ -1,6 +1,7 @@
 node_modules/
 .next/
 out/
+csp.json
 .source/
 .wrangler/
 *.tsbuildinfo
