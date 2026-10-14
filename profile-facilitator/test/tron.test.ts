@@ -11,6 +11,7 @@ import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isRefusal } from "@integraledger/lcp";
 import { decodeTronTx, encodeTronRaw } from "@integraledger/lcp/tron";
+import { guarded, operatorLine } from "../src/answers.js";
 import { serveProfileFacilitator } from "../src/index.js";
 import {
   claimAttempts,
@@ -138,6 +139,8 @@ let db: Awaited<ReturnType<typeof freshDatabase>>;
 let node: Stub;
 let base: string;
 let closeFacilitator: () => Promise<void>;
+/** What the facilitator gave its operator log: each entry, with its cause. */
+let entries: { entry: Record<string, unknown>; cause: unknown }[] = [];
 
 async function start(n: Node = {}, settleWaitMs = 3_000): Promise<void> {
   node = await stub(async (path, sent) => {
@@ -165,6 +168,7 @@ async function start(n: Node = {}, settleWaitMs = 3_000): Promise<void> {
     tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],
     store: { url: db.url },
     settleWaitMs: clock.settleWait(settleWaitMs),
+    operatorLog: (entry, cause) => entries.push({ entry, cause }),
   });
   closeFacilitator = f.close;
   base = `http://127.0.0.1:${port}`;
@@ -172,6 +176,7 @@ async function start(n: Node = {}, settleWaitMs = 3_000): Promise<void> {
 
 beforeEach(async () => {
   clock = controlledClock(NOW_V2);
+  entries = [];
   db = await freshDatabase();
 });
 
@@ -913,5 +918,94 @@ describe("the facilitator's own bounds", () => {
     expect(await settle(body(TX_V2, { ...O, scheme: "upto" }))).toEqual(refused("unsupported_scheme", NETWORK));
     expect(await settle(body(TX_V2, { ...O, network: 728126428 }))).toEqual(refused("invalid_network", ""));
     expect(await settle([body(TX_V2)])).toEqual(refused("invalid_payload", ""));
+  });
+});
+
+describe("the operator log", () => {
+  // The operator gets the cause of every error the facilitator answers for; the client's answer stays x402's and
+  // carries nothing from it. The fields name the payment: network, payer and the transaction id.
+  const ABOUT = { network: NETWORK, payer: PAYER, transaction: TXID_V2 };
+  const logged = (event: string) => entries.filter((e) => e.entry["event"] === event);
+
+  it("an error a rail throws reaches the log with the request's network, and the answer is the unexpected error", async () => {
+    // A clock that reads no time: the expiration check cannot compare, and throws.
+    await start();
+    const now = vi.spyOn(Date, "now").mockReturnValue(NaN);
+    try {
+      expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({ isValid: false, invalidReason: "unexpected_verify_error" });
+      expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(REFUSED);
+    } finally {
+      now.mockRestore();
+    }
+    for (const event of ["verify-error", "settle-error"]) {
+      expect(logged(event)).toHaveLength(1);
+      expect(logged(event)[0]!.entry).toEqual({ event, network: NETWORK });
+      expect(logged(event)[0]!.cause).toBeInstanceOf(Error);
+    }
+  });
+
+  it("a node read that fails reaches the log with the payment's fields and the call, and the answer is unchanged", async () => {
+    // The stub's Solidity node answers getnowblock with {}, which names no block.
+    await start();
+    expect(await settle()).toEqual(SUCCESS);
+    const failedReads = logged("node-call-failed");
+    expect(failedReads.length).toBeGreaterThan(0);
+    expect(failedReads[0]!.entry).toEqual({ event: "node-call-failed", ...ABOUT, call: "/walletsolidity/getnowblock" });
+    expect((failedReads[0]!.cause as Error).message).toBe("malformed: getnowblock fields");
+  });
+
+  it("a store call that fails reaches the log with the payment's fields and the call, and the answer is pending with the id", async () => {
+    await start();
+    await db.pool.query("ALTER TABLE settlement RENAME TO settlement_elsewhere");
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(PENDING);
+    expect(logged("store-call-failed").map((e) => e.entry)).toEqual([{ event: "store-call-failed", ...ABOUT, call: "read" }]);
+    expect(String((logged("store-call-failed")[0]!.cause as Error).message)).toContain("settlement");
+  });
+
+  it("a receipt the Solidity node shows reading REVERT reaches the log as settlement-failed", async () => {
+    await start({ info: () => info("REVERT") });
+    expect(await settle()).toEqual(STATE_FAILED);
+    expect(logged("settlement-failed").map((e) => e.entry)).toEqual([
+      { event: "settlement-failed", ...ABOUT, why: "contract-failed", result: "REVERT" },
+    ]);
+  });
+
+  it("by default, writes one JSON line on standard error, with the cause's name, message, stack and cause chain", async () => {
+    await start();
+    const lines: string[] = [];
+    const write = vi.spyOn(process.stderr, "write").mockImplementation((chunk) => (lines.push(String(chunk)), true));
+    try {
+      const cause = new TypeError("outer", { cause: new RangeError("inner") });
+      operatorLine({ event: "settle-error", network: NETWORK }, cause);
+      operatorLine({ event: "settlement-expired", ...ABOUT });
+    } finally {
+      write.mockRestore();
+    }
+    expect(lines.every((l) => l.endsWith("\n"))).toBe(true);
+    const [first, second] = lines.map((l) => JSON.parse(l) as Record<string, unknown>);
+    expect(second).toEqual({ event: "settlement-expired", ...ABOUT });
+    expect(first).toMatchObject({
+      event: "settle-error",
+      network: NETWORK,
+      cause: { name: "TypeError", message: "outer", cause: { name: "RangeError", message: "inner" } },
+    });
+    expect((first!["cause"] as { stack: string }).stack).toContain("TypeError: outer");
+  });
+
+  it("a log that throws never changes an answer: the entry goes to standard error, with operator-log-failed", async () => {
+    await start();
+    const lines: string[] = [];
+    const write = vi.spyOn(process.stderr, "write").mockImplementation((chunk) => (lines.push(String(chunk)), true));
+    try {
+      guarded(() => {
+        throw new Error("sink down");
+      })({ event: "answer-not-stored", ...ABOUT }, new Error("store down"));
+    } finally {
+      write.mockRestore();
+    }
+    expect(lines.map((l) => JSON.parse(l) as Record<string, unknown>)).toMatchObject([
+      { event: "answer-not-stored", ...ABOUT, cause: { message: "store down" } },
+      { event: "operator-log-failed", ...ABOUT, cause: { message: "sink down" } },
+    ]);
   });
 });
