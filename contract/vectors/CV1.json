@@ -106,5 +106,5 @@
       }
     }
   ],
-  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. Content: printf '%s' '\"Pay 10000 base units of USDC for one report.\"' | base64"
+  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. Content: printf '%s' '\"Pay 10000 base units of USDC for one report.\"' | base64. The option is the accepted option of the payment example in x402's MCP transport specification (specs/transports-v2/mcp.md), and the request's bodyDigest is the SHA-256 of an empty body: printf '' | sha256sum."
 }

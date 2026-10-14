@@ -24,7 +24,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV1
 
-**issue.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. Content: printf '%s' '"Pay 10000 base units of USDC for one report."' | base64
+**issue.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. Content: printf '%s' '"Pay 10000 base units of USDC for one report."' | base64. The option is the accepted option of the payment example in x402's MCP transport specification (specs/transports-v2/mcp.md), and the request's bodyDigest is the SHA-256 of an empty body: printf '' | sha256sum.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
@@ -94,7 +94,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV9
 
-**plain card checkout.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. The reference is Wix's documented providerTransactionId example. expiresAt: date -u -d @1790000900. The agreement URL is https://&lt;the tenant's first host&gt;/agreement/&lt;atrHash&gt;; the agreement transaction is a stated input, recorded before the report. Once the agreement is recorded, the pattern's statement names it: sed 's/&lt;network&gt;/eip155:84532/; s/&lt;transaction&gt;/&lt;the agreement transaction&gt;/'.
+**plain card checkout.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. The checkout bytes: printf '%s' '&#123;"id":"chk_1001","total":&#123;"currency":"USD","amount":27999&#125;&#125;' | base64. The reference is Wix's documented providerTransactionId example. fixed.agreement is a stated input. expiresAt: date -u -d @1790000900. The agreement URL is https://&lt;the tenant's first host&gt;/agreement/&lt;atrHash&gt;; the agreement transaction is a stated input, recorded before the report. Once the agreement is recorded, the pattern's statement names it: sed 's/&lt;network&gt;/eip155:84532/; s/&lt;transaction&gt;/&lt;the agreement transaction&gt;/'.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
@@ -105,7 +105,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV10
 
-**a card payment reported before the agreement is recorded.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. The checkout bytes: printf '%s' '&#123;"id":"chk_1002","total":&#123;"currency":"USD","amount":27999&#125;&#125;' | base64. expiresAt: date -u -d @1790000900. The agreement URL is https://&lt;the tenant's first host&gt;/agreement/&lt;atrHash&gt;. The reference is Wix's documented providerTransactionId example. The payment has moved, so it is recorded on the seller's report, and the record states what is missing: no agreement was recorded before this payment, and nothing public carries this ATR's hash.
+**a card payment reported before the agreement is recorded.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. The checkout bytes: printf '%s' '&#123;"id":"chk_1002","total":&#123;"currency":"USD","amount":27999&#125;&#125;' | base64. expiresAt: date -u -d @1790000900. The agreement URL is https://&lt;the tenant's first host&gt;/agreement/&lt;atrHash&gt;. fixed.agreement is a stated input. The reference is Wix's documented providerTransactionId example. The payment has moved, so it is recorded on the seller's report, and the record states what is missing: no agreement was recorded before this payment, and nothing public carries this ATR's hash.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|

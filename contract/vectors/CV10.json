@@ -203,5 +203,5 @@
       }
     }
   ],
-  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. The checkout bytes: printf '%s' '{\"id\":\"chk_1002\",\"total\":{\"currency\":\"USD\",\"amount\":27999}}' | base64. expiresAt: date -u -d @1790000900. The agreement URL is https://<the tenant's first host>/agreement/<atrHash>. The reference is Wix's documented providerTransactionId example. The payment has moved, so it is recorded on the seller's report, and the record states what is missing: no agreement was recorded before this payment, and nothing public carries this ATR's hash."
+  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. The checkout bytes: printf '%s' '{\"id\":\"chk_1002\",\"total\":{\"currency\":\"USD\",\"amount\":27999}}' | base64. expiresAt: date -u -d @1790000900. The agreement URL is https://<the tenant's first host>/agreement/<atrHash>. fixed.agreement is a stated input. The reference is Wix's documented providerTransactionId example. The payment has moved, so it is recorded on the seller's report, and the record states what is missing: no agreement was recorded before this payment, and nothing public carries this ATR's hash."
 }

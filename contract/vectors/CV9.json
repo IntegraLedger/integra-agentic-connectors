@@ -234,5 +234,5 @@
       }
     }
   ],
-  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. The reference is Wix's documented providerTransactionId example. expiresAt: date -u -d @1790000900. The agreement URL is https://<the tenant's first host>/agreement/<atrHash>; the agreement transaction is a stated input, recorded before the report. Once the agreement is recorded, the pattern's statement names it: sed 's/<network>/eip155:84532/; s/<transaction>/<the agreement transaction>/'."
+  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. The checkout bytes: printf '%s' '{\"id\":\"chk_1001\",\"total\":{\"currency\":\"USD\",\"amount\":27999}}' | base64. The reference is Wix's documented providerTransactionId example. fixed.agreement is a stated input. expiresAt: date -u -d @1790000900. The agreement URL is https://<the tenant's first host>/agreement/<atrHash>; the agreement transaction is a stated input, recorded before the report. Once the agreement is recorded, the pattern's statement names it: sed 's/<network>/eip155:84532/; s/<transaction>/<the agreement transaction>/'."
 }

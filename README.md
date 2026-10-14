@@ -66,7 +66,7 @@ and rail, and the complete reference.
   [profile facilitator's README](./profile-facilitator#readme). Its quickstart starts the facilitator and reads
   `/supported`.
 - **You implement the seller door, or a test double of it:** replay the contract's vectors. `scripts/stand-in-door.mjs`
-  is a local door that answers from them; every sample in these READMEs runs against it.
+  is a local door that answers from them; every sample here that calls the door runs against it.
 
 ## Build and test
 
