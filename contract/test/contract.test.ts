@@ -224,6 +224,21 @@ describe("the OpenAPI document", () => {
     expect(s.ClaimRequest.properties.network).toMatchObject({ maxLength: 64 });
   });
 
+  it("a bound's description names the refusal code that answers it, at its status in the closed table", () => {
+    // The codes are the refusal table's meanings: issue/input-bounds for the offer and slot counts, core/slot-name for a
+    // slot name off its pattern, door/reference-required for a reference off its bound.
+    const s = doc.components.schemas;
+    const mapped: [string, string][] = [
+      [s.IssueRequest.properties.offers.description, "issue/input-bounds"],
+      [s.IssueRequest.properties.content.description, "issue/input-bounds"],
+      [s.ContentSlot.properties.slot.description, "core/slot-name"],
+      [s.Reference.description, "door/reference-required"],
+    ];
+    for (const [description, code] of mapped) {
+      expect(description).toContain(`${REFUSALS[code]} \`${code}\``);
+    }
+  });
+
   it("RequestCommitment states the request-target bound the LCP package applies: 8192 characters", async () => {
     expect(doc.components.schemas.RequestCommitment.description).toContain("is at most 8192 characters");
     const at = (length: number) => requestCommitment({ method: "GET", target: `/${"a".repeat(length - 1)}`, body: new Uint8Array() });

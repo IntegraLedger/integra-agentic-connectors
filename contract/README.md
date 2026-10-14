@@ -160,6 +160,9 @@ Call `issue` before the buyer approves, once per checkout state.
   request-target, `path` + `?` + `query` (`path` alone where it had no `?`), is at most 8192 characters.
 - `lifetimeSeconds` is the challenge's lifetime, 1 to 604 800. On x402, use the largest `maxTimeoutSeconds`.
 
+An offer count outside 1 to 16, or more than 56 content slots, answers `422 issue/input-bounds`. A slot name that does
+not match `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` answers `422 core/slot-name`.
+
 The answer's `agreement`, when present, means the record needs the agreement step; see
 [Card checkouts and the agreement step](#card-checkouts-and-the-agreement-step).
 

@@ -175,7 +175,7 @@ An object. A member not listed here is refused.
 
 | Field | Type | Required | Constraints | Description |
 |---|---|---|---|---|
-| `slot` | `string` | yes | pattern `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` |  |
+| `slot` | `string` | yes | pattern `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` | The slot name. A name that does not match the pattern answers 422 `core/slot-name`. |
 | `bytes` | `string` | yes | pattern `^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==\|[A-Za-z0-9+/]{3}=)?$`; at most 1398104 characters | Base64 with padding (RFC 4648 §4) of the slot's exact bytes: one JSON value. |
 
 ### RequestCommitment
@@ -200,8 +200,8 @@ An object. A member not listed here is refused.
 | `mintRequestId` | `string` | yes | pattern `^[A-Za-z0-9._:-]{1,128}$` |  |
 | `resource` | `string` | yes | 1 to 512 characters | The resource id declared for the tenant: 1 to 512 UTF-8 bytes. |
 | `lifetimeSeconds` | `integer` | yes | 1 to 604800 |  |
-| `offers` | array of [Offer](#offer) | yes | 1 to 16 items |  |
-| `content` | array of [ContentSlot](#contentslot) | no | at most 56 items |  |
+| `offers` | array of [Offer](#offer) | yes | 1 to 16 items | 1 to 16, in the order the document will carry them. A count outside that bound answers 422 `issue/input-bounds`. |
+| `content` | array of [ContentSlot](#contentslot) | no | at most 56 items | 0 to 56 slots. More answers 422 `issue/input-bounds`. |
 | `request` | [RequestCommitment](#requestcommitment) | no |  |  |
 
 ### Carriers
@@ -304,6 +304,8 @@ An object. A member not listed here is refused.
 | `transaction` | `string` or `null` | yes | 1 to 256 characters |  |
 
 ### Reference
+
+The platform's payment reference as it comes: 1 to 256 characters, no control characters. A report that needs one and carries none within that bound answers 422 `door/reference-required`.
 
 `string`; pattern `^[^\u0000-\u001f\u007f]+$`; 1 to 256 characters.
 

@@ -15,12 +15,13 @@ seller's storage, hashes them, and answers with the values to place in the payme
 | `mintRequestId` | yes | One state of one checkout: `<checkout id>:<version>`, matching `^[A-Za-z0-9._:-]{1,128}$`. |
 | `resource` | yes | The resource id declared for the tenant, 1 to 512 UTF-8 bytes. |
 | `lifetimeSeconds` | yes | The challenge's lifetime, 1 to 604 800. On x402, the largest `maxTimeoutSeconds` of the offers. |
-| `offers` | yes | 1 to 16 `{pairing, option}`, each option exactly as the challenge will carry it, all of one protocol. |
-| `content` | no | 0 to 56 `{slot, bytes}`: the parties' content, each slot one JSON value as padded base64 of its exact bytes. |
+| `offers` | yes | 1 to 16 `{pairing, option}`, each option exactly as the challenge will carry it, all of one protocol. Outside that count, `422 issue/input-bounds`. |
+| `content` | no | 0 to 56 `{slot, bytes}`: the parties' content, each slot one JSON value as padded base64 of its exact bytes. More slots, `422 issue/input-bounds`. |
 | `request` | on x402 | `{method, path, query, bodyDigest}`: the request the challenge answers. |
 
-Slot names match `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`. `atrVersion`, `id` and the binding's slot (such as `x402`) are
-reserved. A slot's bytes must be exactly one JSON value (RFC 8259): the door writes them into the ATR as received.
+Slot names match `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`, else `422 core/slot-name`. `atrVersion`, `id` and the binding's
+slot (such as `x402`) are reserved. A slot's bytes must be exactly one JSON value (RFC 8259): the door writes them into
+the ATR as received.
 
 ## The request commitment
 

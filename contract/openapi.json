@@ -2013,7 +2013,8 @@
         "properties": {
           "slot": {
             "type": "string",
-            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$"
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+            "description": "The slot name. A name that does not match the pattern answers 422 `core/slot-name`."
           },
           "bytes": {
             "type": "string",
@@ -2087,14 +2088,16 @@
             "maxItems": 16,
             "items": {
               "$ref": "#/components/schemas/Offer"
-            }
+            },
+            "description": "1 to 16, in the order the document will carry them. A count outside that bound answers 422 `issue/input-bounds`."
           },
           "content": {
             "type": "array",
             "maxItems": 56,
             "items": {
               "$ref": "#/components/schemas/ContentSlot"
-            }
+            },
+            "description": "0 to 56 slots. More answers 422 `issue/input-bounds`."
           },
           "request": {
             "$ref": "#/components/schemas/RequestCommitment"
@@ -2437,7 +2440,8 @@
         "type": "string",
         "minLength": 1,
         "maxLength": 256,
-        "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        "pattern": "^[^\\u0000-\\u001f\\u007f]+$",
+        "description": "The platform's payment reference as it comes: 1 to 256 characters, no control characters. A report that needs one and carries none within that bound answers 422 `door/reference-required`."
       },
       "ReportRequest": {
         "oneOf": [
