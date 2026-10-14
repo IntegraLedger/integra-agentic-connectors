@@ -57,8 +57,9 @@ export function markdownPath(url: string): string {
 }
 
 /**
- * A page's body as portable Markdown: the text after the remark pipeline, with numeric
- * character references decoded and root-relative links made absolute.
+ * A page's body as portable Markdown: its authored Markdown with the edits the remark plugins make
+ * through `replaceSource()` (the leading title and raw anchors removed, links rewritten to site and
+ * repository URLs), numeric character references decoded and root-relative links made absolute.
  */
 export async function pageMarkdown(page: DocPage): Promise<string> {
   const processed = await page.data.getText("processed");

@@ -1,10 +1,14 @@
 import { existsSync, statSync } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
+import { replaceSource } from "fumadocs-core/mdx-plugins/stringifier";
 
 /** The parts of an mdast node these plugins read or write. */
 interface MdastNode {
   type: string;
   url?: string;
+  /** A link's or definition's title, and a definition's label as written. */
+  title?: string | null;
+  label?: string | null;
   depth?: number;
   value?: string;
   data?: { hName?: string; hProperties?: Record<string, string> };
@@ -20,30 +24,48 @@ function walk(node: MdastNode, visit: (node: MdastNode) => void): void {
   for (const child of node.children ?? []) walk(child, visit);
 }
 
+type SourceFile = Parameters<typeof replaceSource>[0];
+type SourceNode = Parameters<typeof replaceSource>[1];
+
 /**
- * Removes a page's leading `# Title` heading. The page layout renders the frontmatter title
- * as the page heading, and the Markdown files repeat it on their first line for GitHub.
+ * Replaces a node in the Markdown that fumadocs writes from a page's authored source: the page's Markdown copy
+ * (`getText("processed")`) and its search records. A change to the tree alone does not reach that Markdown. A
+ * function receives the node's children as Markdown.
+ */
+function replaceInMarkdown(file: FileLike, node: MdastNode, text: string | ((inner: string) => string)): void {
+  const target = node as unknown as SourceNode;
+  replaceSource(file as unknown as SourceFile, target, typeof text === "string" ? text : (s) => text(s.inner(target)));
+}
+
+/**
+ * Removes a page's leading `# Title` heading, from the page and from its Markdown copy. The page layout and the
+ * Markdown copy (`pageDocument`) each put the frontmatter title first, and the Markdown files repeat it on their
+ * first line for GitHub.
  */
 export function remarkStripLeadingTitle() {
-  return (tree: MdastNode) => {
+  return (tree: MdastNode, file: FileLike) => {
     const children = tree.children ?? [];
     const first = children.findIndex((n) => n.type !== "yaml" && n.type !== "toml");
     const node = children[first];
-    if (node?.type === "heading" && node.depth === 1) children.splice(first, 1);
+    if (node?.type === "heading" && node.depth === 1) {
+      replaceInMarkdown(file, node, "");
+      children.splice(first, 1);
+    }
   };
 }
 
 /**
- * Turns each raw `<a id="…"></a>` into an anchor element. Markdown pages are compiled without
- * raw HTML, and the API pages mark table rows with these anchors.
+ * Turns each raw `<a id="…"></a>` into an anchor element, and removes it from the page's Markdown copy. Markdown
+ * pages are compiled without raw HTML, and the API pages mark table rows with these anchors.
  */
 export function remarkHtmlAnchors() {
-  const anchor = (node: MdastNode, id: string) => {
-    node.type = "text";
-    node.value = "";
-    node.data = { hName: "a", hProperties: { id } };
-  };
-  return (tree: MdastNode) => {
+  return (tree: MdastNode, file: FileLike) => {
+    const anchor = (node: MdastNode, id: string) => {
+      replaceInMarkdown(file, node, "");
+      node.type = "text";
+      node.value = "";
+      node.data = { hName: "a", hProperties: { id } };
+    };
     walk(tree, (parent) => {
       const children = parent.children;
       if (!children) return;
@@ -60,6 +82,7 @@ export function remarkHtmlAnchors() {
         const next = children[i + 1];
         if (open?.[1] && next?.type === "html" && next.value?.trim() === "</a>") {
           anchor(node, open[1]);
+          replaceInMarkdown(file, next, "");
           children.splice(i + 1, 1);
         }
       }
@@ -89,7 +112,8 @@ const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
  *
  * Absolute URLs, root-relative paths and in-page `#` links are left as they are. A link to a
  * page that does not exist in the documentation tree fails the build; a missing target
- * outside the tree is reported and still rewritten.
+ * outside the tree is reported and still rewritten. The page's Markdown copy carries each
+ * rewritten link too.
  */
 export function remarkDocLinks(options: DocLinksOptions) {
   const docsDir = resolve(options.docsDir);
@@ -133,7 +157,17 @@ export function remarkDocLinks(options: DocLinksOptions) {
     if (!from) return;
     walk(tree, (node) => {
       if ((node.type === "link" || node.type === "definition") && typeof node.url === "string") {
-        node.url = rewrite(node.url, resolve(from));
+        const url = rewrite(node.url, resolve(from));
+        if (url !== node.url) {
+          const target = /[\s()<>]/.test(url) ? `<${url}>` : url;
+          const title = node.title ? ` "${node.title.replace(/["\\]/g, "\\$&")}"` : "";
+          replaceInMarkdown(
+            file,
+            node,
+            node.type === "link" ? (inner) => `[${inner}](${target}${title})` : `[${node.label ?? ""}]: ${target}${title}`,
+          );
+        }
+        node.url = url;
       }
     });
   };

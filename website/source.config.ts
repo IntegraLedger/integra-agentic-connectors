@@ -3,8 +3,6 @@ import { resolve } from "node:path";
 import { rehypeCodeDefaultOptions } from "fumadocs-core/mdx-plugins";
 import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 import { transformerTwoslash } from "fumadocs-twoslash";
-import type { ShikiTransformer } from "shiki";
-import ts from "typescript";
 import { DOCS_DIR } from "./src/lib/docs-dir";
 import { rehypeMermaid, rehypeUncheckedUnder, hasMetaFlag } from "./src/mdx/rehype-docs";
 import { remarkDocLinks, remarkHtmlAnchors, remarkStripLeadingTitle } from "./src/mdx/remark-docs";
@@ -43,12 +41,12 @@ export const docs = defineDocs({
 });
 
 // The TypeScript samples are checked as ES modules (top-level await allowed) under these strict
-// options, with each package's imports resolved to its built declarations.
-const compilerOptions: ts.CompilerOptions = {
-  module: ts.ModuleKind.NodeNext,
-  moduleResolution: ts.ModuleResolutionKind.NodeNext,
-  target: ts.ScriptTarget.ES2024,
-  lib: ["lib.es2024.d.ts", "lib.dom.d.ts"],
+// options, in tsconfig.json form, with each package's imports resolved to its built declarations.
+const compilerOptions = {
+  module: "nodenext",
+  moduleResolution: "nodenext",
+  target: "es2024",
+  lib: ["es2024", "dom"],
   types: ["node"],
   strict: true,
   noUncheckedIndexedAccess: true,
@@ -67,19 +65,6 @@ const compilerOptions: ts.CompilerOptions = {
 function isChecked(lang: string, meta: unknown): boolean {
   return (lang === "ts" || lang === "typescript") && !hasMetaFlag(meta, "no-check");
 }
-
-/**
- * Prepends Twoslash's `@module` and `@moduleResolution` flags to each checked block. Twoslash
- * applies its own `moduleResolution` default on every call, after the configured options, and
- * the flags in the code are applied last; Twoslash removes the flag lines from the output.
- */
-const nodeNextFlags: ShikiTransformer = {
-  name: "twoslash-nodenext",
-  preprocess(code, options) {
-    if (!isChecked(options.lang, options.meta?.__raw)) return undefined;
-    return `// @module: nodenext\n// @moduleResolution: nodenext\n${code}`;
-  },
-};
 
 export default defineConfig({
   mdxOptions: {
@@ -102,7 +87,6 @@ export default defineConfig({
       themes: { light: "github-light", dark: "github-dark" },
       transformers: [
         ...(rehypeCodeDefaultOptions.transformers ?? []),
-        nodeNextFlags,
         transformerTwoslash({
           // Every `ts` block is checked unless its meta carries `no-check`; a type error
           // fails the build.
