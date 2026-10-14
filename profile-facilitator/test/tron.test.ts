@@ -1051,18 +1051,22 @@ describe("the operator log", () => {
     expect((cause as NodeError).cause).toBeInstanceOf(SyntaxError);
   });
 
-  it("a request whose client leaves before its body ends reaches the log with its path, and the next request is answered", async () => {
+  it("a request whose client leaves before its body ends writes no entry, the connection ends, and the next request is answered", async () => {
+    // The client caused it, and nothing failed in the facilitator: there is no one to answer and nothing to log.
     await start();
     const client = connect(Number(new URL(base).port), "127.0.0.1");
-    // The facilitator ends the connection once the request cannot complete; that is not this test's subject.
     client.on("error", () => {});
+    // The client reads, and drops, whatever comes back, so it sees the connection end.
+    client.resume();
+    let closed = false;
+    client.on("close", () => (closed = true));
     // The request declares 100 bytes of body; the client sends 10 of them, then ends its side of the connection.
     client.end("POST /settle HTTP/1.1\r\nhost: 127.0.0.1\r\ncontent-length: 100\r\n\r\n{\"x402Vers");
-    await until(() => logged("request-error").length > 0);
-    client.destroy();
-    expect(logged("request-error").map((e) => e.entry)).toEqual([{ event: "request-error", path: "/settle" }]);
-    expect((logged("request-error")[0]!.cause as NodeJS.ErrnoException).code).toBe("ECONNRESET");
+    // Either is enough to go on: an entry fails the test below, as the connection kept open does.
+    await until(() => closed || entries.length > 0);
     expect((await fetch(`${base}/supported`)).status).toBe(200);
+    expect(entries).toEqual([]);
+    expect(closed).toBe(true);
   });
 
   it("a sweep that fails reaches the log, and the sweep a minute later drops the rows it is due to drop", async () => {

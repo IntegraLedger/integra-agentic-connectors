@@ -153,6 +153,11 @@ export async function serveProfileFacilitator(c: ProfileFacilitatorConfig): Prom
       req.destroy();
       return;
     }
+    if (read !== undefined && "left" in read) {
+      // The client left before its body was complete: there is no one to answer, and nothing failed here to log.
+      res.destroy();
+      return;
+    }
     if (path === "/verify") {
       if (read === undefined) return sendJson(res, 400, { isValid: false, invalidReason: "invalid_payload" });
       return sendJson(res, 200, await verify(read.json));

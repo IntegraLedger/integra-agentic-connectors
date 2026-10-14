@@ -91,17 +91,26 @@ async function readBounded(res: Response, signal: AbortSignal, maxBytes: number)
   return out;
 }
 
-/** Reads a request body of at most 64 KiB as JSON; undefined when it is larger or is not JSON. */
-export async function readRequestJson(req: IncomingMessage): Promise<{ json: unknown } | { tooLarge: true } | undefined> {
+/**
+ * Reads a request body of at most 64 KiB as JSON: `tooLarge` when it is larger, `left` when the request ends before
+ * its body does (the client left), and undefined when it is not JSON.
+ */
+export async function readRequestJson(
+  req: IncomingMessage,
+): Promise<{ json: unknown } | { tooLarge: true } | { left: true } | undefined> {
   const declared = Number(req.headers["content-length"]);
   if (Number.isFinite(declared) && declared > REQUEST_MAX_BYTES) return { tooLarge: true };
   const parts: Buffer[] = [];
   let total = 0;
-  for await (const chunk of req) {
-    const b = chunk as Buffer;
-    total += b.byteLength;
-    if (total > REQUEST_MAX_BYTES) return { tooLarge: true };
-    parts.push(b);
+  try {
+    for await (const chunk of req) {
+      const b = chunk as Buffer;
+      total += b.byteLength;
+      if (total > REQUEST_MAX_BYTES) return { tooLarge: true };
+      parts.push(b);
+    }
+  } catch {
+    return { left: true };
   }
   try {
     return { json: JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(parts))) };
