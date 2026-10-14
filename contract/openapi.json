@@ -443,7 +443,7 @@
                       ]
                     },
                     {
-                      "description": "The runtime is at capacity; retry after one second.",
+                      "description": "The runtime is at capacity; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402.",
                       "allOf": [
                         {
                           "$ref": "#/components/schemas/RuntimeRefusal"
@@ -920,7 +920,7 @@
                       ]
                     },
                     {
-                      "description": "The runtime is at capacity; retry after one second.",
+                      "description": "The runtime is at capacity; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402.",
                       "allOf": [
                         {
                           "$ref": "#/components/schemas/RuntimeRefusal"
@@ -1372,7 +1372,7 @@
                       ]
                     },
                     {
-                      "description": "The runtime is at capacity; retry after one second.",
+                      "description": "The runtime is at capacity; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402.",
                       "allOf": [
                         {
                           "$ref": "#/components/schemas/RuntimeRefusal"
@@ -1694,7 +1694,7 @@
                       ]
                     },
                     {
-                      "description": "The runtime is at capacity; retry after one second.",
+                      "description": "The runtime is at capacity; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402.",
                       "allOf": [
                         {
                           "$ref": "#/components/schemas/RuntimeRefusal"
@@ -2777,7 +2777,7 @@
               },
               {
                 "const": "at-capacity",
-                "description": "The runtime is at capacity; retry after one second."
+                "description": "The runtime is at capacity; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402."
               }
             ]
           },

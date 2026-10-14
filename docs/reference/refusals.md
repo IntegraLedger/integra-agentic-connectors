@@ -151,4 +151,4 @@ A refusal the HTTP runtime in front of the door answers itself, in the same shap
 | <a id="request-timeout"></a>`request-timeout` | 408 | The request did not arrive in full in time. |
 | <a id="body-too-large"></a>`body-too-large` | 413 | The body is larger than the runtime accepts for any request; the door never read it. |
 | <a id="fault"></a>`fault` | 500 | The request could not be served. Quote the `correlationId` to the door's operator. |
-| <a id="at-capacity"></a>`at-capacity` | 503 | The runtime is at capacity; retry after one second. |
+| <a id="at-capacity"></a>`at-capacity` | 503 | The runtime is at capacity; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402. |
