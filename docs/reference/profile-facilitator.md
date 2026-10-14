@@ -131,3 +131,5 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   `settle-deadline-passed` for a settle whose deadline passed before its node reads or its claim, with `before`, the
   step it did not start, and `settleWaitMs`. A request refused for its own bytes (a body that is not JSON, a signature
   that recovers no key, an extrinsic that does not decode) is answered to its client and not logged.
+  `@polkadot/api`, which loads each Polkadot network's metadata, also writes its own lines (not JSON) on standard error
+  when that load fails; the facilitator's entry for it is `node-call-failed` with `call: metadata`.
