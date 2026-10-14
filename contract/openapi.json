@@ -152,6 +152,29 @@
               }
             }
           },
+          "405": {
+            "description": "The request's method is one this path does not serve.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/method"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
           "409": {
             "description": "The record is in a state that does not allow this.",
             "content": {
@@ -421,6 +444,29 @@
                           "enum": [
                             "door/resource-unknown",
                             "claim/unknown"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "The request's method is one this path does not serve.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/method"
                           ]
                         }
                       }
@@ -728,6 +774,29 @@
               }
             }
           },
+          "405": {
+            "description": "The request's method is one this path does not serve.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/method"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
           "409": {
             "description": "The record is in a state that does not allow this.",
             "content": {
@@ -965,6 +1034,29 @@
               }
             }
           },
+          "405": {
+            "description": "The request's method is one this path does not serve.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/method"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
           "503": {
             "description": "Not available now; retry after one second.",
             "content": {
@@ -1013,6 +1105,29 @@
               "application/json": {
                 "schema": {
                   "type": "object"
+                }
+              }
+            }
+          },
+          "405": {
+            "description": "The request's method is one this path does not serve.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/method"
+                          ]
+                        }
+                      }
+                    }
+                  ]
                 }
               }
             }

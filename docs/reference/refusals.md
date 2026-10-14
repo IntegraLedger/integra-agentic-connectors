@@ -49,6 +49,8 @@ Nothing known by that name for this tenant.
 
 ## 405
 
+The request's method is one this path does not serve.
+
 | Code | Meaning |
 |---|---|
 | <a id="doormethod"></a>`door/method` | The path is served, but not with this method. |

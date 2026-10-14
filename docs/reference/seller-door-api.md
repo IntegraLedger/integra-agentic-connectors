@@ -38,6 +38,7 @@ Requires the seller credential: `Authorization: Bearer isk_…`.
 | 401 | No valid seller credential. | [Refusal](#refusal): [`door/unauthenticated`](./refusals.md#doorunauthenticated) | `WWW-Authenticate`: `Bearer realm="seller-door"` |
 | 403 | The request carries an Origin header; the door serves servers only. | [Refusal](#refusal): [`door/browser-origin`](./refusals.md#doorbrowser-origin) |  |
 | 404 | Nothing known by that name for this tenant. | [Refusal](#refusal): [`door/resource-unknown`](./refusals.md#doorresource-unknown) |  |
+| 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod) |  |
 | 409 | The record is in a state that does not allow this. | [Refusal](#refusal): [`issue/mint-request-reused`](./refusals.md#issuemint-request-reused), [`issue/mint-request-lapsed`](./refusals.md#issuemint-request-lapsed) |  |
 | 413 | The body is larger than this operation accepts. | [Refusal](#refusal): [`door/too-large`](./refusals.md#doortoo-large) |  |
 | 415 | The body is not application/json. | [Refusal](#refusal): [`door/media-type`](./refusals.md#doormedia-type) |  |
@@ -59,6 +60,7 @@ Requires the seller credential: `Authorization: Bearer isk_…`.
 | 401 | No valid seller credential. | [Refusal](#refusal): [`door/unauthenticated`](./refusals.md#doorunauthenticated) | `WWW-Authenticate`: `Bearer realm="seller-door"` |
 | 403 | The request carries an Origin header; the door serves servers only. | [Refusal](#refusal): [`door/browser-origin`](./refusals.md#doorbrowser-origin) |  |
 | 404 | Nothing known by that name for this tenant. | [Refusal](#refusal): [`door/resource-unknown`](./refusals.md#doorresource-unknown), [`claim/unknown`](./refusals.md#claimunknown) |  |
+| 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod) |  |
 | 409 | The record is in a state that does not allow this. | [Refusal](#refusal): [`claim/in-progress`](./refusals.md#claimin-progress), [`claim/paid`](./refusals.md#claimpaid), [`claim/not-this-request`](./refusals.md#claimnot-this-request), [`claim/channel-open`](./refusals.md#claimchannel-open), [`claim/channel-not-open`](./refusals.md#claimchannel-not-open), [`claim/agreement-first`](./refusals.md#claimagreement-first), [`claim/instrument-claimed`](./refusals.md#claiminstrument-claimed) |  |
 | 410 | The challenge has lapsed. | [Refusal](#refusal): [`claim/lapsed`](./refusals.md#claimlapsed) |  |
 | 413 | The body is larger than this operation accepts. | [Refusal](#refusal): [`door/too-large`](./refusals.md#doortoo-large) |  |
@@ -82,6 +84,7 @@ Requires the seller credential: `Authorization: Bearer isk_…`.
 | 401 | No valid seller credential. | [Refusal](#refusal): [`door/unauthenticated`](./refusals.md#doorunauthenticated) | `WWW-Authenticate`: `Bearer realm="seller-door"` |
 | 403 | The request carries an Origin header; the door serves servers only. | [Refusal](#refusal): [`door/browser-origin`](./refusals.md#doorbrowser-origin) |  |
 | 404 | Nothing known by that name for this tenant. | [Refusal](#refusal): [`door/not-found`](./refusals.md#doornot-found) |  |
+| 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod) |  |
 | 409 | The record is in a state that does not allow this. | [Refusal](#refusal): [`report/pairing-mismatch`](./refusals.md#reportpairing-mismatch), [`settle/other-reference`](./refusals.md#settleother-reference), [`settle/not-settling`](./refusals.md#settlenot-settling) |  |
 | 413 | The body is larger than this operation accepts. | [Refusal](#refusal): [`door/too-large`](./refusals.md#doortoo-large) |  |
 | 415 | The body is not application/json. | [Refusal](#refusal): [`door/media-type`](./refusals.md#doormedia-type) |  |
@@ -102,6 +105,7 @@ Requires the seller credential: `Authorization: Bearer isk_…`.
 | 401 | No valid seller credential. | [Refusal](#refusal): [`door/unauthenticated`](./refusals.md#doorunauthenticated) | `WWW-Authenticate`: `Bearer realm="seller-door"` |
 | 403 | The request carries an Origin header; the door serves servers only. | [Refusal](#refusal): [`door/browser-origin`](./refusals.md#doorbrowser-origin) |  |
 | 404 | Nothing known by that name for this tenant. | [Refusal](#refusal): [`door/not-found`](./refusals.md#doornot-found) |  |
+| 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod) |  |
 | 503 | Not available now; retry after one second. | [Refusal](#refusal): [`settle/store-unavailable`](./refusals.md#settlestore-unavailable) | `Retry-After`: `1` |
 
 ### openapi
@@ -113,6 +117,7 @@ No credential is required.
 | Status | Meaning | Body | Headers |
 |---|---|---|---|
 | 200 | This document's bytes. | `object` |  |
+| 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod) |  |
 
 ## Schemas
 

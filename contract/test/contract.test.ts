@@ -141,6 +141,19 @@ describe("the OpenAPI document", () => {
     }
   });
 
+  it("every code of the closed table is listed on some operation", () => {
+    expect([...new Set(listedCodes().map((l) => l.code))].sort()).toEqual(Object.keys(REFUSALS).sort());
+  });
+
+  it("each operation lists 405 door/method, the answer to a method its path does not serve", () => {
+    for (const [path, item] of Object.entries(doc.paths as Record<string, Record<string, unknown>>)) {
+      for (const method of Object.keys(item)) {
+        const codes = listedCodes().filter((l) => l.path === path && l.method === method && l.status === "405");
+        expect(codes.map((l) => l.code), `${method} ${path}`).toEqual(["door/method"]);
+      }
+    }
+  });
+
   it("the record's and the agreement leg's states are the same closed lists in the types and the document", () => {
     // The states the seller door defines, `stale` the terminal one for a claimed leg that reached its cap. A key
     // missing from or added to either object is a type error against the union it is typed by.
