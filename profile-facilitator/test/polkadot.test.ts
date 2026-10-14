@@ -95,7 +95,12 @@ interface Chain {
   best?: string;
   /** Whether block BEST + 1 holds V3; it does unless this says otherwise. */
   included?: () => boolean;
-  validity?: string;
+  /** `chain_getHeader`'s answer at the best block; its number, BEST, when not given. */
+  header?: unknown;
+  /** The validation's answer; VALID when not given. */
+  validity?: unknown;
+  /** The node's metadata, given the live metadata (`Metadata_metadata_at_version`'s answer); the live one when not given. */
+  metadata?: (live: string) => string;
   events?: string;
   submitError?: { code: number; message: string; data?: string };
   /** The finalized head's height; the node gives none when this is not set. */
@@ -125,6 +130,9 @@ async function start(chain: Chain = {}, network: string = NETWORK, settleWaitMs 
     const refused = chain.refuse?.(method, params);
     if (refused !== undefined) return { jsonrpc: "2.0", id, error: refused };
     const known = init.find((c) => c.method === method && JSON.stringify(c.params) === JSON.stringify(params));
+    if (known !== undefined && chain.metadata && method === "state_call" && params[0] === "Metadata_metadata_at_version") {
+      return answer(chain.metadata(known.result as string));
+    }
     if (known !== undefined) return answer(known.result);
     const p = JSON.stringify(params);
     if (method === "chain_getBlockHash" && p === "[]") return answer(chain.best ?? BEST_HASH);
@@ -132,7 +140,9 @@ async function start(chain: Chain = {}, network: string = NETWORK, settleWaitMs 
     if (method === "chain_getHeader" && p === JSON.stringify([FINALIZED_HASH]) && chain.finalized) {
       return answer({ number: `0x${chain.finalized().toString(16)}` });
     }
-    if (method === "chain_getHeader" && p === JSON.stringify([BEST_HASH])) return answer({ number: `0x${BEST.toString(16)}` });
+    if (method === "chain_getHeader" && p === JSON.stringify([BEST_HASH])) {
+      return answer(chain.header !== undefined ? chain.header : { number: `0x${BEST.toString(16)}` });
+    }
     if (method === "state_call") return answer(chain.validity ?? VALID);
     if (method === "author_submitExtrinsic") {
       return chain.submitError ? { jsonrpc: "2.0", id, error: chain.submitError } : answer(HASH_V3);
@@ -850,20 +860,56 @@ describe("the operator log", () => {
   // An unexpected answer that no error caused has its entry too: a node answer the facilitator cannot read, and a
   // settle whose deadline passed.
 
-  it("a node answer it cannot read reaches the log as the call that failed, its cause naming the part, and the answer is unchanged", async () => {
-    // A block hash is 32 bytes (Substrate's H256); the best block hash this node gives is 31.
-    await start({ best: `0x${"bb".repeat(31)}` });
-    expect((await post(`${base}/verify`, body())).json).toEqual({
-      isValid: false,
-      invalidReason: "unexpected_verify_error",
-      payer: PAYER,
-    });
-    expect(entries.map((e) => e.entry)).toEqual([{ event: "node-call-failed", ...ABOUT, call: "chain_getBlockHash" }]);
-    const cause = entries[0]!.cause;
-    expect(cause).toBeInstanceOf(NodeError);
-    expect((cause as NodeError).code).toBe("malformed");
-    expect((cause as NodeError).message).toBe("malformed: chain_getBlockHash: the block hash");
-  });
+  /**
+   * The live metadata with one name changed to another of the same length, where it occurs once: SCALE writes a name
+   * as its compact length, then its bytes.
+   */
+  const renamed = (from: string, to: string) => (live: string) => {
+    const [a, b] = [Buffer.from(from).toString("hex"), Buffer.from(to).toString("hex")];
+    if (a.length !== b.length || live.split(a).length !== 2) throw new Error(`${from} is not one name in the metadata`);
+    return live.replace(a, b);
+  };
+  // Every node answer the facilitator cannot read, one row per branch: the call, the node's answer, and the part the
+  // cause names. A block hash is 32 bytes (Substrate's H256), a header names its number, the validation answers SCALE
+  // bytes as hex, and the System pallet holds the Events storage and the BlockLength and BlockHashCount constants. In
+  // the metadata rows the entry names the payer, read from the decoded extrinsic, and the answer names none: the
+  // extrinsic's checks have not ended.
+  const CANNOT_READ: { call: string; what: string; part: string; chain: Chain; checked: boolean }[] = [
+    {
+      call: "metadata",
+      what: "a System pallet with no Events storage",
+      part: "System.Events",
+      chain: { metadata: renamed("\x18Events", "\x18Evenzs") },
+      checked: false,
+    },
+    {
+      call: "metadata",
+      what: "a System pallet with no BlockHashCount constant",
+      part: "System.BlockLength, System.BlockHashCount",
+      chain: { metadata: renamed("\x38BlockHashCount", "\x38BlockHashCounz") },
+      checked: false,
+    },
+    { call: "chain_getBlockHash", what: "a hash of 31 bytes", part: "the block hash", chain: { best: `0x${"bb".repeat(31)}` }, checked: true },
+    { call: "chain_getHeader", what: "a header with no number", part: "number", chain: { header: {} }, checked: true },
+    { call: "state_call", what: "a number", part: "the validity", chain: { validity: 0 }, checked: true },
+  ];
+
+  it.each(CANNOT_READ)(
+    "$call answering $what reaches the log as the call that failed, its cause naming $part, and the answer is unchanged",
+    async ({ call, part, chain, checked }) => {
+      await start(chain);
+      expect((await post(`${base}/verify`, body())).json).toEqual({
+        isValid: false,
+        invalidReason: "unexpected_verify_error",
+        ...(checked ? { payer: PAYER } : {}),
+      });
+      expect(entries.map((e) => e.entry)).toEqual([{ event: "node-call-failed", ...ABOUT, call }]);
+      const cause = entries[0]!.cause;
+      expect(cause).toBeInstanceOf(NodeError);
+      expect((cause as NodeError).code).toBe("malformed");
+      expect((cause as NodeError).message).toBe(`malformed: ${call}: ${part}`);
+    },
+  );
 
   it("a settle whose deadline passes once the node's validation has answered reaches the log as settle-deadline-passed with the bound, and claims and submits nothing", async () => {
     // The validation's answer arrives within its bound, and the facilitator goes on with it once the clock is at

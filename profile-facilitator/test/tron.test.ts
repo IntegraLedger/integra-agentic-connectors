@@ -1109,20 +1109,77 @@ describe("the operator log", () => {
   // An unexpected answer that no error caused has its entry too: a node answer the facilitator cannot read, a settle
   // whose deadline passed, and a broadcast the node did not accept.
 
-  it("a node answer it cannot read reaches the log as the call that failed, its cause naming the part, and the answer is unchanged", async () => {
-    // java-tron prints a permission's threshold as an int64 JSON number; this account's is a word.
-    await start({ account: { address: V2_PAYER_HEX, owner_permission: { threshold: "one", keys: [] } } });
-    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({
-      isValid: false,
-      invalidReason: "unexpected_verify_error",
-      payer: PAYER,
-    });
-    expect(entries.map((e) => e.entry)).toEqual([{ event: "node-call-failed", ...ABOUT, call: "/wallet/getaccount" }]);
-    const cause = entries[0]!.cause;
-    expect(cause).toBeInstanceOf(NodeError);
-    expect((cause as NodeError).code).toBe("malformed");
-    expect((cause as NodeError).message).toBe("malformed: /wallet/getaccount: owner_permission.threshold");
-  });
+  // Every node answer the facilitator cannot read, one row per branch: the call, the node's answer, and the part the
+  // cause names. java-tron prints a permission's threshold and a key's weight as int64 JSON numbers, a block's id as
+  // 64 hex digits whose first 16 are its number, and a broadcast it does not accept with a `code`. The broadcast's row
+  // is a /settle's; every other row is a /verify's.
+  const owner = (permission: unknown) => ({ account: { address: V2_PAYER_HEX, owner_permission: permission } });
+  const CANNOT_READ: { call: string; what: string; part: string; answers: Node; settles?: true }[] = [
+    { call: "/wallet/getaccount", what: "an array", part: "the account", answers: { account: [] } },
+    { call: "/wallet/getaccount", what: "a permission with no keys", part: "owner_permission.keys", answers: owner({ threshold: 1 }) },
+    {
+      call: "/wallet/getaccount",
+      what: "a threshold that is a word",
+      part: "owner_permission.threshold",
+      answers: owner({ threshold: "one", keys: [] }),
+    },
+    {
+      call: "/wallet/getaccount",
+      what: "a key with no address",
+      part: "owner_permission.keys[].address",
+      answers: owner({ threshold: 1, keys: [{ weight: 1 }] }),
+    },
+    {
+      call: "/wallet/getaccount",
+      what: "a key whose weight is a string",
+      part: "owner_permission.keys[].weight",
+      answers: owner({ threshold: 1, keys: [{ address: V2_PAYER_HEX, weight: "1" }] }),
+    },
+    {
+      call: "/wallet/getnowblock",
+      what: "a head with no number",
+      part: "block_header.raw_data.number",
+      answers: { head: { block_header: { raw_data: {} } } },
+    },
+    { call: "/wallet/getblock", what: "an array", part: "the block", answers: { block: () => [] } },
+    {
+      call: "/wallet/getblock",
+      what: "the id of another block number",
+      part: "blockID",
+      answers: { block: () => ({ blockID: "00".repeat(32) }) },
+    },
+    { call: "/wallet/gettransactionbyid", what: "an array", part: "the transaction", answers: { held: () => [] } },
+    { call: "/wallet/gettransactionfrompending", what: "an array", part: "the transaction", answers: { pendingPool: () => [] } },
+    { call: "/wallet/triggerconstantcontract", what: "no result", part: "result", answers: { trigger: { transaction: {} } } },
+    {
+      call: "/wallet/broadcasthex",
+      what: "neither a result nor a code",
+      part: "code",
+      answers: { broadcast: { result: false } },
+      settles: true,
+    },
+  ];
+
+  it.each(CANNOT_READ)(
+    "$call answering $what reaches the log as the call that failed, its cause naming $part, and the answer is unchanged",
+    async ({ call, part, answers, settles }) => {
+      await start(answers);
+      if (settles) {
+        expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(REFUSED);
+      } else {
+        expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({
+          isValid: false,
+          invalidReason: "unexpected_verify_error",
+          payer: PAYER,
+        });
+      }
+      expect(entries.map((e) => e.entry)).toEqual([{ event: "node-call-failed", ...ABOUT, call }]);
+      const cause = entries[0]!.cause;
+      expect(cause).toBeInstanceOf(NodeError);
+      expect((cause as NodeError).code).toBe("malformed");
+      expect((cause as NodeError).message).toBe(`malformed: ${call}: ${part}`);
+    },
+  );
 
   it("a settle whose deadline passes once its node reads have answered reaches the log as settle-deadline-passed with the bound, and claims and broadcasts nothing", async () => {
     // The simulation's answer arrives within its bound, and the facilitator goes on with it once the clock is at
