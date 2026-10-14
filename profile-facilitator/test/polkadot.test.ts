@@ -34,6 +34,10 @@ vi.mock("../src/http.js", async (original) => {
   const support = await import("./support.js");
   return support.lateResume(support.countingSleep(await original<typeof import("../src/http.js")>()));
 });
+vi.mock("../src/store.js", async (original) => {
+  const support = await import("./support.js");
+  return support.lateStore(await original<typeof import("../src/store.js")>());
+});
 
 const NETWORK = "polkadot:68d56f15f85d3136970ec16946040bc1";
 /** SHA-256("abc"), FIPS 180-2's first example: the H of the lcp vectors. */
@@ -999,4 +1003,38 @@ describe("the operator log", () => {
     expect((await db.pool.query("SELECT id FROM settlement")).rowCount).toBe(0);
     expect(calls("author_submitExtrinsic")).toHaveLength(0);
   });
+
+  // A settle of a hash the store does not hold reads the node in three steps: the decode (the runtime version, and the
+  // metadata when it is not loaded), the finalized head, and the validation. Each row holds the answer before one step
+  // until the clock is at settleWaitMs (1,000 ms), as after time spent elsewhere. In the second row a /verify has loaded
+  // the metadata, so the decode reads the runtime version alone.
+  const isCall = (method: string, at?: string) => (_url: string, sent: unknown) => {
+    const b = sent as { method: string; params: unknown[] };
+    return b.method === method && (at === undefined || b.params[0] === at);
+  };
+  const SPENT: { before: string; held: string; holds: (call: string, sent: unknown) => boolean; loaded: boolean; payer: boolean }[] = [
+    { before: "node reads", held: "the store read", holds: (call) => call === "store.read", loaded: false, payer: false },
+    { before: "finalized head", held: "the runtime version read", holds: isCall("state_getRuntimeVersion"), loaded: true, payer: true },
+    { before: "validation", held: "the finalized head read", holds: isCall("chain_getHeader", FINALIZED_HASH), loaded: false, payer: true },
+  ];
+
+  it.each(SPENT)(
+    "a settle whose deadline passes once $held has answered reaches the log as settle-deadline-passed before the $before, and sends no node call",
+    async ({ before, holds, loaded, payer }) => {
+      await start({ finalized: () => BEST - 2 }, NETWORK, 1_000);
+      if (loaded) expect((await post(`${base}/verify`, body())).json).toEqual({ isValid: true, payer: PAYER });
+      const held = resumeLate(holds);
+      const answer = post(`${base}/settle`, body());
+      await reaches(answer, held.arrived);
+      const sent = node.calls.length;
+      await clock.advanceTo(1_000);
+      held.resume();
+      expect((await answer).json).toEqual({ success: false, errorReason: "unexpected_settle_error", transaction: "", network: NETWORK });
+      const about = payer ? ABOUT : { network: NETWORK, transaction: HASH_V3 };
+      expect(entries.map((e) => e.entry)).toEqual([{ event: "settle-deadline-passed", ...about, before, settleWaitMs: 1_000 }]);
+      expect(entries[0]!.cause).toBeUndefined();
+      expect(node.calls).toHaveLength(sent);
+      expect((await db.pool.query("SELECT id FROM settlement")).rowCount).toBe(0);
+    },
+  );
 });

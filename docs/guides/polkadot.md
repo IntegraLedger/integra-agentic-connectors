@@ -54,8 +54,11 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
    extrinsic is decoded again and step 5's scan goes on from the blocks its row records as not yet read, and nothing
    is submitted.
 3. For a hash the store does not hold, decodes the extrinsic and asks the node to validate it, as `/verify` does
-   (steps 3 and 4). Then claims the hash, with the first block to scan: the block after the finalized head read before
-   validation, never before the era's birth.
+   (steps 3 and 4), reading the finalized head before the validation. The settle's wait is checked before each of
+   these three node reads: once `settleWaitMs` has passed, it sends no node call and answers `unexpected_settle_error`.
+   Step 1's refusals come first; the decode's refusals need the node's metadata, so they are given only while the wait
+   leaves time for it. Then claims the hash, with the first block to scan: the block after the finalized head read
+   before validation, never before the era's birth.
 4. Submits with `author_submitExtrinsic`. A refusal that says the node has already seen the extrinsic or its nonce
    (1013 already imported, 1012 temporarily banned, or 1010 with an outdated nonce) is a consumed payment, answered
    `invalid_transaction_state` with the extrinsic's hash, and no block is scanned for it. Any other refusal, or a

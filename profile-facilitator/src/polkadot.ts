@@ -218,7 +218,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       new NodeError("malformed", true, `${call}: ${part}`),
     );
   /** The entry for a settle whose deadline, `settleWaitMs` after its request, passed before `before`. */
-  const deadlinePassed = (c: Checked, before: string) => ({
+  const deadlinePassed = (c: { network: string; id: string; payer?: string }, before: string) => ({
     event: "settle-deadline-passed",
     ...about(c),
     before,
@@ -683,9 +683,12 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
    * refused submission, or a submission request that cannot have reached the node, gives `unexpected_settle_error`
    * with no transaction, which says nothing was submitted. Each is stored final, and every repeat gets the stored
    * answer. When the store cannot be read, the facilitator cannot know whether the extrinsic was submitted, so the
-   * answer is pending with its hash. The scan starts after the finalized head read before validation (never before the
-   * era's birth): validation at the best block shows the extrinsic absent from that block's ancestry, and the
-   * finalized head is in every later best chain.
+   * answer is pending with its hash. For a hash the store does not hold, the deadline is checked before each node read:
+   * the decode, the finalized head read and the validation. A deadline spent there sends no node call, and gives
+   * `unexpected_settle_error`; a refusal the client's own bytes give comes first, so the decode's refusals, which need
+   * the metadata, are given when the deadline leaves time for it. The scan starts after the finalized head read before
+   * validation (never before the era's birth): validation at the best block shows the extrinsic absent from that
+   * block's ancestry, and the finalized head is in every later best chain.
    */
   async function settle(r: FacilitatorRequest): Promise<SettleAnswer> {
     const deadline = performance.now() + settleWaitMs;
@@ -702,9 +705,12 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     }
     if (stored.state === "answered" && !isPending(stored.answer)) return repeatOf(stored.answer);
     if (stored.state !== "none") return follow(l, stored.since, stored.unread, deadline);
+    if (left() <= 0) return unexpectedSettle(log, deadlinePassed({ network: l.node.network, id: l.id }, "node reads"));
     const c = await decode(l, left());
     if (typeof c === "string") return failed(settleReason(c), "", network);
+    if (left() <= 0) return unexpectedSettle(log, deadlinePassed(c, "finalized head"));
     const finalized = await finalizedHeight(c, l.node.rpc, deadline);
+    if (left() <= 0) return unexpectedSettle(log, deadlinePassed(c, "validation"));
     const v = await validate(c, left());
     if (typeof v === "string") return failed(settleReason(v), "", network);
     if (left() <= 0) return unexpectedSettle(log, deadlinePassed(c, "claim"));

@@ -42,7 +42,7 @@ controls, to the resource servers that use it.
 | `unsupported_permission` | yes | yes | Tron: the transaction carries more than one signature, or the owner's permission does not accept its one signature (the key's weight is below the threshold). |
 | `invalid_transaction` | yes | yes | The node refuses the transaction in simulation or validation. On Tron this includes a reference block (TaPoS) that does not match the node's. |
 | `unexpected_verify_error` | yes | no | The node or the store could not be read. |
-| `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission, or the settle's `settleWaitMs` passed before its claim (on Tron, also before its node reads). |
+| `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission, or the settle's `settleWaitMs` passed before its node reads or its claim. |
 | `settlement_pending` | no | yes | Submitted, or possibly submitted (the store could not be read), and not yet final or not yet stored when the wait ended. |
 | `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. On Polkadot, also a repeat of a payment whose success has been answered, or a submission the node refuses as one it has already seen (already imported, temporarily banned, or an outdated nonce). |
 
@@ -130,7 +130,8 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   `node-call-failed` for a node answer the facilitator cannot read, its cause a `malformed` error naming the part, and
   for a Tron broadcast the node does not accept, its cause the node's `code` and `message`; and
   `settle-deadline-passed` for a settle whose deadline passed before its node reads or its claim, with `before`, the
-  step it did not start, and `settleWaitMs`. A request refused for its own bytes (a body that is not JSON, a signature
+  step it did not start (`node reads` or `claim`, and on Polkadot, once the extrinsic is decoded, `finalized head` or
+  `validation`), and `settleWaitMs`. A request refused for its own bytes (a body that is not JSON, a signature
   that recovers no key, an extrinsic that does not decode) is answered to its client and not logged, and a client that
   leaves before its request body is complete writes no entry: the connection is destroyed.
   `@polkadot/api`, which loads each Polkadot network's metadata, also writes its own lines (not JSON) on standard error
