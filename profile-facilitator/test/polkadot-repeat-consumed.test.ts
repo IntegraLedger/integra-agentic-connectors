@@ -3,9 +3,11 @@
 // BLAKE2b-256 (the profile's rule 5 deduplicates by it), known from its bytes, so a repeated /settle while the node is
 // unreachable gives the same failure. Expected values: those rules, and the lcp vectors' V2 and V3 (the call, the
 // extrinsic).
+// Every wait the facilitator makes runs on a clock the test moves (support.ts's `controlledClock`): a settle's wait
+// ends when the test moves the clock to its end, never because the machine is slow.
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
-import { fixture, freePort, freshDatabase, post, stub, type Stub } from "./support.js";
+import { controlledClock, fixture, freePort, freshDatabase, post, stub, type Clock, type Stub } from "./support.js";
 
 const NETWORK = "polkadot:68d56f15f85d3136970ec16946040bc1";
 const CALL_V2 =
@@ -38,6 +40,7 @@ const record = (index: number, pallet: number, variant: number, data: string) =>
   `00${u32le(index)}${pallet.toString(16).padStart(2, "0")}${variant.toString(16).padStart(2, "0")}${data}00`;
 const EVENTS = `0x0c${record(2, 50, 2, `${u32le(1337)}${SIGNER}${ALICE}1027${"00".repeat(14)}`)}${record(2, 0, 5, `${SIGNER}${REMARK_HASH}`)}${record(2, 0, 0, "00000000")}`;
 
+let clock: Clock & { restore(): void };
 let db: Awaited<ReturnType<typeof freshDatabase>>;
 let node: Stub | undefined;
 let base: string;
@@ -81,10 +84,12 @@ const body = () => ({
 });
 
 beforeEach(async () => {
+  clock = controlledClock();
   db = await freshDatabase();
 });
 
 afterEach(async () => {
+  clock.restore();
   await closeFacilitator?.();
   await node?.close();
   await db.drop();
@@ -101,6 +106,7 @@ describe("a repeated Polkadot /settle of a consumed payment", () => {
     });
     const consumed = { success: false, errorReason: "invalid_transaction_state", transaction: `${BLOCK_HASH}-2`, network: NETWORK };
     expect((await post(`${base}/settle`, body())).json).toEqual(consumed);
+    expect(node!.calls.filter((c) => (c.body as { method: string }).method === "author_submitExtrinsic")).toHaveLength(1);
     await node!.close();
     node = undefined;
     expect((await post(`${base}/settle`, body())).json).toEqual(consumed);
