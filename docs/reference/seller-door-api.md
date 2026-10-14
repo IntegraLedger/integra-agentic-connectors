@@ -29,7 +29,7 @@ The door a seller's own systems call to issue an ATR before approval, to claim a
 
 Requires the seller credential: `Authorization: Bearer isk_…`.
 
-**Request body** (`application/json`): [IssueRequest](#issuerequest).
+**Request body** (`application/json`): [IssueRequest](#issuerequest). The body is at most 1 572 864 bytes. A larger body answers 413 `door/too-large`.
 
 | Status | Meaning | Body | Headers |
 |---|---|---|---|
@@ -54,7 +54,7 @@ Requires the seller credential: `Authorization: Bearer isk_…`.
 
 Requires the seller credential: `Authorization: Bearer isk_…`.
 
-**Request body** (`application/json`): [ClaimRequest](#claimrequest).
+**Request body** (`application/json`): [ClaimRequest](#claimrequest). The body is at most 65 536 bytes. A larger body answers 413 `door/too-large`.
 
 | Status | Meaning | Body | Headers |
 |---|---|---|---|
@@ -80,7 +80,7 @@ Requires the seller credential: `Authorization: Bearer isk_…`.
 
 Requires the seller credential: `Authorization: Bearer isk_…`.
 
-**Request body** (`application/json`): [ReportRequest](#reportrequest).
+**Request body** (`application/json`): [ReportRequest](#reportrequest). The body is at most 16 384 bytes. A larger body answers 413 `door/too-large`.
 
 | Status | Meaning | Body | Headers |
 |---|---|---|---|

@@ -32,6 +32,7 @@
         "summary": "Assemble, store and hash the ATR for one checkout state; return the values to place.",
         "requestBody": {
           "required": true,
+          "description": "The body is at most 1 572 864 bytes. A larger body answers 413 `door/too-large`.",
           "content": {
             "application/json": {
               "schema": {
@@ -482,6 +483,7 @@
         "summary": "The one check: the presented payment carries this ATR's hash, for the options issued.",
         "requestBody": {
           "required": true,
+          "description": "The body is at most 65 536 bytes. A larger body answers 413 `door/too-large`.",
           "content": {
             "application/json": {
               "schema": {
@@ -958,6 +960,7 @@
         "summary": "The platform's payment reference, keyed by the ATR hash.",
         "requestBody": {
           "required": true,
+          "description": "The body is at most 16 384 bytes. A larger body answers 413 `door/too-large`.",
           "content": {
             "application/json": {
               "schema": {

@@ -280,6 +280,21 @@ describe("the OpenAPI document", () => {
     }
   });
 
+  it("each request body states the size the door accepts and the code a larger body answers", () => {
+    // The door's body bounds in bytes, one per operation that takes a body; 413 door/too-large is the closed table's
+    // one 413 code of the door.
+    const bounds: [string, string][] = [
+      ["/issue", "1 572 864"],
+      ["/claim", "65 536"],
+      ["/report", "16 384"],
+    ];
+    for (const [path, bytes] of bounds) {
+      expect(doc.paths[path].post.requestBody.description, path).toBe(
+        `The body is at most ${bytes} bytes. A larger body answers ${REFUSALS["door/too-large"]} \`door/too-large\`.`,
+      );
+    }
+  });
+
   it("RequestCommitment states the request-target bound the LCP package applies: 8192 characters", async () => {
     expect(doc.components.schemas.RequestCommitment.description).toContain("is at most 8192 characters");
     const at = (length: number) => requestCommitment({ method: "GET", target: `/${"a".repeat(length - 1)}`, body: new Uint8Array() });

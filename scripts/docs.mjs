@@ -167,7 +167,10 @@ function apiPage() {
       out.push(`**Path parameter** ${code(p.name)}: ${typeOf(p.schema)}${p.required ? ", required" : ""}.`, "");
     }
     const body = op.requestBody?.content?.["application/json"]?.schema;
-    if (body) out.push(`**Request body** (${code("application/json")}): ${typeOf(body)}.`, "");
+    if (body) {
+      const said = op.requestBody.description;
+      out.push(`**Request body** (${code("application/json")}): ${typeOf(body)}.${said ? ` ${prose(said)}` : ""}`, "");
+    }
     out.push("| Status | Meaning | Body | Headers |", "|---|---|---|---|");
     for (const [status, r] of Object.entries(op.responses)) {
       const schema = r.content?.["application/json"]?.schema;
