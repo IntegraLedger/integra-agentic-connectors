@@ -84,7 +84,8 @@ export interface Clock {
    * Resolves with `answers` once each has arrived, waking the polls: whenever every settle not yet answered is asleep
    * in its poll, the clock moves on to the first of them to wake. A settle waiting on anything else is left to it.
    * Throws when a poll would wake, or the answers arrive, more than the recorded settleWaitMs after the call, and when
-   * no settleWaitMs is recorded.
+   * no settleWaitMs is recorded. Throws when a poll sleeps on once the clock has passed its wake: a sleep that does not
+   * run on this clock.
    */
   answered<T>(answers: Promise<T>[]): Promise<T[]>;
 }
@@ -148,6 +149,9 @@ export function controlledClock(date?: number): Clock & { restore(): void } {
           throw new Error(`a poll wakes ${wakes - from} ms after the settles are sent, past settleWaitMs (${wait} ms)`);
         }
         await clock.advance(wakes - performance.now());
+        if ([...sleepers].some((s) => s.wakes <= performance.now())) {
+          throw new Error("a poll sleeps on after the clock passed its wake: its sleep does not run on this clock");
+        }
       }
       const took = performance.now() - from;
       if (took > wait) throw new Error(`the settles answer ${took} ms after they are sent, past settleWaitMs (${wait} ms)`);
