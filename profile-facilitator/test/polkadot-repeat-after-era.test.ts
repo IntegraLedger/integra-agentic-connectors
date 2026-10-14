@@ -3,9 +3,13 @@
 // period 64 from block 21,054,314 (the lcp vectors' V3, era bytes a502), so it ends at 21,054,378. The extrinsic lands in block
 // 21,054,321, inside the era; the repeat comes when the head is at 21,054,421, after the era has ended and before the
 // dedupe row's own end. Expected values: the profile's rule 5, and the lcp vectors' V2 and V3.
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+// Every wait the facilitator makes runs on a clock the test moves (support.ts's `controlledClock`): a settle's wait
+// ends when the test moves the clock to its end, never because the machine is slow.
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
-import { fixture, freePort, freshDatabase, post, stub, type Stub } from "./support.js";
+import { controlledClock, fixture, freePort, freshDatabase, post, stub, type Clock, type Stub } from "./support.js";
+
+vi.mock("../src/http.js", async (original) => (await import("./support.js")).countingSleep(await original<typeof import("../src/http.js")>()));
 
 const NETWORK = "polkadot:68d56f15f85d3136970ec16946040bc1";
 const CALL_V2 =
@@ -38,6 +42,7 @@ const record = (index: number, pallet: number, variant: number, data: string) =>
   `00${u32le(index)}${pallet.toString(16).padStart(2, "0")}${variant.toString(16).padStart(2, "0")}${data}00`;
 const EVENTS = `0x0c${record(2, 50, 2, `${u32le(1337)}${SIGNER}${ALICE}1027${"00".repeat(14)}`)}${record(2, 0, 5, `${SIGNER}${REMARK_HASH}`)}${record(2, 0, 0, "00000000")}`;
 
+let clock: Clock & { restore(): void };
 let db: Awaited<ReturnType<typeof freshDatabase>>;
 let node: Stub | undefined;
 let base: string;
@@ -85,13 +90,18 @@ const body = () => ({
   paymentRequirements: O_P,
 });
 
+/** A /settle's answer, waking its poll whenever it sleeps: a wait that ends pending ends at the end of settleWaitMs. */
+const settle = async () => (await clock.answered([post(`${base}/settle`, body())]))[0]!.json;
+
 beforeEach(async () => {
   landed = false;
   head = BEST + 1;
+  clock = controlledClock();
   db = await freshDatabase();
 });
 
 afterEach(async () => {
+  clock.restore();
   await closeFacilitator?.();
   await node?.close();
   await db.drop();
@@ -100,19 +110,19 @@ afterEach(async () => {
 describe("a pending Polkadot answer re-read after the era has ended", () => {
   it("control: re-read while the head is still inside the era, it answers success", async () => {
     await start();
-    expect(((await post(`${base}/settle`, body())).json as { errorReason?: string }).errorReason).toBe("settlement_pending");
+    expect(((await settle()) as { errorReason?: string }).errorReason).toBe("settlement_pending");
     landed = true;
     head = BEST + 1 + 10;
-    expect(((await post(`${base}/settle`, body())).json as { success: boolean }).success).toBe(true);
+    expect(((await settle()) as { success: boolean }).success).toBe(true);
   });
 
   it("finds the extrinsic in the block that holds it and answers success, submitting nothing more", async () => {
     await start();
-    const first = (await post(`${base}/settle`, body())).json as { errorReason?: string };
+    const first = (await settle()) as { errorReason?: string };
     expect(first.errorReason).toBe("settlement_pending");
     landed = true;
     head = BEST + 1 + 100;
-    expect((await post(`${base}/settle`, body())).json).toEqual({
+    expect(await settle()).toEqual({
       success: true,
       transaction: `${BLOCK_HASH}-2`,
       network: NETWORK,
