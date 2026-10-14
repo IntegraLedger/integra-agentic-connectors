@@ -126,9 +126,9 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV12
 
-**a report with no claim on a pairing whose hash is read only through the claim.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. The option is lcp 0.4.0's vectors/x402-auth-capture-eip155-eip3009.json fixed.option. In lcp 0.4.0's registry this pairing has status and no recover: with no claim, no read of the transaction can check the hash. The report of money that moved is recorded, never refused: the record is settling with the reported transaction, and its proves (claimed false, no pattern, nothing settled it) states that the hash is not read, so it is unpaid.
+**a report with no claim on a pairing whose hash is read only through the claim.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. The option is lcp 0.4.0's vectors/x402-auth-capture-eip155-eip3009.json fixed.option. In lcp 0.4.0's registry this pairing has status and no recover: with no claim, no read of the transaction can check the hash. fixed.reader is that file's EV6 reader (network, finalized and safe marks) with one receipt, keyed by the reported transaction: the one lcp 0.4.0's test/x402-evm-breadth.test.ts reads for EV6, status 1 at EV6's expected block 100, holding EV6's authorizedAndTransfer logs (the escrow's PaymentAuthorized, then the token's Transfer). The receipt is at the reader's finalized mark, and the read checks no hash: nothing is recorded, and the report is answered 202 with the record issued, settlement null and proves (claimed false, no pattern, nothing settled it), so the record is unpaid.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
 | 1 | `POST /issue` | 200 | 791 bytes, SHA-256 `0xb8722010481cfbea6d8b6d7faa4e5ab986092682dec60c28b4c4a9e2118b99fd` |
-| 2 | `POST /report` | 202 `state: settling` |  |
+| 2 | `POST /report` | 202 `state: issued` |  |

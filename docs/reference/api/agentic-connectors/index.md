@@ -176,8 +176,8 @@ One payment option, as the challenge will carry it. `pairing` is a pairing id th
 ### Proves
 
 What a record proves: whether the claim read the hash from the payment, the pairing's pattern, and the evidence it is
-paid on. A record whose `settlement` names a transaction while `claimed` is false and `pattern` and `settledBy` are
-null holds a reported payment whose hash is not read: nothing shows that the payment carries it, and it is unpaid.
+paid on. On a pairing whose hash is read only through the claim, a payment reported with no claim leaves the record
+`issued` and unpaid, with `claimed` false and `pattern` and `settledBy` null, because no claim read the hash.
 
 #### Properties
 

@@ -16,7 +16,37 @@
     "clock": 1790000000,
     "atrIds": [
       "6f1c2b0e-8d4a-4c3b-9e2f-1a7d5c9b3e54"
-    ]
+    ],
+    "reader": {
+      "network": "eip155:84532",
+      "finalized": "100",
+      "safe": "105",
+      "receipts": {
+        "0x4444444444444444444444444444444444444444444444444444444444444444": {
+          "status": 1,
+          "blockNumber": "100",
+          "logs": [
+            {
+              "address": "0xf96815976523E00e65Be8f34cA5e64b4f41EB19c",
+              "topics": [
+                "0x1c81fb2e3bab27f6bb09bee9a0dddf61600b7cbaf2c12683e4864e0cbdb9d284",
+                "0x21a0acc1bbeb5c7e1c4259865dc5bcdb7867f4c07c99440e731d48141d8da556"
+              ],
+              "data": "0x"
+            },
+            {
+              "address": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+              "topics": [
+                "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+                "0x000000000000000000000000f39fd6e51aad88f6f4ce6ab8827279cfffb92266",
+                "0x0000000000000000000000008612dfdc421f80336cd14e8ef9cb1e765db5ab88"
+              ],
+              "data": "0x0000000000000000000000000000000000000000000000000000000000002710"
+            }
+          ]
+        }
+      }
+    }
   },
   "steps": [
     {
@@ -157,13 +187,9 @@
         "status": 202,
         "body": {
           "atrHash": "0xb8722010481cfbea6d8b6d7faa4e5ab986092682dec60c28b4c4a9e2118b99fd",
-          "state": "settling",
+          "state": "issued",
           "expiresAt": "2026-09-21T14:14:20.000Z",
-          "settlement": {
-            "pairing": "x402/auth-capture/eip155/eip3009",
-            "network": "eip155:84532",
-            "reference": "0x4444444444444444444444444444444444444444444444444444444444444444"
-          },
+          "settlement": null,
           "proves": {
             "claimed": false,
             "pattern": null,
@@ -175,5 +201,5 @@
       }
     }
   ],
-  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. The option is lcp 0.4.0's vectors/x402-auth-capture-eip155-eip3009.json fixed.option. In lcp 0.4.0's registry this pairing has status and no recover: with no claim, no read of the transaction can check the hash. The report of money that moved is recorded, never refused: the record is settling with the reported transaction, and its proves (claimed false, no pattern, nothing settled it) states that the hash is not read, so it is unpaid."
+  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. The option is lcp 0.4.0's vectors/x402-auth-capture-eip155-eip3009.json fixed.option. In lcp 0.4.0's registry this pairing has status and no recover: with no claim, no read of the transaction can check the hash. fixed.reader is that file's EV6 reader (network, finalized and safe marks) with one receipt, keyed by the reported transaction: the one lcp 0.4.0's test/x402-evm-breadth.test.ts reads for EV6, status 1 at EV6's expected block 100, holding EV6's authorizedAndTransfer logs (the escrow's PaymentAuthorized, then the token's Transfer). The receipt is at the reader's finalized mark, and the read checks no hash: nothing is recorded, and the report is answered 202 with the record issued, settlement null and proves (claimed false, no pattern, nothing settled it), so the record is unpaid."
 }

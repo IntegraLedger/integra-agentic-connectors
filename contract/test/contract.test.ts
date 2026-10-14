@@ -456,11 +456,22 @@ describe("the vectors", () => {
     const binding = BINDINGS.find((b) => b.id === report(cv12)["pairing"]) as unknown as Record<string, unknown>;
     expect(typeof binding["status"]).toBe("function");
     expect(binding["recover"]).toBeUndefined();
-    expect(cv12.fixed.reader).toBeUndefined();
-    // Its record names the reported transaction, and no claim, pattern or evidence: the hash is not read.
+    // Its reader is lcp's EV6 for this pairing (vectors/x402-auth-capture-eip155-eip3009.json), holding the reported
+    // transaction's receipt as lcp's own test reads it, in a block at the reader's finalized mark.
+    const lcpDir = dirname(dirname(createRequire(import.meta.url).resolve("@integraledger/lcp")));
+    const ev6 = JSON.parse(readFileSync(join(lcpDir, "vectors", "x402-auth-capture-eip155-eip3009.json"), "utf8"))["EV6"];
+    const r12 = cv12.fixed.reader!;
+    const tx12 = report(cv12)["reference"]!;
+    expect({ network: r12.network, finalized: r12.finalized, safe: r12.safe }).toEqual(ev6.reader);
+    expect(r12.receipts).toEqual({
+      [tx12]: { status: 1, blockNumber: ev6.authorizedAndTransfer.expect.blockNumber, logs: ev6.authorizedAndTransfer.logs },
+    });
+    expect(BigInt(r12.receipts[tx12]!.blockNumber) <= BigInt(r12.finalized)).toBe(true);
+    // A read that cannot check the hash settles nothing: the record stays issued, with no settlement, claim, pattern
+    // or evidence.
     const record = cv12.steps.find((s) => s.request.path === "/report")!.expect.body as unknown as RecordView;
-    expect(record.state).toBe("settling");
-    expect(record.settlement?.reference).toBe(report(cv12)["reference"]);
+    expect(record.state).toBe("issued");
+    expect(record.settlement).toBeNull();
     expect(record.proves).toEqual({ claimed: false, pattern: null, settledBy: null });
   });
 

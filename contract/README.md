@@ -477,7 +477,7 @@ Each file in `vectors/` is `{name, fixed, steps, source}`:
 | `CV9` | A plain card checkout with the agreement step. |
 | `CV10` | A card payment reported before the agreement is recorded. |
 | `CV11` | A report with no claim, whose transaction the reader holds settled with the ATR's hash: `200` with the record `paid` on that read. |
-| `CV12` | A report with no claim on a pairing whose hash is read only through the claim: `202` with the record `settling` and the reported transaction. `claimed` false with `pattern` and `settledBy` null states that the hash is not read: the record is unpaid. |
+| `CV12` | A report with no claim on a pairing whose hash is read only through the claim, whose transaction the reader holds final: `202` with the record `issued`, nothing recorded and `settlement` null. No claim read the hash, so the read settles nothing and the record is unpaid. |
 
 Every stored ATR's bytes hash to the value the vector states. You can check that without a door:
 
