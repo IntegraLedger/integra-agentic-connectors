@@ -156,5 +156,5 @@
       }
     }
   ],
-  "source": "One mint request id names one checkout state; other offers under it are refused."
+  "source": "Step 1 is CV1: printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. Content: printf '%s' '\"Pay 10000 base units of USDC for one report.\"' | base64. Step 2 sends step 1's request with the option's amount \"100\": other offers under the same mint request id, which names one checkout state, are refused 409 issue/mint-request-reused."
 }

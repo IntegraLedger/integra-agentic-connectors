@@ -32,7 +32,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV2
 
-**repeat.** Source: The same mint request id and the same request give the first answer, byte for byte, and no second stored file.
+**repeat.** Source: Step 1 is CV1: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. Content: printf '%s' '"Pay 10000 base units of USDC for one report."' | base64. Step 2 sends step 1's request again: its answer is step 1's body, byte for byte, and the storage holds one file.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
@@ -41,7 +41,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV3
 
-**reused id.** Source: One mint request id names one checkout state; other offers under it are refused.
+**reused id.** Source: Step 1 is CV1: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. Content: printf '%s' '"Pay 10000 base units of USDC for one report."' | base64. Step 2 sends step 1's request with the option's amount "100": other offers under the same mint request id, which names one checkout state, are refused 409 issue/mint-request-reused.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
