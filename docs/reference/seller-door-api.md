@@ -328,7 +328,7 @@ An object. A member not listed here is refused.
 
 ### Agreement
 
-The agreement step's leg: required until the buyer pays the agreement URL, settling while that payment settles, recorded once it is on chain. Stale when the agreement payment was claimed and, 604 800 seconds after its settleBy, no read has shown it settled or unable to settle: terminal, with a notice on the record, and never recorded after that.
+The agreement step's leg: required until the buyer pays the agreement URL, settling while that payment settles, recorded once it is on chain. Stale when the agreement payment was claimed and, 604 800 seconds after its settleBy, no read has shown it settled or unable to settle: terminal, and never recorded after that.
 
 An object. A member not listed here is refused.
 
@@ -340,7 +340,7 @@ An object. A member not listed here is refused.
 
 ### RecordView
 
-One ATR's record: issued once the ATR is placed and no payment is recorded, settling while a claimed or reported payment's settlement is not yet read, paid once it is recorded as settled, closed once a channel pairing's close is reported and read. Stale when the payment was claimed and, 604 800 seconds after its settleBy, no read has shown it settled or unable to settle: terminal, with a notice on the record, and never paid after that.
+One ATR's record: issued once the ATR is placed and no payment is recorded, settling while a claimed or reported payment's settlement is not yet read, paid once it is recorded as settled, closed once a channel pairing's close is reported and read. Stale when the payment was claimed and, 604 800 seconds after its settleBy, no read has shown it settled or unable to settle: terminal, and never paid after that.
 
 An object. A member not listed here is refused.
 

@@ -26,7 +26,7 @@ stateDiagram-v2
 | `settling` | A payment was claimed, or reported, and its settlement is not yet read. The door finishes the record. |
 | `paid` | The payment is recorded as settled. |
 | `closed` | A channel pairing's close was reported and read. |
-| `stale` | A payment was claimed, and 604 800 seconds after its `settleBy` no read has shown it settled or unable to settle. Terminal: the record carries a notice and is never paid after that. A claim of it answers 410 `claim/lapsed`, and a report 409 `settle/not-settling`. |
+| `stale` | A payment was claimed, and 604 800 seconds after its `settleBy` no read has shown it settled or unable to settle. Terminal: the record is never paid after that. A claim of it answers 410 `claim/lapsed`, and a report 409 `settle/not-settling`. |
 
 ## `proves`
 
@@ -59,7 +59,7 @@ payment, the buyer's agent pays a nominal amount in a payment whose signed paylo
 - `settling`: the agreement payment is settling;
 - `recorded`: the agreement payment is on chain, in `transaction` on `network`;
 - `stale`: the agreement payment was claimed, and 604 800 seconds after its `settleBy` no read has shown it settled or
-  unable to settle. Terminal: the record carries a notice and the agreement is never recorded after that.
+  unable to settle. Terminal: the agreement is never recorded after that.
 
 `agreement` is `null` when the record needs no agreement step. See [the agreement step](../guides/agreement-step.md).
 
@@ -73,5 +73,5 @@ gives none. See [channels, sessions and subscriptions](../guides/channels.md).
 
 A **pushed** payment is one the buyer broadcast before the claim. If its check fails, the money has already moved, so
 the door answers `200` with `state: "declined"`, the check's `code`, the hash the payment is bound to (or `null`) and
-the landed `transaction`, and the record carries a declined notice with the same facts. The door never refuses a
+the landed `transaction`. The door never refuses a
 payment that has moved; what happens to the money is between the parties.

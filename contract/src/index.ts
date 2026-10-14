@@ -126,7 +126,7 @@ export interface ChannelView {
 export interface AgreementView {
   /**
    * `stale`: the agreement payment was claimed, and 604 800 seconds after its `settleBy` no read has shown it settled
-   * or unable to settle. Terminal: the record carries a notice, and the agreement is never recorded after that.
+   * or unable to settle. Terminal: the agreement is never recorded after that.
    */
   state: "required" | "settling" | "recorded" | "stale";
   network: string | null;
@@ -136,7 +136,7 @@ export interface RecordView {
   atrHash: AtrHash;
   /**
    * `stale`: the payment was claimed, and 604 800 seconds after its `settleBy` no read has shown it settled or unable
-   * to settle. Terminal: the record carries a notice, and it is never paid after that.
+   * to settle. Terminal: it is never paid after that.
    */
   state: "issued" | "settling" | "paid" | "closed" | "stale";
   expiresAt: string;

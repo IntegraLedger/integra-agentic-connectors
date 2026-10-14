@@ -130,7 +130,7 @@ reference being the subscription's own identifier.
 
 Where the buyer broadcast the payment before `claim` (a push-mode pairing), the money has moved when the door checks
 it. A check that fails then answers `200` with `state` `declined`, the check's `code`, the hash the payment is bound
-to (or `null`) and the landed `transaction`, and the record's declined notice carries the same. Tell the buyer the
+to (or `null`) and the landed `transaction`. Tell the buyer the
 payment was not accepted for this record, with that code; never answer it as a refusal to pay. A retry of the
 presentation that was claimed answers as the claim did.
 

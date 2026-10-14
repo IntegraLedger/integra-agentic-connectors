@@ -43,7 +43,7 @@ It contains no client and no server. It is the contract both sides build to.
   same ATR, byte for byte.
 - **Record:** the door's state for one ATR: `issued`, `settling`, `paid`, `closed` or `stale`, with `proves`, the
   statement of what it shows. `stale` is terminal: the payment was claimed, and 604 800 seconds after its `settleBy`
-  no read has shown it settled or unable to settle; the record carries a notice and is never paid after that.
+  no read has shown it settled or unable to settle; the record is never paid after that.
 - **Seller:** the party serving the resource. **Facilitator:** the x402 role that verifies and settles.
 - **Vectors:** the shared test cases that fix the contract byte for byte.
 
