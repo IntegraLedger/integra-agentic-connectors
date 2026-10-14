@@ -66,45 +66,91 @@ export function countingSleep<T extends { sleep(ms: number): Promise<void> }>(ht
   };
 }
 
-/** The node calls the facilitator has made whose answers have not arrived, as `lateResume` counts them. */
+/** The node and store calls the facilitator has made whose answers have not arrived, as `lateResume` and `lateStore` count them. */
 let unanswered = 0;
-/** The node call whose answer the facilitator goes on with only when the test opens `resume` (`resumeLate`). */
-let late: { matches: (url: string, body: unknown) => boolean; arrived: boolean; resume: Gate } | undefined;
+/** The call whose answer the facilitator goes on with only when the test opens `resume` (`resumeLate`). */
+let late: { matches: (call: string, body: unknown) => boolean; arrived: boolean; resume: Gate } | undefined;
+
+/**
+ * The answer `ask` gives to `call`, counted in `unanswered` until it arrives; when `late` names the call, the
+ * facilitator goes on with that answer only once the test opens it.
+ */
+async function goOn<A>(call: string, body: unknown, ask: () => Promise<A>): Promise<A> {
+  unanswered += 1;
+  let answer: A;
+  try {
+    answer = await ask();
+  } finally {
+    unanswered -= 1;
+  }
+  const held = late !== undefined && late.matches(call, body) ? late : undefined;
+  if (held !== undefined) {
+    late = undefined;
+    held.arrived = true;
+    await held.resume.opened;
+  }
+  return answer;
+}
 
 /**
  * The facilitator's `http.js` with its `postJson` able to go on late, for `vi.mock`: the answer to the call `resumeLate`
- * names arrives whole and within its bound, and the facilitator goes on with it only when the test opens it, as it
- * would after time spent elsewhere between that answer and its next step. Every call is the module's own.
+ * names (by its URL and body) arrives whole and within its bound, and the facilitator goes on with it only when the
+ * test opens it, as it would after time spent elsewhere between that answer and its next step. Every call is the
+ * module's own.
  */
 export function lateResume<
   T extends { postJson(url: string, body: unknown, timeoutMs?: number, maxBytes?: number): Promise<unknown> },
 >(http: T): T {
   return {
     ...http,
-    async postJson(url: string, body: unknown, timeoutMs?: number, maxBytes?: number) {
-      unanswered += 1;
-      let answer: unknown;
-      try {
-        answer = await http.postJson(url, body, timeoutMs, maxBytes);
-      } finally {
-        unanswered -= 1;
-      }
-      const held = late !== undefined && late.matches(url, body) ? late : undefined;
-      if (held !== undefined) {
-        late = undefined;
-        held.arrived = true;
-        await held.resume.opened;
-      }
-      return answer;
+    postJson(url: string, body: unknown, timeoutMs?: number, maxBytes?: number) {
+      return goOn(url, body, () => http.postJson(url, body, timeoutMs, maxBytes));
+    },
+  };
+}
+
+/** The store reads the facilitator has asked for, by their promise, with the body `resumeLate` matches. */
+const storeReads = new WeakMap<Promise<unknown>, { network: string; id: string }>();
+
+/**
+ * The facilitator's `store.js` with its store's reads able to go on late, for `vi.mock`, as `lateResume` holds a node
+ * call: a read's answer arrives within the bound the facilitator sets on it (`inTime`), and the facilitator goes on
+ * with it only when the test opens it. `resumeLate` names a read as the call `store.read`, with `{ network, id }` as
+ * its body. Every call is the store's own.
+ */
+export function lateStore<
+  T extends {
+    openStore(...args: never[]): Promise<{ read(network: string, id: string): Promise<unknown> }>;
+    inTime<A>(p: Promise<A>, deadline: number): Promise<A>;
+  },
+>(store: T): T {
+  return {
+    ...store,
+    async openStore(...args: Parameters<T["openStore"]>) {
+      const opened = await store.openStore(...args);
+      return {
+        ...opened,
+        read(network: string, id: string) {
+          const read = opened.read(network, id);
+          storeReads.set(read, { network, id });
+          return read;
+        },
+      };
+    },
+    inTime<A>(p: Promise<A>, deadline: number) {
+      const read = storeReads.get(p);
+      const bounded = store.inTime(p, deadline);
+      return read === undefined ? bounded : goOn("store.read", read, () => bounded);
     },
   };
 }
 
 /**
- * Holds the facilitator at the answer to the next node call `matches` names, through `lateResume`: `arrived()` once that
- * answer is in and no other node call is waiting for its answer, and `resume()` lets the facilitator go on with it.
+ * Holds the facilitator at the answer to the next call `matches` names, through `lateResume` or `lateStore`:
+ * `arrived()` once that answer is in and no other call is waiting for its answer, and `resume()` lets the facilitator go
+ * on with it.
  */
-export function resumeLate(matches: (url: string, body: unknown) => boolean): { arrived(): boolean; resume(): void } {
+export function resumeLate(matches: (call: string, body: unknown) => boolean): { arrived(): boolean; resume(): void } {
   const held = { matches, arrived: false, resume: gate() };
   late = held;
   return { arrived: () => held.arrived && unanswered === 0, resume: () => held.resume.open() };

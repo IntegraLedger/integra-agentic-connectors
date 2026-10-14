@@ -41,6 +41,10 @@ vi.mock("../src/http.js", async (original) => {
   const support = await import("./support.js");
   return support.lateResume(support.countingSleep(await original<typeof import("../src/http.js")>()));
 });
+vi.mock("../src/store.js", async (original) => {
+  const support = await import("./support.js");
+  return support.lateStore(await original<typeof import("../src/store.js")>());
+});
 
 // The lcp vectors' V2.
 const RAW_V2 =
@@ -1110,6 +1114,28 @@ describe("the operator log", () => {
       { event: "settle-deadline-passed", ...ABOUT, before: "claim", settleWaitMs: 1_000 },
     ]);
     expect(entries[0]!.cause).toBeUndefined();
+    expect((await db.pool.query("SELECT id FROM settlement")).rowCount).toBe(0);
+    expect(calls("/wallet/broadcasthex")).toHaveLength(0);
+  });
+
+  it("a settle whose deadline passes once its store read has answered reaches the log as settle-deadline-passed before the node reads, and makes none of them", async () => {
+    // The store's answer for the id (none held) arrives within its bound, and the facilitator goes on with it once the
+    // clock is at settleWaitMs (1,000 ms): the deadline has passed before the reads of the account, the head, the
+    // reference block and the simulation. The two id reads start before that check, and are answered.
+    await start({}, 1_000);
+    const read = resumeLate((call) => call === "store.read");
+    const answer = post(`${base}/settle`, body(TX_V2));
+    await reaches(answer, read.arrived);
+    await clock.advanceTo(1_000);
+    read.resume();
+    expect((await answer).json).toEqual(REFUSED);
+    expect(entries.map((e) => e.entry)).toEqual([
+      { event: "settle-deadline-passed", ...ABOUT, before: "node reads", settleWaitMs: 1_000 },
+    ]);
+    expect(entries[0]!.cause).toBeUndefined();
+    for (const path of ["/wallet/getaccount", "/wallet/getnowblock", "/wallet/getblock", "/wallet/triggerconstantcontract"]) {
+      expect(calls(path)).toHaveLength(0);
+    }
     expect((await db.pool.query("SELECT id FROM settlement")).rowCount).toBe(0);
     expect(calls("/wallet/broadcasthex")).toHaveLength(0);
   });
