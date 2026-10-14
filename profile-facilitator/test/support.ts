@@ -215,10 +215,11 @@ function ephemeralLow(): number {
 
 /**
  * A port on 127.0.0.1, free when chosen. It lies below the kernel's range for outgoing connections, so no client
- * socket, and no socket in TIME_WAIT, holds it when the facilitator binds it.
+ * socket, and no socket in TIME_WAIT, holds it when the facilitator binds it, and above 10080, the highest of the
+ * Fetch Standard's bad ports, to which `fetch` refuses to connect.
  */
 export async function freePort(): Promise<number> {
-  const low = 10_000;
+  const low = 10_081;
   const high = Math.min(ephemeralLow(), 32_768);
   if (high - low < 1_000) throw new Error(`no port range below the kernel's outgoing range (it starts at ${high})`);
   for (;;) {
