@@ -1069,6 +1069,26 @@ describe("the operator log", () => {
     expect(closed).toBe(true);
   });
 
+  it("an error a request's handling throws reaches the log as request-error with its path, and the answer is 500", async () => {
+    // The /supported answer cannot be written: its JSON throws. Every other JSON is written as it is.
+    await start();
+    const write = JSON.stringify;
+    const failing = new Error("the answer cannot be written");
+    const spy = vi.spyOn(JSON, "stringify").mockImplementation((value: unknown, ...rest: unknown[]) => {
+      if (typeof value === "object" && value !== null && "kinds" in value) throw failing;
+      return (write as (v: unknown, ...r: unknown[]) => string)(value, ...rest);
+    });
+    let status: number;
+    try {
+      status = (await fetch(`${base}/supported`)).status;
+    } finally {
+      spy.mockRestore();
+    }
+    expect(status).toBe(500);
+    expect(entries.map((e) => e.entry)).toEqual([{ event: "request-error", path: "/supported" }]);
+    expect(entries[0]!.cause).toBe(failing);
+  });
+
   it("a sweep that fails reaches the log, and the sweep a minute later drops the rows it is due to drop", async () => {
     await start();
     await db.pool.query("ALTER TABLE settlement RENAME TO settlement_elsewhere");
