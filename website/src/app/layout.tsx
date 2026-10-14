@@ -45,6 +45,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="flex min-h-screen flex-col">
+        {/* The llms.txt index that describes this page (https://llmstxt.org); React places it in <head>. */}
+        <link rel="describedby" href="/llms.txt" type="text/plain" />
         <a
           href="#main"
           className="sr-only z-50 rounded-md bg-fd-primary px-4 py-2 text-fd-primary-foreground focus:not-sr-only focus:fixed focus:top-3 focus:left-3"

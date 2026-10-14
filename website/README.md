@@ -46,3 +46,21 @@ pnpm dev         # serve it locally with live reload
   theme; no diagram code runs in the browser.
 - Writes `/llms.txt`, `/llms-full.txt`, each page as Markdown at `/md/<path>.md`, the search index, `sitemap.xml`,
   `robots.txt` and `/.well-known/security.txt`.
+
+## How it is served
+
+`wrangler.toml` serves `out/` as a Worker's static assets, with `worker.js` in front of the page addresses and their
+`.md` addresses only:
+
+- `/<path>.md`, and `/index.md` for the home page, answer with the page's Markdown copy (the address
+  [llmstxt.org](https://llmstxt.org) proposes). `/llms.txt` links each page there.
+- A request for a page whose `Accept` header ranks `text/markdown` (or `text/x-markdown`) at least as high as
+  `text/html` gets the same Markdown at the page's own address; `text/plain` is not a Markdown type and gets HTML. A
+  page address that ends in a slash redirects to the address without it, for Markdown as for HTML. Every response for
+  a page address carries `Vary: Accept`, and a conditional request for a Markdown copy can be answered 304.
+- Every other file is served directly, without the Worker: the Markdown copies, the scripts, and every `.txt` file,
+  the RSC payload each page fetches among them. Every response the Worker returns is a static assets response, so the
+  rules in `public/_headers` apply to all of them.
+
+Each page names `/llms.txt` with `<link rel="describedby">` and its Markdown with `<link rel="alternate"
+type="text/markdown">`. `pnpm dev` does not run `worker.js`.

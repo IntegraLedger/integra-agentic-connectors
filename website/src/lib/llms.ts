@@ -51,9 +51,18 @@ export function orderedPages(): OrderedPage[] {
   return out;
 }
 
-/** Where a page's Markdown copy is served: `/md/<path>.md`, and `/md/index.md` for the home page. */
+/** Where the build writes a page's Markdown copy: `/md/<path>.md`, and `/md/index.md` for the home page. */
 export function markdownPath(url: string): string {
   return url === "/" ? "/md/index.md" : `/md${url}.md`;
+}
+
+/**
+ * Where a reader asks for a page as Markdown: the page's address with `.md` appended
+ * (https://llmstxt.org), and `/index.md` for the home page. The site's Worker (`worker.js`) answers
+ * it with the page's Markdown copy.
+ */
+export function markdownUrl(url: string): string {
+  return url === "/" ? "/index.md" : `${url}.md`;
 }
 
 /**
