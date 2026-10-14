@@ -330,7 +330,7 @@ An object. A member not listed here is refused.
 
 ### ReportClosed
 
-A channel pairing's close: the close transaction, read before the record is closed.
+A channel pairing's close: the close transaction. Where the pairing's rail can be read, the door reads it before the record is closed; on a pairing with nothing to read, the report is the close.
 
 An object. A member not listed here is refused.
 

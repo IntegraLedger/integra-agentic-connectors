@@ -228,11 +228,12 @@ After payment, call `report` with the platform's payment reference as it comes, 
 - `202` with `state: "settling"`: final for you; the door finishes the record.
 - `202` with `state: "issued"`: nothing was read yet; report again later.
 
-The door reads a reported payment on the rail before it records it. A report of money that moved is recorded even
-without a claim, and the record then states what is missing. On a record with no claim, send `chosen` (and, on
-x402, `request`), from which the door takes the payment's read keys, its network among them: the door reads that
-payment only on the network the option pays on, and a report whose `network` is another answers
-`409 report/network-mismatch`. A report naming another pairing than the record's answers `409 report/pairing-mismatch`.
+The door reads a reported payment on the rail before it records it; on a pairing with nothing to read, the seller's
+report is the settlement. A report of money that moved is recorded even without a claim, and the record then states
+what is missing. On a record with no claim, on a pairing the door can read, send `chosen` (and, on x402, `request`),
+from which the door takes the payment's read keys, its network among them: the door reads that payment only on the
+network the option pays on, and a report whose `network` is another answers `409 report/network-mismatch`. A report
+naming another pairing than the record's answers `409 report/pairing-mismatch`.
 
 ### Status
 
@@ -290,9 +291,10 @@ processor's reference with `network: "card"`, once the agreement is recorded (ve
 For a channel pairing, claim the opening only. The opening carries H, and one ATR covers the whole channel, session
 or subscription. Serve later requests yourself and never claim them (a claim answers `409 claim/channel-open`), and
 repeat the channel's legal context in every later 402. Report the close as
-`{atrHash, pairing, state: "closed", reference}`, where `reference` is the close transaction; the door reads it with
-the keys recorded at the opening. For a subscription whose payment carries nothing to claim, the opening's `report`
-with `outcome: "paid"` records the channel, with the subscription's own identifier as `reference`.
+`{atrHash, pairing, state: "closed", reference}`, where `reference` is the close transaction. Where the pairing's rail
+can be read, the door reads it with the keys recorded at the opening; on a pairing with nothing to read, the report is
+the close. For a subscription whose payment carries nothing to claim, the opening's `report` with `outcome: "paid"`
+records the channel, with the subscription's own identifier as `reference`.
 
 ### What each path sends
 

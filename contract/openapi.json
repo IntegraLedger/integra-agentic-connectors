@@ -2505,7 +2505,7 @@
           "state",
           "reference"
         ],
-        "description": "A channel pairing's close: the close transaction, read before the record is closed.",
+        "description": "A channel pairing's close: the close transaction. Where the pairing's rail can be read, the door reads it before the record is closed; on a pairing with nothing to read, the report is the close.",
         "properties": {
           "atrHash": {
             "$ref": "#/components/schemas/AtrHashInput"

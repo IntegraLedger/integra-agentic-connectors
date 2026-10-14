@@ -64,8 +64,9 @@ Where a pairing reads the hash from the payment or records read keys for it, cal
 before your facilitator's `/verify`, so every refusal comes before money moves. Name the pairing the record offered: a
 claim or report naming another is refused, and a report answers `report/pairing-mismatch`.
 
-After payment, call `report` with the platform's payment reference as it comes, and retry until a 2xx or a 4xx. The
-door reads a reported payment on the rail before it records it:
+After payment, call `report` with the platform's payment reference as it comes, and retry until a 2xx or a 4xx. On a
+pairing with nothing to read, the seller's report is the settlement. Otherwise the door reads a reported payment on
+the rail before it records it:
 
 - a `202` whose `state` is `settling` is final for the connector, because the door finishes it;
 - a `202` whose `state` is `issued` means nothing was read yet: report again later.
@@ -128,7 +129,8 @@ be on record before the payment it covers.
 Serve later requests yourself, never claim them, and report the close. The opening carries the hash; later requests
 in the channel, session or subscription are paid under that ATR. Every later 402 in a channel repeats the legal
 context of the channel's ATR. Report the close with `{atrHash, pairing, state: "closed", reference}`, the reference
-being the close transaction; the door reads it with the close keys recorded at the opening, and needs no `chosen`.
+being the close transaction. Where the pairing's rail can be read, the door reads it with the close keys recorded at
+the opening, and needs no `chosen`; on a pairing with nothing to read, the report is the close.
 For a subscription whose payment carries nothing to claim, the opening's `report` `paid` records the channel, the
 reference being the subscription's own identifier.
 
