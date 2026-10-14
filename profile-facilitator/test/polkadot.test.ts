@@ -911,8 +911,20 @@ describe("the operator log", () => {
   // cause names. A block hash is 32 bytes (Substrate's H256), a header names its number, the validation answers SCALE
   // bytes as hex, and the System pallet holds the Events storage and the BlockLength and BlockHashCount constants. In
   // the metadata rows the entry names the payer, read from the decoded extrinsic, and the answer names none: the
-  // extrinsic's checks have not ended.
-  const CANNOT_READ: { call: string; what: string; part: string; chain: Chain; checked: boolean }[] = [
+  // extrinsic's checks have not ended. The rows with `settled` are a /settle's reads, whose answer is the one a failed
+  // read gives, with one entry for each read: the finalized head is read before the validation and at the start of
+  // the scan's pass, which finds the extrinsic at the head; the head is read on each of the scan's three passes, and
+  // the answer is pending.
+  const NO_NUMBER = (method: string, header: (params: unknown[]) => boolean) => (m: string, params: unknown[]) =>
+    m === method && header(params) ? { jsonrpc: "2.0", id: 1, result: { parentHash: BEST_HASH } } : undefined;
+  const CANNOT_READ: {
+    call: string;
+    what: string;
+    part: string;
+    chain: Chain;
+    checked: boolean;
+    settled?: { answer: unknown; reads: number };
+  }[] = [
     {
       call: "metadata",
       what: "a System pallet with no Events storage",
@@ -937,22 +949,44 @@ describe("the operator log", () => {
       chain: { body: (method, params) => (method === "chain_getBlockHash" && params.length === 0 ? [] : undefined) },
       checked: true,
     },
+    {
+      call: "chain_getHeader",
+      what: "the finalized head's header with no number",
+      part: "number",
+      chain: { finalized: () => BEST - 2, body: NO_NUMBER("chain_getHeader", (params) => params[0] === FINALIZED_HASH) },
+      checked: true,
+      settled: { answer: { success: true, transaction: `${BLOCK_HASH}-2`, network: NETWORK, payer: PAYER }, reads: 2 },
+    },
+    {
+      call: "chain_getHeader",
+      what: "the head's header with no number",
+      part: "number",
+      chain: { finalized: () => BEST - 2, body: NO_NUMBER("chain_getHeader", (params) => params.length === 0) },
+      checked: true,
+      settled: { answer: PENDING_V3, reads: 3 },
+    },
   ];
 
   it.each(CANNOT_READ)(
     "$call answering $what reaches the log as the call that failed, its cause naming $part, and the answer is unchanged",
-    async ({ call, part, chain, checked }) => {
+    async ({ call, part, chain, checked, settled }) => {
       await start(chain);
-      expect((await post(`${base}/verify`, body())).json).toEqual({
-        isValid: false,
-        invalidReason: "unexpected_verify_error",
-        ...(checked ? { payer: PAYER } : {}),
-      });
-      expect(entries.map((e) => e.entry)).toEqual([{ event: "node-call-failed", ...ABOUT, call }]);
-      const cause = entries[0]!.cause;
-      expect(cause).toBeInstanceOf(NodeError);
-      expect((cause as NodeError).code).toBe("malformed");
-      expect((cause as NodeError).message).toBe(`malformed: ${call}: ${part}`);
+      if (settled === undefined) {
+        expect((await post(`${base}/verify`, body())).json).toEqual({
+          isValid: false,
+          invalidReason: "unexpected_verify_error",
+          ...(checked ? { payer: PAYER } : {}),
+        });
+      } else {
+        expect(await settle()).toEqual(settled.answer);
+      }
+      const entry = { event: "node-call-failed", ...ABOUT, call };
+      expect(entries.map((e) => e.entry)).toEqual(Array.from({ length: settled?.reads ?? 1 }, () => entry));
+      for (const { cause } of entries) {
+        expect(cause).toBeInstanceOf(NodeError);
+        expect((cause as NodeError).code).toBe("malformed");
+        expect((cause as NodeError).message).toBe(`malformed: ${call}: ${part}`);
+      }
     },
   );
 

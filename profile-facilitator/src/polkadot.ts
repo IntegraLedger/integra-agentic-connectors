@@ -455,25 +455,32 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
   }
 
   /**
-   * The finalized head's height, read before `deadline`; undefined when the node does not give it, and the failure goes
-   * to the operator log.
+   * The finalized head's height, read before `deadline`. Undefined when a read fails or the header names no number, a
+   * node answer this facilitator cannot read; either is a `node-call-failed` entry with the call.
    */
   async function finalizedHeight(c: Checked, url: string, deadline: number): Promise<number | undefined> {
     let call = "chain_getFinalizedHead";
     try {
       const hash = await rpc(url, call, [], deadline - performance.now());
       call = "chain_getHeader";
-      return blockNumber(await rpc(url, call, [hash], deadline - performance.now()));
+      const height = blockNumber(await rpc(url, call, [hash], deadline - performance.now()));
+      if (height === undefined) throw new NodeError("malformed", true, `${call}: number`);
+      return height;
     } catch (e) {
       log({ event: "node-call-failed", ...about(c), call }, e);
       return undefined;
     }
   }
 
-  /** The head's height; undefined when the node does not give it, and the failure goes to the operator log. */
+  /**
+   * The head's height. Undefined when the read fails or the header names no number, a node answer this facilitator
+   * cannot read; either is a `node-call-failed` entry with the call.
+   */
   async function headHeight(c: Checked, url: string, left: () => number): Promise<number | undefined> {
     try {
-      return blockNumber(await rpc(url, "chain_getHeader", [], left()));
+      const height = blockNumber(await rpc(url, "chain_getHeader", [], left()));
+      if (height === undefined) throw new NodeError("malformed", true, "chain_getHeader: number");
+      return height;
     } catch (e) {
       log({ event: "node-call-failed", ...about(c), call: "chain_getHeader" }, e);
       return undefined;
