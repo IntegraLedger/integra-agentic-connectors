@@ -144,7 +144,7 @@ async function start(chain: Chain = {}, network: string = NETWORK, settleWaitMs 
     listen: `127.0.0.1:${port}`,
     polkadot: [{ network: network as typeof NETWORK, rpc: node.url }],
     store: { url: db.url },
-    settleWaitMs,
+    settleWaitMs: clock.settleWait(settleWaitMs),
   });
   closeFacilitator = f.close;
   base = `http://127.0.0.1:${port}`;
@@ -515,6 +515,54 @@ describe("/settle", () => {
     });
     const submits = node.calls.filter((c) => (c.body as { method: string }).method === "author_submitExtrinsic");
     expect(submits).toHaveLength(0);
+  });
+
+  /**
+   * A /settle of V3 with settleWaitMs 1,500 ms, whose wait for the chain ends at 1,125 ms (it keeps a quarter of the
+   * wait for storing the answer). The node holds the head read (`chain_getHeader` with no block, the scan's first read
+   * after the finalized head) until the clock is at `at` ms, then answers with the extrinsic in the block after the best
+   * block. With `claimed`, the store holds what a settle leaves when it stops between its claim and its answer.
+   */
+  async function headAnsweredAt(at: number, claimed: boolean): Promise<unknown> {
+    let landed = false;
+    const head = gate();
+    await start(
+      {
+        included: () => landed,
+        hold: async (method, params) => {
+          if (method === "chain_getHeader" && params.length === 0) await head.opened;
+        },
+      },
+      NETWORK,
+      1_500,
+    );
+    if (claimed) {
+      await db.pool.query("INSERT INTO settlement (network, id, answer, until, since) VALUES ($1, $2, NULL, $3, $4)", [
+        NETWORK,
+        HASH_V3,
+        new Date(Date.now() + 600_000).toISOString(),
+        BEST + 1,
+      ]);
+    }
+    const answer = post(`${base}/settle`, body());
+    await reaches(answer, () => calls("chain_getHeader").some((b) => b.params.length === 0));
+    await clock.advanceTo(at);
+    landed = true;
+    head.open();
+    return (await answer).json;
+  }
+
+  it("a claimed id whose head read the node answers 1 ms before the wait for the chain ends gives the success, submitting nothing", async () => {
+    expect(await headAnsweredAt(1_124, true)).toEqual({ success: true, transaction: `${BLOCK_HASH}-2`, network: NETWORK, payer: PAYER });
+    expect(calls("author_submitExtrinsic")).toHaveLength(0);
+  });
+
+  it("a claimed id whose head read the node answers once the wait for the chain has ended stores settlement_pending and gives it, submitting nothing", async () => {
+    const pendingAnswer = { success: false, errorReason: "settlement_pending", transaction: HASH_V3, network: NETWORK };
+    expect(await headAnsweredAt(1_125, true)).toEqual(pendingAnswer);
+    const stored = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, HASH_V3]);
+    expect(stored.rows).toEqual([{ answer: pendingAnswer }]);
+    expect(calls("author_submitExtrinsic")).toHaveLength(0);
   });
 
   it("waits for the node's validation until settleWaitMs, and gives the node's answer when it comes before then", async () => {

@@ -166,7 +166,7 @@ async function start(settleWaitMs = 1_500): Promise<void> {
     listen: `127.0.0.1:${port}`,
     polkadot: [{ network: NETWORK, rpc: node.url }],
     store: { url: db.url },
-    settleWaitMs,
+    settleWaitMs: clock.settleWait(settleWaitMs),
   });
   closeFacilitator = f.close;
   base = `http://127.0.0.1:${port}`;

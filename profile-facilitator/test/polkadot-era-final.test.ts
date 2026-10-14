@@ -92,7 +92,7 @@ async function start(): Promise<void> {
     listen: `127.0.0.1:${port}`,
     polkadot: [{ network: NETWORK, rpc: node.url }],
     store: { url: db.url },
-    settleWaitMs: 3_000,
+    settleWaitMs: clock.settleWait(3_000),
   });
   closeFacilitator = f.close;
   base = `http://127.0.0.1:${port}`;

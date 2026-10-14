@@ -164,7 +164,7 @@ async function start(n: Node = {}, settleWaitMs = 3_000): Promise<void> {
     listen: `127.0.0.1:${port}`,
     tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],
     store: { url: db.url },
-    settleWaitMs,
+    settleWaitMs: clock.settleWait(settleWaitMs),
   });
   closeFacilitator = f.close;
   base = `http://127.0.0.1:${port}`;

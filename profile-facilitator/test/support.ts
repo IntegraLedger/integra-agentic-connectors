@@ -76,8 +76,15 @@ export interface Clock {
   /** Moves the clock on to `elapsed === ms`. */
   advanceTo(ms: number): Promise<void>;
   /**
+   * Records `ms` as the settleWaitMs the facilitator under test is started with, and gives it back for its
+   * configuration: `settleWaitMs: clock.settleWait(1_500)`. `answered()` holds each settle to it.
+   */
+  settleWait(ms: number): number;
+  /**
    * Resolves with `answers` once each has arrived, waking the polls: whenever every settle not yet answered is asleep
    * in its poll, the clock moves on to the first of them to wake. A settle waiting on anything else is left to it.
+   * Throws when a poll would wake, or the answers arrive, more than the recorded settleWaitMs after the call, and when
+   * no settleWaitMs is recorded.
    */
   answered<T>(answers: Promise<T>[]): Promise<T[]>;
 }
@@ -101,6 +108,7 @@ export function controlledClock(date?: number): Clock & { restore(): void } {
   });
   sleepers.clear();
   const origin = performance.now();
+  let settleWaitMs: number | undefined;
   const clock = {
     get elapsed() {
       return performance.now() - origin;
@@ -115,7 +123,16 @@ export function controlledClock(date?: number): Clock & { restore(): void } {
     advanceTo(ms: number) {
       return clock.advance(ms - clock.elapsed);
     },
+    settleWait(ms: number) {
+      settleWaitMs = ms;
+      return ms;
+    },
     async answered<T>(answers: Promise<T>[]): Promise<T[]> {
+      const wait = settleWaitMs;
+      if (wait === undefined) {
+        throw new Error("answered() holds each settle to settleWaitMs: start the facilitator with clock.settleWait(ms)");
+      }
+      const from = performance.now();
       let open = answers.length;
       const all = Promise.all(answers.map((a) => a.finally(() => (open -= 1))));
       let done = false;
@@ -125,9 +142,16 @@ export function controlledClock(date?: number): Clock & { restore(): void } {
       );
       for (;;) {
         await until(() => done || (open > 0 && sleepers.size === open));
-        if (done) return all;
-        await clock.advance(Math.min(...[...sleepers].map((s) => s.wakes)) - performance.now());
+        if (done) break;
+        const wakes = Math.min(...[...sleepers].map((s) => s.wakes));
+        if (wakes - from > wait) {
+          throw new Error(`a poll wakes ${wakes - from} ms after the settles are sent, past settleWaitMs (${wait} ms)`);
+        }
+        await clock.advance(wakes - performance.now());
       }
+      const took = performance.now() - from;
+      if (took > wait) throw new Error(`the settles answer ${took} ms after they are sent, past settleWaitMs (${wait} ms)`);
+      return all;
     },
     restore() {
       vi.useRealTimers();

@@ -89,7 +89,7 @@ async function start(): Promise<string> {
     listen: `127.0.0.1:${port}`,
     tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],
     store: { url: db.url },
-    settleWaitMs: 1_000,
+    settleWaitMs: clock.settleWait(1_000),
   });
   closeFacilitator = f.close;
   return `http://127.0.0.1:${port}`;
