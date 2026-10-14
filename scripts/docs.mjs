@@ -147,7 +147,7 @@ function apiPage() {
     const vars = Object.entries(server.variables ?? {})
       .map(([k, v]) => `${code(k)} (for example ${code(v.default)})`)
       .join(", ");
-    out.push(`- **Base URL:** ${code(server.url)}${vars ? `, where ${vars} is your door's base URL` : ""}.`);
+    out.push(`- **Base URL:** ${code(server.url)}${vars ? `, where ${vars} is your door's base URL` : ""}.${server.description ? ` ${prose(server.description)}` : ""}`);
   }
   for (const [name, scheme] of Object.entries(doc.components.securitySchemes)) {
     out.push(`- **Authentication:** ${code(name)}: HTTP ${code(scheme.scheme)} with format ${code(scheme.bearerFormat)}. ${prose(scheme.description)}`);

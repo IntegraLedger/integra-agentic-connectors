@@ -12,6 +12,7 @@
   "servers": [
     {
       "url": "{doorBase}",
+      "description": "Every path in this document is under the door's base URL, its path prefix included: `POST /issue` is `POST {doorBase}/issue`.",
       "variables": {
         "doorBase": {
           "default": "https://seller.example/door"

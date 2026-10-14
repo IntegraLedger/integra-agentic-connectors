@@ -79,7 +79,8 @@ It needs Node.js `>=26.10.0`, and it is ESM only. Its one peer dependency is `@i
 ## Quickstart
 
 Issue an ATR for an x402 resource, then read the answer. The request is the one in vector `CV1`. Set
-`SELLER_DOOR_URL` to your door's base URL and `SELLER_CREDENTIAL` to the tenant's seller credential. This package's
+`SELLER_DOOR_URL` to your door's base URL and `SELLER_CREDENTIAL` to the tenant's seller credential. Every path of the
+door is under its base URL, any path prefix included: `POST /issue` is `POST <base URL>/issue`. This package's
 repository runs every sample against a local stand-in door that answers from the vectors (`scripts/stand-in-door.mjs`).
 
 ```ts title="issue.ts"
