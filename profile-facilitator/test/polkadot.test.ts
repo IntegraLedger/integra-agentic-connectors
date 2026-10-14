@@ -814,6 +814,36 @@ describe("the operator log", () => {
     }
   });
 
+  it("a request that waits for a metadata load another request started stops waiting at its own bound, and reaches the log with the timeout", async () => {
+    // A /verify starts the load, and the facilitator goes on with the node's metadata answer only when the test lets it:
+    // the load stays in flight, within the /verify's own bound. A /settle with settleWaitMs 1,000 then waits for that
+    // load, and stops when the clock is at 1,000 ms.
+    await start({}, OTHER, 1_000);
+    const sent = body(XT_V3, CALL_V2, { ...O_P, network: OTHER });
+    const methodOf = (b: unknown) => b as { method: string; params: unknown[] };
+    const load = resumeLate((_url, b) => isMetadata(methodOf(b).method, methodOf(b).params));
+    const first = post(`${base}/verify`, sent);
+    try {
+      await reaches(first, load.arrived);
+      const version = resumeLate((_url, b) => methodOf(b).method === "state_getRuntimeVersion");
+      const second = post(`${base}/settle`, sent);
+      await reaches(second, version.arrived);
+      version.resume();
+      // One turn of the event loop: the /settle goes on from its version read to its wait for the load.
+      await new Promise((resolve) => setImmediate(resolve));
+      await clock.advanceTo(1_000);
+      expect(entries.map((e) => e.entry)).toEqual([LOAD_ENTRY]);
+      expect((entries[0]!.cause as NodeError).code).toBe("timeout");
+      expect((await second).json).toEqual({ success: false, errorReason: "unexpected_settle_error", transaction: "", network: OTHER });
+    } finally {
+      // A test that stops early lets the held load answer, so the facilitator closes.
+      load.resume();
+    }
+    expect((await first).json).toEqual({ isValid: false, invalidReason: "unexpected_verify_error" });
+    expect(entries.map((e) => e.entry)).toEqual([LOAD_ENTRY, LOAD_ENTRY]);
+    expect((entries[1]!.cause as Error).message).toBe(ANOTHER_CHAIN);
+  });
+
   it("a store call that fails reaches the log with the network, the hash and the call, and the answer is pending with the hash", async () => {
     // The store is read before the extrinsic is decoded, so the entry names no payer.
     await start();
