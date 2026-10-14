@@ -112,9 +112,10 @@ append `:<n>` with a new `n` and issue again.
 
 ## Failure modes
 
-- `422`: the request cannot be served as sent. The most common are `issue/pairing-not-served` (the resource does not
-  serve that pairing), `issue/offer-refused` (the pairing cannot place H in that option; the sentence names the
-  pairing and its code), `issue/mixed-protocols`, and the `core/…` codes for content.
+- `422`: the request cannot be served as sent. The most common are `issue/pairing-not-served` (an offer names a
+  pairing this resource does not serve), `issue/offer-refused` (the offer is on a network the door does not serve for
+  this tenant, its pairing is not its option's own, or the pairing cannot place H in that option; the sentence names
+  the pairing and the code of the cause), `issue/mixed-protocols`, and the `core/…` codes for content.
 - `503`: `issue/storage-unavailable` means the ATR could not be written, so no challenge may go out. Every `503`
   carries `Retry-After: 1`; retry the same request, with the same `mintRequestId`.
 

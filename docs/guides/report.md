@@ -16,7 +16,7 @@ A report is either an **outcome** or a channel's **close**.
 | Field | Outcome | Close | What to send |
 |---|---|---|---|
 | `atrHash` | yes | yes | The record's H, in either case. |
-| `pairing` | yes | yes | The record's pairing. Another answers `409 report/pairing-mismatch`. |
+| `pairing` | yes | yes | The record's pairing: the claimed pairing, or before a claim one the record offered. Another, or a `chosen` this record did not issue (with its `request` where the options are tied to the request), answers `409 report/pairing-mismatch`. |
 | `outcome` | yes | | `paid` or `declined`. |
 | `state` | | yes | `closed`. |
 | `reference` | on `paid` | yes | The platform's payment reference as it comes, 1 to 256 characters with no control characters: the facilitator's `transaction`, the processor's payment id, the close transaction. |

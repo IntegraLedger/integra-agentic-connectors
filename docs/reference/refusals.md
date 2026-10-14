@@ -63,7 +63,7 @@ The record is in a state that does not allow this.
 
 | Code | Meaning |
 |---|---|
-| <a id="issuemint-request-reused"></a>`issue/mint-request-reused` | This `mintRequestId` was issued for different offers, content or request. A changed checkout needs a new id. |
+| <a id="issuemint-request-reused"></a>`issue/mint-request-reused` | This `mintRequestId` was issued for other offers or another request. A changed checkout needs a new id. |
 | <a id="issuemint-request-lapsed"></a>`issue/mint-request-lapsed` | This `mintRequestId`'s record has lapsed. Append `:<n>` with a new `n` and issue again. |
 | <a id="claimin-progress"></a>`claim/in-progress` | This ATR's payment is already claimed. On a retry of the same presentation, the first attempt won. |
 | <a id="claimpaid"></a>`claim/paid` | This ATR is already paid. |
@@ -72,7 +72,7 @@ The record is in a state that does not allow this.
 | <a id="claimchannel-not-open"></a>`claim/channel-not-open` | No opening of this channel was claimed. Claim the opening first. |
 | <a id="claimagreement-first"></a>`claim/agreement-first` | The record needs the agreement step, and the agreement payment is not recorded yet. Claim this payment once it is. |
 | <a id="claiminstrument-claimed"></a>`claim/instrument-claimed` | This payment instrument is already claimed for another record. |
-| <a id="reportpairing-mismatch"></a>`report/pairing-mismatch` | The report names a pairing other than the record's. |
+| <a id="reportpairing-mismatch"></a>`report/pairing-mismatch` | The report names a pairing other than the record's (the claimed pairing, or before a claim one the record offered), or `chosen` is not an option this record issued, with its `request` where the options are tied to the request. |
 | <a id="settleother-reference"></a>`settle/other-reference` | This record was settled with another reference. |
 | <a id="settlenot-settling"></a>`settle/not-settling` | The record is not in a state that allows this report. |
 
@@ -111,13 +111,13 @@ The request cannot be served as sent.
 | <a id="doorreference-required"></a>`door/reference-required` | The report needs a `reference` of 1 to 256 characters with no control characters. |
 | <a id="doorreceipt-required"></a>`door/receipt-required` | The paid report is for a confirm-only channel pairing, and needs the `receipt` its opening answered. |
 | <a id="issueinput-bounds"></a>`issue/input-bounds` | The request is outside the bounds the door accepts (for example more than 16 offers or 56 content slots). |
-| <a id="issuepairing-not-served"></a>`issue/pairing-not-served` | An offer names a pairing the resource is not declared to serve. |
-| <a id="issueoffer-refused"></a>`issue/offer-refused` | An offer's pairing cannot place the hash in that option. The sentence names the pairing and its own code. |
+| <a id="issuepairing-not-served"></a>`issue/pairing-not-served` | An offer names a pairing this resource does not serve. |
+| <a id="issueoffer-refused"></a>`issue/offer-refused` | An offer cannot be placed by its pairing: the offer is on a network the door does not serve for this tenant, its pairing is not its option's own, or the pairing cannot place the hash in that option. The sentence names the pairing and the code of the cause. |
 | <a id="issuemixed-protocols"></a>`issue/mixed-protocols` | The offers name pairings of more than one protocol. One `issue` serves one protocol. |
 | <a id="coreslot-name"></a>`core/slot-name` | A content slot's name is not allowed: it must match `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`. |
 | <a id="coreslot-reserved"></a>`core/slot-reserved` | A content slot uses a name the ATR reserves (`atrVersion`, `id`, or the binding's slot). |
 | <a id="coreslot-duplicate"></a>`core/slot-duplicate` | Two content slots have the same name. |
-| <a id="corecontent-not-json"></a>`core/content-not-json` | A content slot's bytes are not exactly one JSON value (RFC 8259). |
+| <a id="corecontent-not-json"></a>`core/content-not-json` | A content slot's bytes are not exactly one JSON value (RFC 8259), or nest more than 64 levels. |
 | <a id="corebinding-not-json"></a>`core/binding-not-json` | An offer cannot be recorded as JSON. |
 | <a id="coretoo-large"></a>`core/too-large` | The ATR would be larger than the size the door allows. |
 | <a id="claimpairing-unknown"></a>`claim/pairing-unknown` | The pairing is not one this payment or the chosen option offers. |
@@ -131,13 +131,13 @@ Not available now; retry after one second.
 | Code | Meaning |
 |---|---|
 | <a id="issuedeadline"></a>`issue/deadline` | The ATR was not ready in time. Retry with the same `mintRequestId`. |
-| <a id="issuecontributor-unavailable"></a>`issue/contributor-unavailable` | A contributor the seller configured did not answer. Retry shortly. |
+| <a id="issuecontributor-unavailable"></a>`issue/contributor-unavailable` | Not available now; retry after one second. |
 | <a id="issuestorage-unavailable"></a>`issue/storage-unavailable` | The ATR could not be written to the seller's storage, so no challenge may go out. Retry shortly. |
-| <a id="issuestore-unavailable"></a>`issue/store-unavailable` | The record store is not available. Retry shortly. |
-| <a id="issuecapacity"></a>`issue/capacity` | The record store is at capacity. Retry shortly. |
-| <a id="claimstore-unavailable"></a>`claim/store-unavailable` | The record store is not available. Retry shortly. |
+| <a id="issuestore-unavailable"></a>`issue/store-unavailable` | Not available now; retry after one second. |
+| <a id="issuecapacity"></a>`issue/capacity` | Not available now; retry after one second. |
+| <a id="claimstore-unavailable"></a>`claim/store-unavailable` | Not available now; retry after one second. |
 | <a id="claimread-unavailable"></a>`claim/read-unavailable` | The landed payment could not be read on the rail yet. Retry shortly. |
-| <a id="settlestore-unavailable"></a>`settle/store-unavailable` | The record store is not available. Retry shortly. |
+| <a id="settlestore-unavailable"></a>`settle/store-unavailable` | Not available now; retry after one second. |
 
 ## The runtime in front of the door
 
