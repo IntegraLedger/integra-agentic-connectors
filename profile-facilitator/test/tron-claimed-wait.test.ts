@@ -1,11 +1,30 @@
 // A /settle answers within `settleWaitMs`, the facilitator's configured wait. It holds for a /settle that finds the id
-// claimed and unanswered (a settle that stopped between its claim and its answer). The id and bytes are the lcp
-// vectors' V2.
+// claimed and unanswered (a settle that stopped between its claim and its answer), which reads the chain until its wait
+// ends. Its wait for the chain ends a quarter of a 1,000 ms settleWaitMs before it, at 750 ms, keeping that quarter for
+// storing the answer (store.ts's `answerReserve`). Every wait the facilitator makes runs on a clock the test moves
+// (support.ts's `controlledClock`), and the node holds its first receipt read while the test moves the clock: a landed
+// receipt the node gives at 749 ms is the answer, and one it gives once the clock is at 750 ms comes too late: the
+// settle stores settlement_pending with the id and gives it, before the clock reaches settleWaitMs. The id and bytes are
+// the lcp vectors' V2.
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { createHash } from "node:crypto";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
-import { fixture, freePort, freshDatabase, post, stub, tronChainReads, type Stub } from "./support.js";
+import {
+  controlledClock,
+  fixture,
+  freePort,
+  freshDatabase,
+  gate,
+  post,
+  reaches,
+  stub,
+  tronChainReads,
+  until,
+  type Clock,
+  type Gate,
+  type Stub,
+} from "./support.js";
 
 const RAW_V2 =
   "0a0289ad22087d1ddbe0b0adbe8740a0b6f4b18d34524d6c63703a7368613235363a3078626137383136626638663031636665613431343134306465356461653232323362303033363161333936313737613963623431306666363166323030313561645aae01081f12a9010a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412740a1541f39fd6e51aad88f6f4ce6ab8827279cfffb92266121541a614f803b6fd780986a42c78ec9c7f77e6ded13c2244a9059cbb000000000000000000000000209693bc6afc0c5328ba36faf03c514ef312287c000000000000000000000000000000000000000000000000000000000000271070c0e1f0b18d34900180c2d72f";
@@ -42,22 +61,29 @@ const body = () => ({
   paymentRequirements: O,
 });
 
+const v1 = live["infoV1"]!;
+/** A receipt with SUCCESS and the asset's Transfer log, modelled on the live answer for V1's id, carrying V2's id. */
+const LANDED = { ...v1, id: TXID_V2, blockNumber: 86542790, receipt: { ...(v1["receipt"] as object), result: "SUCCESS" } };
+const PENDING = { success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK };
+
+let clock: Clock & { restore(): void };
 let db: Awaited<ReturnType<typeof freshDatabase>>;
 let node: Stub;
 let base: string;
 let closeFacilitator: (() => Promise<void>) | undefined;
+/** Opened when the node answers the Solidity node's receipt read, with LANDED. */
+let receipt: Gate;
 
 beforeEach(async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(NOW_V2);
+  receipt = gate();
+  clock = controlledClock(NOW_V2);
   db = await freshDatabase();
   node = await stub(async (path, sent) => {
-    if (path === "/wallet/triggerconstantcontract") return live["triggerSuccess"];
-    if (path === "/wallet/broadcasthex") return { result: true, txid: TXID_V2 };
-    if (path === "/wallet/gettransactioninfobyid") {
-      const v1 = live["infoV1"]!;
-      return { ...v1, id: TXID_V2, blockNumber: 86542790, receipt: { ...(v1["receipt"] as object), result: "SUCCESS" } };
+    if (path === "/walletsolidity/gettransactioninfobyid") {
+      await receipt.opened;
+      return LANDED;
     }
+    if (path === "/wallet/gettransactioninfobyid") return live["infoNotFound"];
     return tronChainReads(path, sent) ?? {};
   });
   const port = await freePort();
@@ -72,21 +98,45 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  clock.restore();
   await closeFacilitator?.();
   await node.close();
   await db.drop();
-  vi.useRealTimers();
 }, 60_000);
 
+/** What a settle leaves when it stops between its claim and its answer. */
+async function claimed(): Promise<void> {
+  await db.pool.query("INSERT INTO settlement (network, id, answer, until) VALUES ($1, $2, NULL, $3)", [
+    NETWORK,
+    TXID_V2,
+    new Date(EXPIRATION_V2).toISOString(),
+  ]);
+}
+
+const receiptReads = () => node.calls.filter((c) => c.path === "/walletsolidity/gettransactioninfobyid").length;
+
 describe("the wait of a /settle that finds the id claimed", () => {
-  it("answers within settleWaitMs, with a second's slack for the local calls", async () => {
-    await db.pool.query("INSERT INTO settlement (network, id, answer, until) VALUES ($1, $2, NULL, $3)", [
-      NETWORK,
-      TXID_V2,
-      new Date(EXPIRATION_V2).toISOString(),
-    ]);
-    const started = performance.now();
-    await post(`${base}/settle`, body());
-    expect(performance.now() - started).toBeLessThan(1_000 + 1_000);
-  }, 30_000);
+  it("gives the receipt the node answers before its wait for the chain ends", async () => {
+    await claimed();
+    const answer = post(`${base}/settle`, body());
+    await reaches(answer, () => receiptReads() === 1);
+    await clock.advanceTo(749);
+    receipt.open();
+    expect((await answer).json).toEqual({ success: true, transaction: TXID_V2, network: NETWORK, payer: PAYER });
+    expect(clock.elapsed).toBe(749);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(0);
+  });
+
+  it("answers within settleWaitMs when the node does not answer: settlement_pending with the id, stored", async () => {
+    await claimed();
+    const answer = post(`${base}/settle`, body());
+    await reaches(answer, () => receiptReads() === 1);
+    await clock.advanceTo(750);
+    receipt.open();
+    expect((await answer).json).toEqual(PENDING);
+    expect(clock.elapsed).toBe(750);
+    const stored = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, TXID_V2]);
+    expect(stored.rows).toEqual([{ answer: PENDING }]);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(0);
+  });
 });
