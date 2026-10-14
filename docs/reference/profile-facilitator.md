@@ -46,7 +46,7 @@ controls, to the resource servers that use it.
 | `unexpected_verify_error` | yes | no | The node or the store could not be read. |
 | `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission. |
 | `settlement_pending` | no | yes | Submitted, and not yet final when the wait ended. |
-| `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. On Polkadot, also a repeat of a payment whose success has been answered. |
+| `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. On Polkadot, also a repeat of a payment whose success has been answered, or a submission the node refuses as one it has already seen (already imported, temporarily banned, or an outdated nonce). |
 
 `unsupported_permission` and `invalid_transaction` are this facilitator's, for a Tron owner permission that does not
 accept the transaction's one signature and for a transaction the node refuses in simulation or validation. The
@@ -81,6 +81,10 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
 - A row whose answer is not final (claimed with no answer, or `settlement_pending`) is kept, whatever its age, until a
   repeated `/settle` reads the chain and writes a final answer. A repeat therefore always finds the id of a payment
   that was submitted, and never answers with an empty `transaction` for it.
+- A claim is never removed. A broadcast or submission the node refuses stores its answer, final, in the claimed row:
+  `invalid_transaction_state` with the id when the node says it already holds the transaction, and
+  `unexpected_settle_error` with an empty `transaction` for any other refusal. Every repeat gets that stored answer, so
+  a payment is submitted at most once.
 - A sweep every minute drops the rows whose answer is final and whose `until` is more than 24 hours past. It reads
   them through `settlement_final_until`, an index that holds only rows with a final answer, so the rows it keeps add
   nothing to its work.

@@ -72,7 +72,11 @@ The answer is `{isValid: true, payer}`, with `payer` the owner in base58check.
    as before it. A node that does not answer the id reads gives `unexpected_settle_error`. Otherwise it repeats the
    expiration check and the other node reads of `/verify`, and a refusal is answered with an empty `transaction`.
 4. Claims the transaction id with one conditional insert, so concurrent settles of one payment broadcast once.
-5. Broadcasts the signed bytes with `/wallet/broadcasthex`. A `DUP_TRANSACTION_ERROR` counts as broadcast.
+5. Broadcasts the signed bytes with `/wallet/broadcasthex`. A `DUP_TRANSACTION_ERROR` says the node already holds the
+   transaction: the payment is consumed, answered `invalid_transaction_state` with the id. Any other refusal, or a
+   request that cannot have reached the node, is answered `unexpected_settle_error` with an empty `transaction`:
+   nothing was broadcast. Either answer is stored final and every repeat gets it. The claim is never removed, so the
+   payment is broadcast at most once.
 6. Reads the transaction's status every second with `@integraledger/lcp`'s `tronStatus`: the Solidity node's
    `gettransactioninfobyid` first, then the FullNode's. Success requires receipt result `SUCCESS` **and** a
    `Transfer` log emitted by `asset`. The value the call returned is not read: a TRC-20 token may return false from
@@ -82,7 +86,7 @@ The answer is `{isValid: true, payer}`, with `payer` the owner in base58check.
    Each failure is answered `invalid_transaction_state`.
 7. Stores the answer and returns it. A success is returned only by the settle whose write stored it, so of two
    concurrent settles of one payment, one answers success and the other `invalid_transaction_state` with the id. A
-   success whose write fails is answered `settlement_pending` with the id.
+   success, or an answer with an empty `transaction`, whose write fails is answered `settlement_pending` with the id.
 
 Success is `{success: true, transaction, network, payer}`, where `transaction` is the transaction id in hex.
 

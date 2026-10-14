@@ -95,6 +95,8 @@ const OTHER_HEX = "41209693bc6afc0c5328ba36faf03c514ef312287c";
 const PENDING = { success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK };
 const STATE_FAILED = { success: false, errorReason: "invalid_transaction_state", transaction: TXID_V2, network: NETWORK };
 const SUCCESS = { success: true, transaction: TXID_V2, network: NETWORK, payer: PAYER };
+/** A broadcast the node refused: nothing was broadcast. */
+const REFUSED = { success: false, errorReason: "unexpected_settle_error", transaction: "", network: NETWORK };
 
 interface Node {
   trigger?: unknown;
@@ -529,24 +531,62 @@ describe("settlement outcomes", () => {
     expect(res.json).toEqual({ success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK });
   });
 
-  it("a broadcast the node refuses as a duplicate is read as broadcast, and the receipt answers", async () => {
+  it("a broadcast the node refuses as a duplicate is a consumed payment: invalid_transaction_state with the id, stored final", async () => {
+    // java-tron answers DUP_TRANSACTION_ERROR for a transaction id it already holds. A transaction id the node holds is
+    // a consumed payment, and x402's exact family: "A consumed primitive MUST produce a settlement failure, never a
+    // success." The non-empty id says the transaction may be on chain.
     await start({ broadcast: { code: "DUP_TRANSACTION_ERROR", message: "" } });
-    const res = await post(`${base}/settle`, body(TX_V2));
-    expect(res.json).toEqual({ success: true, transaction: TXID_V2, network: NETWORK, payer: PAYER });
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(STATE_FAILED);
+    expect(node.calls.filter((c) => c.path.endsWith("/gettransactioninfobyid"))).toHaveLength(0);
+    const stored = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, TXID_V2]);
+    expect(stored.rows[0]?.answer).toEqual(STATE_FAILED);
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(STATE_FAILED);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
   });
 
-  it("a refused broadcast whose claim another settle has already answered pending gives settlement_pending with the id", async () => {
-    // An empty transaction says nothing was broadcast; the store holding the id, the facilitator does not say so.
+  it("a refused broadcast is stored final over a pending answer another settle wrote, and every repeat gets it", async () => {
     await start({
       broadcast: live["broadcastExpired"],
       onBroadcast: async () => {
-        await db.pool.query("UPDATE settlement SET answer = $1", [
-          JSON.stringify({ success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK }),
-        ]);
+        await db.pool.query("UPDATE settlement SET answer = $1", [JSON.stringify(PENDING)]);
       },
     });
-    const res = await post(`${base}/settle`, body(TX_V2));
-    expect(res.json).toEqual({ success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK });
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(REFUSED);
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(REFUSED);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
+  });
+
+  it("a refused broadcast whose row another settle has made final gives the stored answer, as a repeat gets it", async () => {
+    // An empty transaction says nothing was broadcast: it is given only once it is the stored answer.
+    await start({
+      broadcast: live["broadcastExpired"],
+      onBroadcast: async () => {
+        await db.pool.query("UPDATE settlement SET answer = $1", [JSON.stringify(STATE_FAILED)]);
+      },
+    });
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(STATE_FAILED);
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(STATE_FAILED);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
+  });
+
+  it("two concurrent /settle calls whose broadcast the node refuses broadcast once, and both give the stored refusal", async () => {
+    // The simulation answers slowly, so both settles have read no stored answer before either claims; the one that
+    // loses the claim reads the row until the other's answer is stored.
+    await start({ triggerMs: 300, broadcast: live["broadcastExpired"], info: () => live["infoNotFound"] }, 5_000);
+    const answers = await Promise.all([post(`${base}/settle`, body(TX_V2)), post(`${base}/settle`, body(TX_V2))]);
+    expect(answers.map((a) => a.json)).toEqual([REFUSED, REFUSED]);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
+  });
+
+  it("a refused broadcast whose answer cannot be stored gives settlement_pending with the id, and keeps the claim", async () => {
+    await start({ broadcast: live["broadcastExpired"] });
+    await db.pool.query(`CREATE FUNCTION refuse_answer() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'answer refused'; END $$`);
+    await db.pool.query("CREATE TRIGGER refuse_answer BEFORE UPDATE OF answer ON settlement FOR EACH ROW EXECUTE FUNCTION refuse_answer()");
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(PENDING);
+    const rows = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, TXID_V2]);
+    expect(rows.rows).toEqual([{ answer: null }]);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
   });
 
   it("a node that never shows the transaction in a block gives settlement_pending with the id", async () => {
@@ -674,10 +714,15 @@ describe("repeated settles and node errors", () => {
     expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(0);
   }, 15_000);
 
-  it("a broadcast the node refuses gives success: false with no transaction, and is never retried as a success", async () => {
+  it("a broadcast the node refuses gives unexpected_settle_error with no transaction, stored final: a repeat gets it and broadcasts nothing", async () => {
+    // A refused broadcast keeps its row with the stored answer, so the payment is broadcast at most once: every answer
+    // to a repeated /settle for the same id is the stored one.
     await start({ broadcast: live["broadcastExpired"] });
-    const res = await post(`${base}/settle`, body(TX_V2));
-    expect(res.json).toEqual({ success: false, errorReason: "unexpected_settle_error", transaction: "", network: NETWORK });
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(REFUSED);
+    const stored = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, TXID_V2]);
+    expect(stored.rows[0]?.answer).toEqual(REFUSED);
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(REFUSED);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
   });
 });
 

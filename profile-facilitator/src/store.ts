@@ -1,12 +1,12 @@
 /**
  * The deduplication table: one row per settled payment, keyed by network and transaction id, holding the answer the
- * first `/settle` gave. A row is claimed by one conditional insert, so concurrent settles of one payment submit once.
- * A final answer is never replaced; a pending one is replaced by what a later read of the chain shows. A row whose
- * answer is final is kept until `KEEP_AFTER_UNTIL_MS` after its validity window has ended, so a repeat in that time
- * reads the stored answer and the chain before anything is verified again. A row whose answer is not final (a claim
- * with no answer yet, or `settlement_pending`) is kept until a read of the chain makes it final, so a repeat never
- * finds its id missing and never answers that nothing was broadcast. Every call to the database is bounded by
- * `STORE_TIMEOUT_MS`.
+ * first `/settle` gave. A row is claimed by one conditional insert, so concurrent settles of one payment submit once,
+ * and a claim is never removed: a submission the node refuses is stored as the row's answer. A final answer is never
+ * replaced; a pending one is replaced by what a later read of the chain shows. A row whose answer is final is kept
+ * until `KEEP_AFTER_UNTIL_MS` after its validity window has ended, so a repeat in that time reads the stored answer and
+ * the chain before anything is verified again. A row whose answer is not final (a claim with no answer yet, or
+ * `settlement_pending`) is kept until a read of the chain makes it final, so a repeat never finds its id missing and
+ * never answers that nothing was broadcast. Every call to the database is bounded by `STORE_TIMEOUT_MS`.
  */
 import pg from "pg";
 import { isPending, type SettleAnswer } from "./answers.js";
@@ -51,8 +51,6 @@ export interface SettlementStore {
   claim(network: string, id: string, until: Date, since?: number): Promise<boolean>;
   /** Writes the answer unless the row already holds a final one. True when this call wrote it. */
   answer(network: string, id: string, answer: SettleAnswer): Promise<boolean>;
-  /** Removes a claim that has no answer: the claimant submitted nothing. True when a row was removed. */
-  release(network: string, id: string): Promise<boolean>;
   /**
    * Moves `since` on to `to`, never back, after a scan that read every finalized block from `from` up to `to` except
    * `unread`, and read `resolved`, blocks of the stored `unread` it read again. The stored `unread` gains `unread`,
@@ -102,10 +100,6 @@ export async function openStore(url: string): Promise<SettlementStore> {
            AND (answer IS NULL OR answer->>'errorReason' = 'settlement_pending')${isPending(answer) ? " AND answer IS NULL" : ""}`,
         [network, id, JSON.stringify(answer)],
       );
-      return r.rowCount === 1;
-    },
-    async release(network, id) {
-      const r = await pool.query("DELETE FROM settlement WHERE network = $1 AND id = $2 AND answer IS NULL", [network, id]);
       return r.rowCount === 1;
     },
     async advance(network, id, scan) {

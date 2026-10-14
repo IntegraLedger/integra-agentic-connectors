@@ -176,9 +176,10 @@ request: it reads the chain from where it stopped, never submits twice, and retu
 The facilitator keeps the payment's row until that final answer is written, however long that takes, so a repeat made
 after the validity window has ended still reads the chain. On Tron a payment is answered success once: every later
 `/settle` of it answers `invalid_transaction_state` with the transaction id, because x402's `exact` family requires that
-a consumed payment produce a settlement failure, never a success. Once the payment's row is gone, the FullNode's
-blocks give that answer. When the store cannot be read, the facilitator cannot know whether the payment was submitted,
-so it answers `settlement_pending` with the id.
+a consumed payment produce a settlement failure, never a success. Once the payment's row is gone, the FullNode's blocks
+give that answer. A broadcast or submission the node refused is stored too, and every repeat gets its answer. When the
+store cannot be read, the facilitator cannot know whether the payment was submitted, so it answers `settlement_pending`
+with the id.
 
 An answer with an empty `transaction` means nothing was submitted: on Tron always, and on Polkadot while the
 facilitator keeps the payment's row (until 24 hours after its validity window). After that, a repeated `/settle` of a

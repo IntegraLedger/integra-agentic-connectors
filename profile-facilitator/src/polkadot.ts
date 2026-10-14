@@ -78,7 +78,7 @@ class RpcError extends Error {
 
 /**
  * True when a refused submission says the node has already seen the extrinsic or its nonce (already in the pool,
- * temporarily banned, or an outdated nonce), so it may be included.
+ * temporarily banned, or an outdated nonce): the payment's replay primitive, the payer's nonce, is consumed.
  */
 function seenBefore(e: RpcError): boolean {
   if (e.code === ALREADY_IMPORTED || e.code === TEMPORARILY_BANNED) return true;
@@ -545,16 +545,22 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
 
   /**
    * Submits, then scans for the extrinsic until `deadline`. A refusal that says the node has already seen the extrinsic
-   * or its nonce is read as possibly included, and the scan runs; any other refusal means nothing was submitted.
+   * or its nonce is a consumed payment: `invalid_transaction_state` with the extrinsic's hash, and no scan. Any other
+   * refusal, or a request that cannot have reached the node, gives `unexpected_settle_error` with no transaction:
+   * nothing was submitted.
    */
   async function submit(c: Checked, since: number, deadline: number): Promise<SettleAnswer> {
     const url = byNetwork.get(c.network)!.rpc;
     try {
       await rpc(url, "author_submitExtrinsic", [c.hex], deadline - performance.now());
     } catch (e) {
-      if (e instanceof RpcError && !seenBefore(e)) return failed("unexpected_settle_error", "", c.network);
+      if (e instanceof RpcError) {
+        return seenBefore(e)
+          ? failed("invalid_transaction_state", c.id, c.network)
+          : failed("unexpected_settle_error", "", c.network);
+      }
       if (e instanceof NodeError && !e.sent) return failed("unexpected_settle_error", "", c.network);
-      if (!(e instanceof RpcError)) return pending(c.id, c.network);
+      return pending(c.id, c.network);
     }
     return scan(c, since, [], deadline, false);
   }
@@ -573,8 +579,9 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
   /**
    * Stores the answer, unless the row holds a final one. A success is given only by the settle whose write stored it:
    * when the row already holds a final answer, the answer is what a repeat gets for it, and when the write fails, it is
-   * pending with the hash, for a later read of the chain. Any other answer is given whether or not it is stored; a
-   * failed write leaves the row for a later read of the chain.
+   * pending with the hash, for a later read of the chain. An answer with no transaction, a refused submission, is given
+   * the same way: only once it is the stored answer. Any other answer is given whether or not it is stored; a failed
+   * write leaves the row for a later read of the chain.
    */
   async function keep(c: { network: string; id: string }, answer: SettleAnswer, deadline: number): Promise<SettleAnswer> {
     let wrote: boolean;
@@ -582,9 +589,9 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       wrote = await inTime(s.answer(c.network, c.id, answer), deadline);
     } catch {
       operatorLog({ event: "answer-not-stored", network: c.network, transaction: c.id });
-      return answer.success ? pending(c.id, c.network) : answer;
+      return answer.success || answer.transaction === "" ? pending(c.id, c.network) : answer;
     }
-    if (!answer.success || wrote) return answer;
+    if (wrote || (!answer.success && answer.transaction !== "")) return answer;
     const row = await inTime(s.read(c.network, c.id), deadline).catch(() => undefined);
     return row?.state === "answered" && !isPending(row.answer) ? repeatOf(row.answer) : pending(c.id, c.network);
   }
@@ -604,12 +611,13 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
 
   /**
    * Answers within `settleWaitMs`. The stored answer is read before the node is asked anything, and a final one is
-   * given as a repeat gets it. A claimed id, or a stored pending answer, is read again from the chain. An answer with no
-   * transaction says nothing was submitted, so it is given only for an id the store does not hold: a submission the node
-   * refused releases the claim, and when nothing is released the answer is pending with its hash. When the store cannot
-   * be read, the facilitator cannot know whether the extrinsic was submitted, so the answer is pending with its hash. The
-   * scan starts after the finalized head read before validation (never before the era's birth): validation at the best
-   * block shows the extrinsic absent from that block's ancestry, and the finalized head is in every later best chain.
+   * given as a repeat gets it. A claimed id, or a stored pending answer, is read again from the chain. A claimed id is
+   * never released: a submission the node refused as one it has already seen is a consumed payment, and any other
+   * refused submission gives `unexpected_settle_error` with no transaction, which says nothing was submitted. Each is
+   * stored final, and every repeat gets the stored answer. When the store cannot be read, the facilitator cannot know
+   * whether the extrinsic was submitted, so the answer is pending with its hash. The scan starts after the finalized
+   * head read before validation (never before the era's birth): validation at the best block shows the extrinsic absent
+   * from that block's ancestry, and the finalized head is in every later best chain.
    */
   async function settle(r: FacilitatorRequest): Promise<SettleAnswer> {
     const deadline = performance.now() + settleWaitMs;
@@ -645,10 +653,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       const claimed = row !== undefined && row.state !== "none" ? row : undefined;
       return follow(l, claimed?.since ?? null, claimed?.unread ?? [], deadline);
     }
-    const answer = await submit(c, since, deadline - answerReserve(settleWaitMs));
-    if (answer.success || answer.transaction !== "") return keep(c, answer, deadline);
-    const released = await inTime(s.release(c.network, c.id), deadline).catch(() => false);
-    return released ? answer : pending(c.id, c.network);
+    return keep(c, await submit(c, since, deadline - answerReserve(settleWaitMs)), deadline);
   }
 
   async function close(): Promise<void> {

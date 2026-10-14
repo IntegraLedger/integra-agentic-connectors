@@ -4,8 +4,8 @@
 // included once no node holds it and the latest solidified block is two 3-second slots past its expiration (the lcp tron
 // entry point's status rule: a node accepts a transaction only while `expiration` is after the head block's time).
 // Until then the answer stays settlement_pending with the id. An empty `transaction` says nothing was broadcast (x402),
-// so it is never given for an id the store holds. Expected values: those rules, and the lcp vectors' V2 (raw_data, id,
-// payer, expiration).
+// so it is given for an id the store holds only as the stored answer of a broadcast the node refused. Expected values:
+// those rules, and the lcp vectors' V2 (raw_data, id, payer, expiration).
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -158,15 +158,19 @@ describe("the end of a Tron transaction's validity window", () => {
     expect(broadcasts()).toBe(1);
   });
 
-  it("a broadcast the node refuses leaves no row, so its empty transaction is never an answer for a held id", async () => {
+  it("a broadcast the node refuses keeps its row with the stored answer: a repeat after the expiration gets it, and the sweep drops it 24 h later", async () => {
     broadcast = live["broadcastExpired"];
     await start(1_000);
-    expect((await post(`${base}/settle`, body())).json).toEqual({
-      success: false,
-      errorReason: "unexpected_settle_error",
-      transaction: "",
-      network: NETWORK,
-    });
+    const refused = { success: false, errorReason: "unexpected_settle_error", transaction: "", network: NETWORK };
+    expect((await post(`${base}/settle`, body())).json).toEqual(refused);
+    expect((await db.pool.query("SELECT id, answer FROM settlement")).rows).toEqual([{ id: TXID_V2, answer: refused }]);
+    vi.setSystemTime(EXPIRATION_V2 + 3_600_000);
+    expect((await post(`${base}/settle`, body())).json).toEqual(refused);
+    expect(broadcasts()).toBe(1);
+    await db.pool.query("UPDATE settlement SET until = now() - interval '25 hours'");
+    const store = await openStore(db.url);
+    await store.drop();
+    await store.close();
     expect((await db.pool.query("SELECT id FROM settlement")).rows).toEqual([]);
   });
 });

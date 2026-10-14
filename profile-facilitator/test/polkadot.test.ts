@@ -348,25 +348,27 @@ describe("/settle", () => {
     });
   });
 
-  it("an extrinsic the node refuses as outdated is read as possibly included, and the chain answers", async () => {
-    await start({ submitError: { code: 1010, message: "Invalid Transaction", data: "Transaction is outdated" } });
-    expect((await post(`${base}/settle`, body())).json).toEqual({
-      success: true,
-      transaction: `${BLOCK_HASH}-2`,
-      network: NETWORK,
-      payer: PAYER,
+  // A submission the pool refuses as one it has already seen (Substrate's author RPC: 1013 already imported, 1012
+  // temporarily banned, 1010 with an outdated nonce) is a consumed payment: the profile's replay primitive is the payer's
+  // account nonce, and x402's exact family: "A consumed primitive MUST produce a settlement failure, never a success."
+  // The answer is invalid_transaction_state with the extrinsic's hash, stored final; no block is read for it.
+  for (const [what, submitError] of [
+    ["already imported", { code: 1013, message: "Transaction Already Imported", data: "The transaction is already in the pool." }],
+    ["temporarily banned", { code: 1012, message: "Transaction is temporarily banned" }],
+    ["outdated, its nonce spent", { code: 1010, message: "Invalid Transaction", data: "Transaction is outdated" }],
+  ] as const) {
+    it(`an extrinsic the node refuses as ${what} answers invalid_transaction_state with its hash, stored final`, async () => {
+      await start({ submitError });
+      const consumed = { success: false, errorReason: "invalid_transaction_state", transaction: HASH_V3, network: NETWORK };
+      expect((await post(`${base}/settle`, body())).json).toEqual(consumed);
+      expect(node.calls.filter((c) => (c.body as { method: string }).method === "chain_getBlock")).toHaveLength(0);
+      const stored = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, HASH_V3]);
+      expect(stored.rows[0]?.answer).toEqual(consumed);
+      expect((await post(`${base}/settle`, body())).json).toEqual(consumed);
+      const submits = node.calls.filter((c) => (c.body as { method: string }).method === "author_submitExtrinsic");
+      expect(submits).toHaveLength(1);
     });
-  });
-
-  it("an extrinsic the node refuses as temporarily banned is read as possibly included, and the chain answers", async () => {
-    await start({ submitError: { code: 1012, message: "Transaction is temporarily banned" } });
-    expect((await post(`${base}/settle`, body())).json).toEqual({
-      success: true,
-      transaction: `${BLOCK_HASH}-2`,
-      network: NETWORK,
-      payer: PAYER,
-    });
-  });
+  }
 
   it("a Transferred event of another asset is never a success, and is final once its block is", async () => {
     // The finalized head is below the best block when the extrinsic is validated, and at its block afterwards.
@@ -467,13 +469,50 @@ describe("/settle", () => {
     expect(submits).toHaveLength(0);
   }, 30_000);
 
-  it("an extrinsic the node refuses at submission gives unexpected_settle_error with no transaction", async () => {
-    await start({ submitError: { code: 1010, message: "Invalid Transaction" } });
+  it("an extrinsic the node refuses at submission gives unexpected_settle_error with no transaction, stored final: a repeat gets it and submits nothing", async () => {
+    // A refused submission keeps its row with the stored answer, so the payment is submitted at most once: every answer
+    // to a repeated /settle for the same id is the stored one.
+    await start({ submitError: { code: 1010, message: "Invalid Transaction", data: "Inability to pay some fees (e.g. account balance too low)" } });
+    const refused = { success: false, errorReason: "unexpected_settle_error", transaction: "", network: NETWORK };
+    expect((await post(`${base}/settle`, body())).json).toEqual(refused);
+    const stored = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, HASH_V3]);
+    expect(stored.rows[0]?.answer).toEqual(refused);
+    expect((await post(`${base}/settle`, body())).json).toEqual(refused);
+    const submits = node.calls.filter((c) => (c.body as { method: string }).method === "author_submitExtrinsic");
+    expect(submits).toHaveLength(1);
+  });
+
+  it("two concurrent settles of an extrinsic the node refuses at submission submit once, and both give the stored refusal", async () => {
+    // Validation answers slowly, so both settles have read no stored answer before either claims; the one that loses the
+    // claim reads the row until the other's answer is stored.
+    await start(
+      {
+        validityMs: 300,
+        included: () => false,
+        submitError: { code: 1010, message: "Invalid Transaction", data: "Inability to pay some fees (e.g. account balance too low)" },
+      },
+      NETWORK,
+      5_000,
+    );
+    const refused = { success: false, errorReason: "unexpected_settle_error", transaction: "", network: NETWORK };
+    const [a, b] = await Promise.all([post(`${base}/settle`, body()), post(`${base}/settle`, body())]);
+    expect([a.json, b.json]).toEqual([refused, refused]);
+    const submits = node.calls.filter((c) => (c.body as { method: string }).method === "author_submitExtrinsic");
+    expect(submits).toHaveLength(1);
+  });
+
+  it("an extrinsic the node refuses at submission, whose answer cannot be stored, gives settlement_pending with its hash and keeps the claim", async () => {
+    await start({ submitError: { code: 1010, message: "Invalid Transaction", data: "Inability to pay some fees (e.g. account balance too low)" } });
+    await db.pool.query(`CREATE FUNCTION refuse_answer() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN RAISE EXCEPTION 'answer refused'; END $$`);
+    await db.pool.query("CREATE TRIGGER refuse_answer BEFORE UPDATE OF answer ON settlement FOR EACH ROW EXECUTE FUNCTION refuse_answer()");
     expect((await post(`${base}/settle`, body())).json).toEqual({
       success: false,
-      errorReason: "unexpected_settle_error",
-      transaction: "",
+      errorReason: "settlement_pending",
+      transaction: HASH_V3,
       network: NETWORK,
     });
+    const rows = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, HASH_V3]);
+    expect(rows.rows).toEqual([{ answer: null }]);
   });
 });

@@ -375,7 +375,11 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     }
   }
 
-  /** Broadcasts, then reads the transaction's status until `deadline`. */
+  /**
+   * Broadcasts, then reads the transaction's status until `deadline`. A `DUP_TRANSACTION_ERROR` says the node already
+   * holds the transaction id, so the payment is consumed. Any other refusal, or a request that cannot have reached the
+   * node, gives `unexpected_settle_error` with no transaction: nothing was broadcast.
+   */
   async function submit(c: Checked, deadline: number): Promise<SettleAnswer> {
     const node = byNetwork.get(c.network)!;
     let sent: unknown;
@@ -386,16 +390,18 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
         ? failed("unexpected_settle_error", "", c.network)
         : pending(c.txid, c.network);
     }
-    const accepted = isObject(sent) && (sent["result"] === true || sent["code"] === "DUP_TRANSACTION_ERROR");
-    if (!accepted) return failed("unexpected_settle_error", "", c.network);
+    if (isObject(sent) && sent["code"] === "DUP_TRANSACTION_ERROR") return consumed(c);
+    if (!isObject(sent) || sent["result"] !== true) return failed("unexpected_settle_error", "", c.network);
     return watch(c, deadline, false);
   }
 
   /**
    * Stores the answer unless the row holds a final one. A success is given only by the settle whose write stored it,
    * so one payment is answered success once: a success another settle stored first gives the consumed answer, and a
-   * success whose write fails gives `settlement_pending` with the id. A failed write of any other answer leaves the row
-   * for a later read of the chain.
+   * success whose write fails gives `settlement_pending` with the id. An answer with no transaction, a refused
+   * broadcast, is given only once it is the stored answer: when the row holds another final answer, the answer is what
+   * a repeat gets for it, and when the write fails, `settlement_pending` with the id. A failed write of any other answer
+   * leaves the row for a later read of the chain.
    */
   async function keep(c: Checked, answer: SettleAnswer, deadline: number): Promise<SettleAnswer> {
     let wrote: boolean;
@@ -403,9 +409,14 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
       wrote = await inTime(s.answer(c.network, c.txid, answer), deadline);
     } catch {
       operatorLog({ event: "answer-not-stored", network: c.network, transaction: c.txid });
-      return answer.success ? pending(c.txid, c.network) : answer;
+      return answer.success || answer.transaction === "" ? pending(c.txid, c.network) : answer;
     }
-    return answer.success && !wrote ? consumed(c) : answer;
+    if (wrote) return answer;
+    if (answer.success) return consumed(c);
+    if (answer.transaction !== "") return answer;
+    const row = await inTime(s.read(c.network, c.txid), deadline).catch(() => undefined);
+    if (row?.state !== "answered" || isPending(row.answer)) return pending(c.txid, c.network);
+    return row.answer.success ? consumed(c) : row.answer;
   }
 
   /**
@@ -413,11 +424,11 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
    * `invalid_transaction_state` with the id; any other stored final answer is given as it is. A claimed id, or a stored
    * pending answer, is read again from the chain. For an id the store does not hold, the node's id reads answer first:
    * an id the node holds, in a block or its pending pool, is consumed too, whatever else the checks refuse and after
-   * the expiration as before it, and a node that does not answer them gives `unexpected_settle_error`. An answer with
-   * no transaction says nothing was broadcast, so it is given only for an id the store does not hold: a broadcast the
-   * node refused releases the claim, and when nothing is released the answer is pending with its id. A refusal as a
-   * duplicate is read as broadcast. When the store cannot be read, the facilitator cannot know whether the transaction
-   * was broadcast, so the answer is pending with its id.
+   * the expiration as before it, and a node that does not answer them gives `unexpected_settle_error`. A claimed id is
+   * never released: a broadcast the node refused as a duplicate is a consumed payment, and any other refused broadcast
+   * gives `unexpected_settle_error` with no transaction, which says nothing was broadcast. Each is stored final, and
+   * every repeat gets the stored answer. When the store cannot be read, the facilitator cannot know whether the
+   * transaction was broadcast, so the answer is pending with its id.
    */
   async function settle(r: FacilitatorRequest): Promise<SettleAnswer> {
     const deadline = performance.now() + settleWaitMs;
@@ -449,10 +460,7 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
       return pending(c.txid, c.network);
     }
     if (!won) return keep(c, await watch(c, waitUntil, true), deadline);
-    const answer = await submit(c, waitUntil);
-    if (answer.success || answer.transaction !== "") return keep(c, answer, deadline);
-    const released = await inTime(s.release(c.network, c.txid), deadline).catch(() => false);
-    return released ? answer : pending(c.txid, c.network);
+    return keep(c, await submit(c, waitUntil), deadline);
   }
 
   return { verify, settle, networks: nodes.map((n) => n.network as string) };

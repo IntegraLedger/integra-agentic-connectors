@@ -53,8 +53,12 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
    final answer is returned as it is.
 3. Claims the hash, with the first block to scan: the block after the finalized head read before validation, never
    before the era's birth.
-4. Submits with `author_submitExtrinsic`. A refusal that says the node has already seen the extrinsic or its nonce is
-   read as possibly included, and the scan runs.
+4. Submits with `author_submitExtrinsic`. A refusal that says the node has already seen the extrinsic or its nonce
+   (1013 already imported, 1012 temporarily banned, or 1010 with an outdated nonce) is a consumed payment, answered
+   `invalid_transaction_state` with the extrinsic's hash, and no block is scanned for it. Any other refusal, or a
+   request that cannot have reached the node, is answered `unexpected_settle_error` with an empty `transaction`:
+   nothing was submitted. Either answer is stored final and every repeat gets it. The claim is never removed, so the
+   extrinsic is submitted at most once.
 5. Scans every second, up to the last block that can include the extrinsic: the era's last block, and no later than
    `System.BlockHashCount` + 1 blocks after the era's birth. Each block's execution keeps only the hashes of the
    `BlockHashCount` + 1 blocks before it, and the chain refuses an extrinsic whose birth block's hash is gone. The scan
@@ -68,8 +72,9 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
    cannot be read is skipped, since it is read again at finality.
 7. Once every block to the last is finalized without the extrinsic, and no block is unread, it can never be included:
    `invalid_transaction_state`.
-8. Stores the answer and returns it. A success is given only by the `/settle` that stores it. When it cannot be stored,
-   the answer is `settlement_pending` with the extrinsic's hash, and a later `/settle` reads the chain again.
+8. Stores the answer and returns it. A success is given only by the `/settle` that stores it, and an answer with an
+   empty `transaction` only once it is the stored answer. When either cannot be stored, the answer is
+   `settlement_pending` with the extrinsic's hash, and a later `/settle` reads the chain again.
 
 Success is `{success: true, transaction, network, payer}`, where `transaction` is `<block hash>-<extrinsic index>`.
 While the extrinsic is broadcast but not yet in a block, the answer is `settlement_pending` with `transaction` set to

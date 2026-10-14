@@ -258,7 +258,11 @@ The answer is `{isValid: true, payer}`, with `payer` the owner in base58check.
    as before it. A node that does not answer the id reads gives `unexpected_settle_error`. Otherwise it repeats the
    expiration check and the other node reads of `/verify`, and a refusal is answered with an empty `transaction`.
 4. Claims the transaction id with one conditional insert, so concurrent settles of one payment broadcast once.
-5. Broadcasts the signed bytes with `/wallet/broadcasthex`. A `DUP_TRANSACTION_ERROR` counts as broadcast.
+5. Broadcasts the signed bytes with `/wallet/broadcasthex`. A `DUP_TRANSACTION_ERROR` says the node already holds the
+   transaction: the payment is consumed, answered `invalid_transaction_state` with the id. Any other refusal, or a
+   request that cannot have reached the node, is answered `unexpected_settle_error` with an empty `transaction`:
+   nothing was broadcast. Either answer is stored final and every repeat gets it. The claim is never removed, so the
+   payment is broadcast at most once.
 6. Reads the transaction's status every second with `@integraledger/lcp`'s `tronStatus`: the Solidity node's
    `gettransactioninfobyid` first, then the FullNode's. Success requires receipt result `SUCCESS` **and** a
    `Transfer` log emitted by `asset`. The value the call returned is not read: a TRC-20 token may return false from
@@ -268,7 +272,7 @@ The answer is `{isValid: true, payer}`, with `payer` the owner in base58check.
    Each failure is answered `invalid_transaction_state`.
 7. Stores the answer and returns it. A success is returned only by the settle whose write stored it, so of two
    concurrent settles of one payment, one answers success and the other `invalid_transaction_state` with the id. A
-   success whose write fails is answered `settlement_pending` with the id.
+   success, or an answer with an empty `transaction`, whose write fails is answered `settlement_pending` with the id.
 
 Success is `{success: true, transaction, network, payer}`, where `transaction` is the transaction id in hex.
 
@@ -296,8 +300,12 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
    final answer is returned as it is.
 3. Claims the hash, with the first block to scan: the block after the finalized head read before validation, never
    before the era's birth.
-4. Submits with `author_submitExtrinsic`. A refusal that says the node has already seen the extrinsic or its nonce is
-   read as possibly included, and the scan runs.
+4. Submits with `author_submitExtrinsic`. A refusal that says the node has already seen the extrinsic or its nonce
+   (1013 already imported, 1012 temporarily banned, or 1010 with an outdated nonce) is a consumed payment, answered
+   `invalid_transaction_state` with the extrinsic's hash, and no block is scanned for it. Any other refusal, or a
+   request that cannot have reached the node, is answered `unexpected_settle_error` with an empty `transaction`:
+   nothing was submitted. Either answer is stored final and every repeat gets it. The claim is never removed, so the
+   extrinsic is submitted at most once.
 5. Scans every second, up to the last block that can include the extrinsic: the era's last block, and no later than
    `System.BlockHashCount` + 1 blocks after the era's birth. Each block's execution keeps only the hashes of the
    `BlockHashCount` + 1 blocks before it, and the chain refuses an extrinsic whose birth block's hash is gone. The scan
@@ -311,8 +319,9 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
    cannot be read is skipped, since it is read again at finality.
 7. Once every block to the last is finalized without the extrinsic, and no block is unread, it can never be included:
    `invalid_transaction_state`.
-8. Stores the answer and returns it. A success is given only by the `/settle` that stores it. When it cannot be stored,
-   the answer is `settlement_pending` with the extrinsic's hash, and a later `/settle` reads the chain again.
+8. Stores the answer and returns it. A success is given only by the `/settle` that stores it, and an answer with an
+   empty `transaction` only once it is the stored answer. When either cannot be stored, the answer is
+   `settlement_pending` with the extrinsic's hash, and a later `/settle` reads the chain again.
 
 Success is `{success: true, transaction, network, payer}`, where `transaction` is `<block hash>-<extrinsic index>`.
 While the extrinsic is broadcast but not yet in a block, the answer is `settlement_pending` with `transaction` set to
@@ -326,9 +335,10 @@ request: it reads the chain from where it stopped, never submits twice, and retu
 The facilitator keeps the payment's row until that final answer is written, however long that takes, so a repeat made
 after the validity window has ended still reads the chain. On Tron a payment is answered success once: every later
 `/settle` of it answers `invalid_transaction_state` with the transaction id, because x402's `exact` family requires that
-a consumed payment produce a settlement failure, never a success. Once the payment's row is gone, the FullNode's
-blocks give that answer. When the store cannot be read, the facilitator cannot know whether the payment was submitted,
-so it answers `settlement_pending` with the id.
+a consumed payment produce a settlement failure, never a success. Once the payment's row is gone, the FullNode's blocks
+give that answer. A broadcast or submission the node refused is stored too, and every repeat gets its answer. When the
+store cannot be read, the facilitator cannot know whether the payment was submitted, so it answers `settlement_pending`
+with the id.
 
 An answer with an empty `transaction` means nothing was submitted: on Tron always, and on Polkadot while the
 facilitator keeps the payment's row (until 24 hours after its validity window). After that, a repeated `/settle` of a
@@ -379,7 +389,7 @@ controls, to the resource servers that use it.
 | `unexpected_verify_error` | yes | no | The node or the store could not be read. |
 | `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission. |
 | `settlement_pending` | no | yes | Submitted, and not yet final when the wait ended. |
-| `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. On Polkadot, also a repeat of a payment whose success has been answered. |
+| `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. On Polkadot, also a repeat of a payment whose success has been answered, or a submission the node refuses as one it has already seen (already imported, temporarily banned, or an outdated nonce). |
 
 `unsupported_permission` and `invalid_transaction` are this facilitator's, for a Tron owner permission that does not
 accept the transaction's one signature and for a transaction the node refuses in simulation or validation. The
@@ -414,6 +424,10 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
 - A row whose answer is not final (claimed with no answer, or `settlement_pending`) is kept, whatever its age, until a
   repeated `/settle` reads the chain and writes a final answer. A repeat therefore always finds the id of a payment
   that was submitted, and never answers with an empty `transaction` for it.
+- A claim is never removed. A broadcast or submission the node refuses stores its answer, final, in the claimed row:
+  `invalid_transaction_state` with the id when the node says it already holds the transaction, and
+  `unexpected_settle_error` with an empty `transaction` for any other refusal. Every repeat gets that stored answer, so
+  a payment is submitted at most once.
 - A sweep every minute drops the rows whose answer is final and whose `until` is more than 24 hours past. It reads
   them through `settlement_final_until`, an index that holds only rows with a final answer, so the rows it keeps add
   nothing to its work.
