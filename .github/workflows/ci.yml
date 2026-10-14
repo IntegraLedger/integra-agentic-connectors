@@ -387,6 +387,6 @@ jobs:
             1) echo "none of the $copies Markdown copies in out/md holds a relative link" ;;
             *) exit "$status" ;;
           esac
-      - name: Every page loads under its own Content-Security-Policy, with no violation or error, and names its links
+      - name: Every page loads under its own Content-Security-Policy, with no violation or error, names its links and finds each fragment
         working-directory: website
         run: node scripts/check-pages.mjs

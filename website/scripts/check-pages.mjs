@@ -2,8 +2,9 @@
 // worker.js first for the addresses run_worker_first names, the files of out/ for the rest, with the rules in
 // public/_headers. Each page, an address no page has (the 404 page), a page's Twoslash popup and a search are
 // checked. The check fails when a response for a page carries any Content-Security-Policy other than the page's own
-// in csp.json, when a page reports a policy violation, a script error or an error on the console, or when a page
-// carries an `a` element with no accessible name. Run it after `pnpm build`.
+// in csp.json, when a page reports a policy violation, a script error or an error on the console, when a page
+// carries an `a` element with no accessible name, or when a link to a fragment of a page of the site, `#x` or
+// `/path#x`, finds no element with that id on that page. Run it after `pnpm build`.
 import { readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join } from "node:path";
@@ -97,6 +98,41 @@ const fail = (address, what) => failures.push(`${address}: ${what}`);
 /** The number of `a` elements on each address visited. */
 const linkCounts = new Map();
 
+/**
+ * The ids of the elements of the open page, and the `href` of each of its links to a fragment of a page of the site:
+ * `#x` or `/path#x`, with a fragment that is not empty.
+ */
+async function fragmentsOf(page) {
+  const { ids, hrefs } = await page.evaluate(() => ({
+    ids: [...document.querySelectorAll("[id]")].map((e) => e.id),
+    hrefs: [...document.querySelectorAll("a[href]")]
+      .map((a) => a.getAttribute("href"))
+      .filter((href) => /^(?:#|\/(?!\/)[^#]*#)./.test(href)),
+  }));
+  return { ids: new Set(ids), hrefs };
+}
+
+/** Fails each fragment link whose page has no element with the fragment's id; returns the number of links read. */
+function checkFragments(pages) {
+  let count = 0;
+  for (const [address, { hrefs }] of pages) {
+    for (const href of hrefs) {
+      count++;
+      const at = href.indexOf("#");
+      const path = href.slice(0, at).replace(/\?.*$/, "");
+      const target = path === "" ? address : path.replace(/(.)\/+$/, "$1");
+      let id = href.slice(at + 1);
+      try {
+        id = decodeURIComponent(id);
+      } catch {}
+      const ids = pages.get(target)?.ids;
+      if (ids === undefined) fail(address, `a fragment link to an address with no page: ${href}`);
+      else if (!ids.has(id)) fail(address, `no element on ${target} has the id of the fragment link ${href}`);
+    }
+  }
+  return count;
+}
+
 /** The reasons Chrome gives for leaving a node out of the accessibility tree because no reader is shown it. */
 const HIDDEN = new Set([
   "notRendered",
@@ -109,9 +145,10 @@ const HIDDEN = new Set([
 
 /**
  * The number of `a` elements on the open page, and the opening tag of each one that has no accessible name, as
- * Chrome's accessibility tree computes the name. An `a` element the tree leaves out because it is hidden from every reader needs no name; every
- * other `a` element needs one. Chrome computes no name for an element whose layout `content-visibility: auto` skips,
- * so each such element is laid out while the names are read, and set back afterwards.
+ * Chrome's accessibility tree computes the name. An `a` element the tree leaves out because it is hidden from every
+ * reader needs no name; every other `a` element needs one. Chrome computes no name for an element whose layout
+ * `content-visibility: auto` skips, so each such element is laid out while the names are read, and set back
+ * afterwards.
  */
 async function namelessLinks(page) {
   await page.evaluate(async () => {
@@ -189,7 +226,13 @@ try {
     }
 
     const addresses = Object.keys(policies.pages).sort();
-    for (const address of addresses) await visit(address, policies.pages[address], 200);
+    const fragments = new Map();
+    for (const address of addresses) {
+      await visit(address, policies.pages[address], 200, async (page) => {
+        fragments.set(address, await fragmentsOf(page));
+      });
+    }
+    const fragmentLinks = checkFragments(fragments);
     await visit("/no-such-page", policies.notFound, 404);
 
     // A Twoslash popup: its trigger fetches the page's popups and shows one.
@@ -208,7 +251,7 @@ try {
     const links = [...linkCounts.values()].reduce((sum, n) => sum + n, 0);
     console.log(
       failures.length === 0
-        ? `${addresses.length} pages, the 404 page, a Twoslash popup and a search load under their own Content-Security-Policy with no violation and no error, and each of the ${links} a elements on these pages has a name`
+        ? `${addresses.length} pages, the 404 page, a Twoslash popup and a search load under their own Content-Security-Policy with no violation and no error, and each of the ${links} a elements on these pages has a name; each of their ${fragmentLinks} fragment links finds its target`
         : failures.join("\n"),
     );
   });

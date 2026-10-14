@@ -75,8 +75,8 @@ which allows no inline script, as they run none; a missing file under an address
 `/_next/` and the rest `run_worker_first` leaves out) is answered with the 404 page under that policy, which shows the
 page without running its scripts. `scripts/check-pages.mjs` serves `out/` on 127.0.0.1 through
 `worker.js` and the `_headers` rules, as `wrangler.toml` routes each address, and loads every page, the 404 page, a
-Twoslash popup and a search in Chrome; a policy violation, a script error, a console error or an `a` element with no
-accessible name fails it.
+Twoslash popup and a search in Chrome; a policy violation, a script error, a console error, an `a` element with no
+accessible name, or a link to `#x` or `/path#x` whose page has no element with the id `x` fails it.
 
 Each page names `/llms.txt` with `<link rel="describedby">` and its Markdown with `<link rel="alternate"
 type="text/markdown">`. `pnpm dev` does not run `worker.js`.
