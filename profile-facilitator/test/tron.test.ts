@@ -613,6 +613,60 @@ describe("repeated settles and node errors", () => {
     expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
   });
 
+  // A transaction id the node holds, in a block or its pending pool, is a consumed payment (x402's exact family: "a
+  // consumed primitive MUST produce a settlement failure, never a success"), and an empty `transaction` says nothing
+  // was broadcast. So for an id the store does not hold, the node's id reads answer before the expiration check and
+  // before any other refusal.
+  it("a /settle of an expired transaction the store does not hold and the node's blocks hold answers invalid_transaction_state with the id", async () => {
+    await start({ held: () => ({ txID: TXID_V2, raw_data_hex: RAW_V2, signature: [signatureV2] }) });
+    vi.setSystemTime(EXPIRATION_V2 + 1);
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(STATE_FAILED);
+    expect(node.calls.filter((c) => c.path === "/wallet/gettransactionbyid").map((c) => c.body)).toEqual([{ value: TXID_V2 }]);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(0);
+  });
+
+  it("a /settle of an expired transaction that neither the store nor the node holds is refused as invalid_payload, with no transaction", async () => {
+    await start();
+    vi.setSystemTime(EXPIRATION_V2 + 1);
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual({
+      success: false,
+      errorReason: "invalid_payload",
+      transaction: "",
+      network: NETWORK,
+    });
+    expect(node.calls.filter((c) => c.path === "/wallet/gettransactionfrompending").map((c) => c.body)).toEqual([
+      { value: TXID_V2 },
+    ]);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(0);
+  });
+
+  it("a /settle of an expired transaction whose id the node does not answer gives unexpected_settle_error, with no transaction", async () => {
+    await start({ held: () => HANG }, 1_000);
+    vi.setSystemTime(EXPIRATION_V2 + 1);
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual({
+      success: false,
+      errorReason: "unexpected_settle_error",
+      transaction: "",
+      network: NETWORK,
+    });
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(0);
+  }, 15_000);
+
+  it("a /settle that the owner's permission refuses, of an id in the node's pending pool, answers invalid_transaction_state with the id", async () => {
+    const account = {
+      address: V2_PAYER_HEX,
+      owner_permission: { permission_name: "owner", threshold: 1, keys: [{ address: OTHER_HEX, weight: 1 }] },
+    };
+    await start({ account, pendingPool: () => ({ txID: TXID_V2, raw_data_hex: RAW_V2, signature: [signatureV2] }) });
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({
+      isValid: false,
+      invalidReason: "unsupported_permission",
+      payer: PAYER,
+    });
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(STATE_FAILED);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(0);
+  });
+
   it("a node error before anything is submitted gives unexpected_settle_error and no broadcast", async () => {
     await start({ trigger: HANG });
     const res = await post(`${base}/settle`, body(TX_V2));

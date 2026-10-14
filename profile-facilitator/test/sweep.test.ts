@@ -43,7 +43,8 @@ function sign(rawHex: string): string {
   );
   return Buffer.from(sig.toBytes("compact")).toString("hex") + sig.recovery!.toString(16).padStart(2, "0");
 }
-const TX_V2 = `0aa202${RAW_V2}1241${sign(RAW_V2)}`;
+const SIGNATURE_V2 = sign(RAW_V2);
+const TX_V2 = `0aa202${RAW_V2}1241${SIGNATURE_V2}`;
 const body = () => ({
   x402Version: 2,
   paymentPayload: { x402Version: 2, accepted: O, payload: { transaction: TX_V2 } },
@@ -55,6 +56,8 @@ let node: Stub | undefined;
 let closeFacilitator: (() => Promise<void>) | undefined;
 /** What the nodes show: a receipt with SUCCESS, or no receipt anywhere. */
 let landed = false;
+/** Whether the FullNode's blocks hold the transaction, as /wallet/gettransactionbyid shows it. */
+let held = false;
 /** The latest solidified block's time, in milliseconds. */
 let solidTime = NOW_V2;
 
@@ -69,6 +72,9 @@ async function start(): Promise<string> {
     }
     if (path === "/walletsolidity/getnowblock") {
       return { blockID: "00", block_header: { raw_data: { number: 86542800, timestamp: solidTime } } };
+    }
+    if (path === "/wallet/gettransactionbyid" && held) {
+      return { ret: [{ contractRet: "SUCCESS" }], txID: TXID_V2, raw_data_hex: RAW_V2, signature: [SIGNATURE_V2] };
     }
     return tronChainReads(path, body);
   });
@@ -100,6 +106,7 @@ beforeEach(async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(NOW_V2);
   landed = false;
+  held = false;
   solidTime = NOW_V2;
   node = undefined;
   closeFacilitator = undefined;
@@ -173,6 +180,30 @@ describe("the sweep of the dedupe table", () => {
     expect(broadcasts()).toBe(1);
 
     await sweep();
+    expect(await rows()).toEqual([]);
+  });
+
+  it("drops a stored success after its life; a repeat then reads the node, which holds the id: invalid_transaction_state with the id", async () => {
+    // x402's exact family: a consumed primitive produces a settlement failure, never a success; and an empty
+    // `transaction` says nothing was broadcast. java-tron's /wallet/gettransactionbyid returns a transaction its blocks
+    // hold, and {} otherwise, so the node answers for the payment once its row is gone.
+    const base = await start();
+    landed = true;
+    const success = { success: true, transaction: TXID_V2, network: NETWORK, payer: PAYER };
+    expect((await post(`${base}/settle`, body())).json).toEqual(success);
+    held = true;
+    vi.setSystemTime(EXPIRATION_V2 + DAY_MS + 60_000);
+    await db.pool.query("UPDATE settlement SET until = now() - interval '25 hours'");
+    await sweep();
+    expect(await rows()).toEqual([]);
+
+    expect((await post(`${base}/settle`, body())).json).toEqual({
+      success: false,
+      errorReason: "invalid_transaction_state",
+      transaction: TXID_V2,
+      network: NETWORK,
+    });
+    expect(broadcasts()).toBe(1);
     expect(await rows()).toEqual([]);
   });
 

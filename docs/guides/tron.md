@@ -20,11 +20,12 @@ network's memo fee.
 | `extra.assetTransferMethod` | `lcp-trc20-memo` |
 | `payload.transaction` | The serialized, signed `Transaction`, in lowercase hex |
 
-The facilitator needs a FullNode (it calls `/wallet/getaccount`, `/wallet/getnowblock`, `/wallet/getblock`,
-`/wallet/gettransactionbyid`, `/wallet/gettransactionfrompending`, `/wallet/triggerconstantcontract`,
-`/wallet/broadcasthex` and `/wallet/gettransactioninfobyid`) and a Solidity node
+The facilitator needs a FullNode that keeps the block history, not a lite FullNode (it calls `/wallet/getaccount`,
+`/wallet/getnowblock`, `/wallet/getblock`, `/wallet/gettransactionbyid`, `/wallet/gettransactionfrompending`,
+`/wallet/triggerconstantcontract`, `/wallet/broadcasthex` and `/wallet/gettransactioninfobyid`) and a Solidity node
 (`/walletsolidity/gettransactioninfobyid` and `/walletsolidity/getnowblock`). A java-tron node serves both, on HTTP
-ports 8090 and 8091 by default.
+ports 8090 and 8091 by default. `/wallet/gettransactionbyid` finds a transaction only in the blocks the node holds, and
+it answers a repeated `/settle` of a payment whose row is gone.
 
 ## What `/verify` checks
 
@@ -65,8 +66,11 @@ The answer is `{isValid: true, payer}`, with `payer` the owner in base58check.
 2. Reads the stored answer for the transaction id. A stored success means the payment is consumed: the answer is
    `invalid_transaction_state` with the transaction id, never a second success. Any other final answer is returned
    as it is. A claimed id, or a stored `settlement_pending`, goes on to step 6 and broadcasts nothing.
-3. For an id the store does not hold, repeats the expiration check and the node reads of `/verify`. An id the node
-   already holds is a consumed payment, answered `invalid_transaction_state` with the id.
+3. For an id the store does not hold, reads the id first, with `/wallet/gettransactionbyid` and
+   `/wallet/gettransactionfrompending`. An id the FullNode holds, in a block or its pending pool, is a consumed
+   payment, answered `invalid_transaction_state` with the id, whatever the other checks give and after the expiration
+   as before it. A node that does not answer the id reads gives `unexpected_settle_error`. Otherwise it repeats the
+   expiration check and the other node reads of `/verify`, and a refusal is answered with an empty `transaction`.
 4. Claims the transaction id with one conditional insert, so concurrent settles of one payment broadcast once.
 5. Broadcasts the signed bytes with `/wallet/broadcasthex`. A `DUP_TRANSACTION_ERROR` counts as broadcast.
 6. Reads the transaction's status every second with `@integraledger/lcp`'s `tronStatus`: the Solidity node's

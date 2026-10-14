@@ -102,6 +102,9 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   until the scan's deadline; one that cannot start by then is recorded as unread, like a block the node cannot give,
   and read again later. Every other node call has no such limit. On Tron, `/verify` makes six FullNode calls:
   the account, the two id reads, the simulation and the head read at once, then the reference block read.
+- A Polkadot node that keeps the state of every block (an archive node) gives the events of any block; a pruning
+  node discards the state of older blocks, and a block that holds the extrinsic and whose state is discarded keeps the
+  answer `settlement_pending`.
 - A request body is at most 64 KiB. The server's request timeout is `settleWaitMs` plus 60 seconds.
 - The table holds a row with a final answer until 24 hours after its validity window ends. A row with no final answer
   stays until a repeated `/settle` for it gives one. Each such row is a payment that passed every check and was

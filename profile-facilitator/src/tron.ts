@@ -203,6 +203,14 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     return Object.keys(tx).length === 0 ? null : "invalid_transaction_state";
   }
 
+  /** The two id reads, made together: the FullNode's blocks, then its pending pool. */
+  function idReads(c: Checked, deadline: number): Promise<[InvalidReason | null, InvalidReason | null]> {
+    return Promise.all([
+      unheld(c, "/wallet/gettransactionbyid", deadline),
+      unheld(c, "/wallet/gettransactionfrompending", deadline),
+    ]);
+  }
+
   /** The node's simulation of `transfer(payTo, amount)` from the owner on the asset. */
   async function simulated(c: Checked, deadline: number): Promise<InvalidReason | null> {
     const sim = await ask(
@@ -225,22 +233,25 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
 
   /**
    * The expiration window, then the node reads, made together: the owner's permission, TaPoS, the ids the node holds
-   * in its blocks and in its pending pool, and the simulation. The first refusal in that order is the answer. Each call is bounded by the node call bound and
-   * by `deadline`.
+   * in its blocks and in its pending pool, and the simulation. The first refusal in that order is the answer. Each call
+   * is bounded by the node call bound and by `deadline`. `ids` are the two id reads when the caller has made them.
    */
-  async function checkNow(c: Checked, deadline = Infinity): Promise<InvalidReason | null> {
+  async function checkNow(
+    c: Checked,
+    deadline = Infinity,
+    ids?: Promise<[InvalidReason | null, InvalidReason | null]>,
+  ): Promise<InvalidReason | null> {
     const now = BigInt(Date.now());
     const expiration = c.raw.expiration;
     if (expiration <= now || expiration > now + BigInt(c.maxTimeoutSeconds) * 1000n) return "invalid_payload";
     if (deadline - performance.now() <= 0) return "unexpected_verify_error";
-    const reads = await Promise.all([
+    const [account, reference, [inBlocks, inPool], simulation] = await Promise.all([
       permitted(c, deadline),
       tapos(c, deadline),
-      unheld(c, "/wallet/gettransactionbyid", deadline),
-      unheld(c, "/wallet/gettransactionfrompending", deadline),
+      ids ?? idReads(c, deadline),
       simulated(c, deadline),
     ]);
-    return reads.find((r) => r !== null) ?? null;
+    return [account, reference, inBlocks, inPool, simulation].find((r) => r !== null) ?? null;
   }
 
   /** Every check of `/verify`: the transaction, the store, which must not hold its id, and the node reads. */
@@ -400,9 +411,11 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
   /**
    * Answers within `settleWaitMs`. A stored success means the payment is consumed, and gives
    * `invalid_transaction_state` with the id; any other stored final answer is given as it is. A claimed id, or a stored
-   * pending answer, is read again from the chain. An id the node already holds is consumed too. An answer with no
-   * transaction says nothing was broadcast, so it is given only for an id the store does not hold: a broadcast the node
-   * refused releases the claim, and when nothing is released the answer is pending with its id. A refusal as a
+   * pending answer, is read again from the chain. For an id the store does not hold, the node's id reads answer first:
+   * an id the node holds, in a block or its pending pool, is consumed too, whatever else the checks refuse and after
+   * the expiration as before it, and a node that does not answer them gives `unexpected_settle_error`. An answer with
+   * no transaction says nothing was broadcast, so it is given only for an id the store does not hold: a broadcast the
+   * node refused releases the claim, and when nothing is released the answer is pending with its id. A refusal as a
    * duplicate is read as broadcast. When the store cannot be read, the facilitator cannot know whether the transaction
    * was broadcast, so the answer is pending with its id.
    */
@@ -423,9 +436,11 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     }
     const waitUntil = deadline - answerReserve(settleWaitMs);
     if (stored.state !== "none") return keep(c, await watch(c, waitUntil, true), deadline);
-    const now = await checkNow(c, deadline);
-    if (now === "invalid_transaction_state") return consumed(c);
-    if (now !== null) return failed(settleReason(now), "", network);
+    const ids = idReads(c, deadline);
+    const now = await checkNow(c, deadline, ids);
+    const held = await ids;
+    if (held.includes("invalid_transaction_state")) return consumed(c);
+    if (now !== null) return failed(settleReason(held.find((r) => r !== null) ?? now), "", network);
     if (left() <= 0) return failed("unexpected_settle_error", "", network);
     let won: boolean;
     try {

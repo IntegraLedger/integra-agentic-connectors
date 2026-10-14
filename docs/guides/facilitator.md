@@ -16,7 +16,10 @@ npm install @integraledger/profile-facilitator
 ```
 
 It needs Node.js `>=26.10.0`, Postgres (the tests run on Postgres 18), and an HTTP endpoint for each network you
-serve: a Tron FullNode and Solidity node, or a Polkadot Asset Hub RPC node.
+serve: a Tron FullNode that keeps the block history (not a lite FullNode) and a Solidity node, or a Polkadot Asset Hub
+RPC node. A Polkadot node that keeps the state of every block (an archive node) gives the events of any block; a
+pruning node discards the state of older blocks, and a block that holds the extrinsic and whose state is discarded
+keeps the answer `settlement_pending`.
 
 ## Start it and read what it supports
 
@@ -173,14 +176,19 @@ request: it reads the chain from where it stopped, never submits twice, and retu
 The facilitator keeps the payment's row until that final answer is written, however long that takes, so a repeat made
 after the validity window has ended still reads the chain. On Tron a payment is answered success once: every later
 `/settle` of it answers `invalid_transaction_state` with the transaction id, because x402's `exact` family requires that
-a consumed payment produce a settlement failure, never a success. An answer with an empty `transaction` means nothing
-was submitted. When the store cannot be read, the facilitator cannot know whether the payment was submitted, so it
-answers `settlement_pending` with the id.
+a consumed payment produce a settlement failure, never a success. Once the payment's row is gone, the FullNode's
+blocks give that answer. When the store cannot be read, the facilitator cannot know whether the payment was submitted,
+so it answers `settlement_pending` with the id.
 
-A payment whose success has been answered is consumed. On Polkadot, a repeated `/settle` for it answers
-`invalid_transaction_state` with the success's `transaction`, never a second success, as x402's `exact` family
-requires: *"A consumed primitive MUST produce a settlement failure, never a success."* Of two concurrent settles of
-one payment, one answers success and the other that failure.
+An answer with an empty `transaction` means nothing was submitted: on Tron always, and on Polkadot while the
+facilitator keeps the payment's row (until 24 hours after its validity window). After that, a repeated `/settle` of a
+Polkadot extrinsic that landed finds no row, the node's validation refuses it, and the answer is `invalid_transaction`
+with an empty `transaction`.
+
+A payment whose success has been answered is consumed. On Polkadot, while the facilitator keeps the payment's row, a
+repeated `/settle` for it answers `invalid_transaction_state` with the success's `transaction`, never a second
+success, as x402's `exact` family requires: *"A consumed primitive MUST produce a settlement failure, never a
+success."* Of two concurrent settles of one payment, one answers success and the other that failure.
 
 ## Security
 
@@ -195,9 +203,11 @@ one payment, one answers success and the other that failure.
 - **What it does not check.** It checks that the payment carries H in the profile's form, not which H the seller issued.
   Its store claims a payment's id once, so the payment is submitted once. On Tron and on Polkadot, a success is answered
   only by the settle whose write stored it, and a repeated `/settle` of that payment answers `invalid_transaction_state`
-  with the transaction. Each profile's rule 6 puts the remaining checks on the resource server: it accepts a payment
-  only when the payment's H is one it issued for that request and has not seen claimed. The seller door's `claim` makes
-  both checks. It answers `404 claim/unknown` for an H it holds no record of, `409 claim/not-this-request` for a payment
-  of another request, and `409 claim/in-progress` or `409 claim/paid` once the ATR's payment has been claimed. The
-  facilitator checks the amount, asset and payee against the requirements it is given because x402 requires that of a
-  facilitator, and carries no business or legal logic beyond that.
+  with the transaction: on Tron from the stored answer or, once the row is gone, from the FullNode's blocks; on Polkadot
+  while the facilitator keeps the payment's row (until 24 hours after its validity window). Each profile's rule 6 puts
+  the remaining checks on the resource server: it accepts a payment only when the payment's H is one it issued for that
+  request and has not seen claimed. The seller door's `claim` makes both checks. It answers `404 claim/unknown` for an H
+  it holds no record of, `409 claim/not-this-request` for a payment of another request, and `409 claim/in-progress` or
+  `409 claim/paid` once the ATR's payment has been claimed. The facilitator checks the amount, asset and payee against
+  the requirements it is given because x402 requires that of a facilitator, and carries no business or legal logic
+  beyond that.

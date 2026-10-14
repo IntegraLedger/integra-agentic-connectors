@@ -64,7 +64,10 @@ npm install @integraledger/profile-facilitator
 ```
 
 It needs Node.js `>=26.10.0`, Postgres (the tests run on Postgres 18), and an HTTP endpoint for each network you
-serve: a Tron FullNode and Solidity node, or a Polkadot Asset Hub RPC node. It is ESM only.
+serve: a Tron FullNode that keeps the block history (not a lite FullNode) and a Solidity node, or a Polkadot Asset Hub
+RPC node. A Polkadot node that keeps the state of every block (an archive node) gives the events of any block; a
+pruning node discards the state of older blocks, and a block that holds the extrinsic and whose state is discarded
+keeps the answer `settlement_pending`. It is ESM only.
 
 ## Quickstart
 
@@ -249,8 +252,11 @@ The answer is `{isValid: true, payer}`, with `payer` the owner in base58check.
 2. Reads the stored answer for the transaction id. A stored success means the payment is consumed: the answer is
    `invalid_transaction_state` with the transaction id, never a second success. Any other final answer is returned
    as it is. A claimed id, or a stored `settlement_pending`, goes on to step 6 and broadcasts nothing.
-3. For an id the store does not hold, repeats the expiration check and the node reads of `/verify`. An id the node
-   already holds is a consumed payment, answered `invalid_transaction_state` with the id.
+3. For an id the store does not hold, reads the id first, with `/wallet/gettransactionbyid` and
+   `/wallet/gettransactionfrompending`. An id the FullNode holds, in a block or its pending pool, is a consumed
+   payment, answered `invalid_transaction_state` with the id, whatever the other checks give and after the expiration
+   as before it. A node that does not answer the id reads gives `unexpected_settle_error`. Otherwise it repeats the
+   expiration check and the other node reads of `/verify`, and a refusal is answered with an empty `transaction`.
 4. Claims the transaction id with one conditional insert, so concurrent settles of one payment broadcast once.
 5. Broadcasts the signed bytes with `/wallet/broadcasthex`. A `DUP_TRANSACTION_ERROR` counts as broadcast.
 6. Reads the transaction's status every second with `@integraledger/lcp`'s `tronStatus`: the Solidity node's
@@ -320,14 +326,19 @@ request: it reads the chain from where it stopped, never submits twice, and retu
 The facilitator keeps the payment's row until that final answer is written, however long that takes, so a repeat made
 after the validity window has ended still reads the chain. On Tron a payment is answered success once: every later
 `/settle` of it answers `invalid_transaction_state` with the transaction id, because x402's `exact` family requires that
-a consumed payment produce a settlement failure, never a success. An answer with an empty `transaction` means nothing
-was submitted. When the store cannot be read, the facilitator cannot know whether the payment was submitted, so it
-answers `settlement_pending` with the id.
+a consumed payment produce a settlement failure, never a success. Once the payment's row is gone, the FullNode's
+blocks give that answer. When the store cannot be read, the facilitator cannot know whether the payment was submitted,
+so it answers `settlement_pending` with the id.
 
-A payment whose success has been answered is consumed. On Polkadot, a repeated `/settle` for it answers
-`invalid_transaction_state` with the success's `transaction`, never a second success, as x402's `exact` family
-requires: *"A consumed primitive MUST produce a settlement failure, never a success."* Of two concurrent settles of
-one payment, one answers success and the other that failure.
+An answer with an empty `transaction` means nothing was submitted: on Tron always, and on Polkadot while the
+facilitator keeps the payment's row (until 24 hours after its validity window). After that, a repeated `/settle` of a
+Polkadot extrinsic that landed finds no row, the node's validation refuses it, and the answer is `invalid_transaction`
+with an empty `transaction`.
+
+A payment whose success has been answered is consumed. On Polkadot, while the facilitator keeps the payment's row, a
+repeated `/settle` for it answers `invalid_transaction_state` with the success's `transaction`, never a second
+success, as x402's `exact` family requires: *"A consumed primitive MUST produce a settlement failure, never a
+success."* Of two concurrent settles of one payment, one answers success and the other that failure.
 
 ## API reference
 
@@ -449,12 +460,14 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
 - **What it does not check.** It checks that the payment carries H in the profile's form, not which H the seller issued.
   Its store claims a payment's id once, so the payment is submitted once. On Tron and on Polkadot, a success is answered
   only by the settle whose write stored it, and a repeated `/settle` of that payment answers `invalid_transaction_state`
-  with the transaction. Each profile's rule 6 puts the remaining checks on the resource server: it accepts a payment
-  only when the payment's H is one it issued for that request and has not seen claimed. The seller door's `claim` makes
-  both checks. It answers `404 claim/unknown` for an H it holds no record of, `409 claim/not-this-request` for a payment
-  of another request, and `409 claim/in-progress` or `409 claim/paid` once the ATR's payment has been claimed. The
-  facilitator checks the amount, asset and payee against the requirements it is given because x402 requires that of a
-  facilitator, and carries no business or legal logic beyond that.
+  with the transaction: on Tron from the stored answer or, once the row is gone, from the FullNode's blocks; on Polkadot
+  while the facilitator keeps the payment's row (until 24 hours after its validity window). Each profile's rule 6 puts
+  the remaining checks on the resource server: it accepts a payment only when the payment's H is one it issued for that
+  request and has not seen claimed. The seller door's `claim` makes both checks. It answers `404 claim/unknown` for an H
+  it holds no record of, `409 claim/not-this-request` for a payment of another request, and `409 claim/in-progress` or
+  `409 claim/paid` once the ATR's payment has been claimed. The facilitator checks the amount, asset and payee against
+  the requirements it is given because x402 requires that of a facilitator, and carries no business or legal logic
+  beyond that.
 
 ## Test vectors and conformance
 
@@ -466,11 +479,11 @@ java-tron's HTTP answers and its signature and TaPoS checks. They cover two conc
 submission), repeated settles while the node is down, a settle that finds its id claimed and unanswered, the end of
 each validity window (Tron's expiration and Polkadot's mortal era, capped by `System.BlockHashCount`), and a
 Polkadot remark that spells H with upper-case digits, refused before the node is asked. On Tron they also cover the
-owner's permission, TaPoS, a transaction id the node (in a block or its pending pool) or the store already holds, a
-consumed payment, and a `SUCCESS` receipt with and without the token's `Transfer` log, including the live
-USDT-TRC20 receipt whose `transfer` returned false. On Polkadot they also cover a repeat of a consumed payment, a
-block answer over 4 MiB and one over the `System.BlockLength` bound, and a block the node cannot give, before and
-after the era's end. They need
+owner's permission, TaPoS, a transaction id the node (in a block or its pending pool) or the store already holds,
+before and after the expiration and after the sweep has dropped the payment's row, a consumed payment, and a `SUCCESS`
+receipt with and without the token's `Transfer` log, including the live USDT-TRC20 receipt whose `transfer` returned
+false. On Polkadot they also cover a repeat of a consumed payment, a block answer over 4 MiB and one over the
+`System.BlockLength` bound, and a block the node cannot give, before and after the era's end. They need
 `INTEGRA_DATABASE_URL` set to a Postgres database.
 
 ## Requirements
@@ -479,8 +492,12 @@ after the era's end. They need
 - Postgres; the tests run on Postgres 18.
 - For Tron, a FullNode and a Solidity node with java-tron's HTTP API: the FullNode serves `/wallet/getaccount`,
   `/wallet/getnowblock`, `/wallet/getblock`, `/wallet/gettransactionbyid`, `/wallet/gettransactionfrompending`,
-  `/wallet/triggerconstantcontract`, `/wallet/broadcasthex` and `/wallet/gettransactioninfobyid`. For Polkadot, an
-  Asset Hub RPC node that serves JSON-RPC over HTTP.
+  `/wallet/triggerconstantcontract`, `/wallet/broadcasthex` and `/wallet/gettransactioninfobyid`. The FullNode keeps
+  the block history, not a lite FullNode: `/wallet/gettransactionbyid` finds a transaction only in the blocks the node
+  holds, and it answers a repeated `/settle` of a payment whose row is gone.
+- For Polkadot, an Asset Hub RPC node that serves JSON-RPC over HTTP. A node that keeps the state of every block (an
+  archive node) gives the events of any block; a pruning node discards the state of older blocks, and a block that
+  holds the extrinsic and whose state is discarded keeps the answer `settlement_pending`.
 
 ## Contributing
 
