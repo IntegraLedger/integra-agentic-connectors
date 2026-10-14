@@ -94,7 +94,7 @@
                 "zeroPartyRecoverable": false,
                 "forwardIndexable": false,
                 "publicProof": false,
-                "proves": "Before this payment, the buyer signed and paid an agreement transaction carrying this ATR's hash on <network>, recorded in <transaction>. The ATR was in the seller's storage before payment, and its hash and link were given to the seller to show the buyer and to place in its processor reference. Nothing the buyer signed carries the hash. The seller checked nothing the buyer signed, and settlement is the seller's report. This record does not show that the buyer's approval carried the hash."
+                "proves": "Before this payment, the buyer signed and paid an agreement transaction carrying this ATR's hash on <network>, recorded in <transaction>. This ATR's hash and link are for the seller to show the buyer and to put in its processor reference. Nothing the buyer signed carries the hash, nothing the buyer signed was checked, and settlement is the seller's report. This record does not show that the buyer's approval carried the hash."
               }
             }
           ],
@@ -178,7 +178,7 @@
               "zeroPartyRecoverable": false,
               "forwardIndexable": false,
               "publicProof": false,
-              "proves": "Before this payment, the buyer signed and paid an agreement transaction carrying this ATR's hash on eip155:84532, recorded in 0x2222222222222222222222222222222222222222222222222222222222222222. The ATR was in the seller's storage before payment, and its hash and link were given to the seller to show the buyer and to place in its processor reference. Nothing the buyer signed carries the hash. The seller checked nothing the buyer signed, and settlement is the seller's report. This record does not show that the buyer's approval carried the hash."
+              "proves": "Before this payment, the buyer signed and paid an agreement transaction carrying this ATR's hash on eip155:84532, recorded in 0x2222222222222222222222222222222222222222222222222222222222222222. This ATR's hash and link are for the seller to show the buyer and to put in its processor reference. Nothing the buyer signed carries the hash, nothing the buyer signed was checked, and settlement is the seller's report. This record does not show that the buyer's approval carried the hash."
             },
             "settledBy": "seller-report"
           },
@@ -220,7 +220,7 @@
               "zeroPartyRecoverable": false,
               "forwardIndexable": false,
               "publicProof": false,
-              "proves": "Before this payment, the buyer signed and paid an agreement transaction carrying this ATR's hash on eip155:84532, recorded in 0x2222222222222222222222222222222222222222222222222222222222222222. The ATR was in the seller's storage before payment, and its hash and link were given to the seller to show the buyer and to place in its processor reference. Nothing the buyer signed carries the hash. The seller checked nothing the buyer signed, and settlement is the seller's report. This record does not show that the buyer's approval carried the hash."
+              "proves": "Before this payment, the buyer signed and paid an agreement transaction carrying this ATR's hash on eip155:84532, recorded in 0x2222222222222222222222222222222222222222222222222222222222222222. This ATR's hash and link are for the seller to show the buyer and to put in its processor reference. Nothing the buyer signed carries the hash, nothing the buyer signed was checked, and settlement is the seller's report. This record does not show that the buyer's approval carried the hash."
             },
             "settledBy": "seller-report"
           },

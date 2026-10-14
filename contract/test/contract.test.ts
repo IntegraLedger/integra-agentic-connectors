@@ -1,14 +1,24 @@
 // The contract's checks: the document is valid OpenAPI 3.1 (checked with Ajv2020 against the published OAS 3.1 schema, pinned by its
 // SHA-256); every vector's request and expected answer validate against the operation's schemas; each stored ATR's
 // bytes hash to the value the vector states (the values were computed with sha256sum and openssl dgst over bytes
-// written by hand); and a request with an extra member fails validation against the document.
+// written by hand); every pattern an answer carries is its pairing's pattern in @integraledger/lcp's registry
+// (BINDINGS); and a request with an extra member fails validation against the document.
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
 import { describe, expect, it } from "vitest";
+import { BINDINGS, type Json, type LcpPattern } from "@integraledger/lcp";
 import { exactEip3009, exactErc7710 } from "@integraledger/lcp/x402";
-import { OPENAPI_BYTES, REFUSALS, VECTORS, type AgreementView, type RecordView } from "../src/index.js";
+import {
+  OPENAPI_BYTES,
+  REFUSALS,
+  VECTORS,
+  type AgreementView,
+  type IssueResponse,
+  type Proves,
+  type RecordView,
+} from "../src/index.js";
 
 const addFormats = addFormatsModule as unknown as (a: Ajv2020) => Ajv2020;
 const OAS_SCHEMA_SHA256 = "da01ba28852cac0de53893797cb8d1942bc3b05084f526dcc216717dec314ed0";
@@ -41,6 +51,27 @@ function operation(method: string, path: string): { request?: Schema; response(s
       return s === undefined ? undefined : rewrite(s);
     },
   };
+}
+
+/** Each pairing's pattern in lcp's registry: the source of every pattern a vector's answer carries. */
+const REGISTERED = new Map<string, LcpPattern>(BINDINGS.map((b) => [b.id, b.pattern]));
+
+/**
+ * The patterns an expected answer carries, each with its pairing: the issue answer's `pairings`, and the `proves` of a
+ * claim or a record, with the record's agreement leg.
+ */
+function answered(body: Json): { pairing: string | undefined; pattern: LcpPattern; agreement: AgreementView | null }[] {
+  const b = body as Record<string, unknown>;
+  const found: { pairing: string | undefined; pattern: LcpPattern; agreement: AgreementView | null }[] = [];
+  for (const p of (b["pairings"] as IssueResponse["pairings"] | undefined) ?? []) {
+    found.push({ pairing: p.pairing, pattern: p.pattern, agreement: null });
+  }
+  const proves = b["proves"] as Proves | undefined;
+  if (proves?.pattern) {
+    const pairing = (b["pairing"] as string | undefined) ?? (b["settlement"] as RecordView["settlement"] | undefined)?.pairing;
+    found.push({ pairing, pattern: proves.pattern, agreement: (b["agreement"] as AgreementView | null | undefined) ?? null });
+  }
+  return found;
 }
 
 function check(schema: Schema, value: unknown): string[] {
@@ -124,6 +155,29 @@ describe("the vectors", () => {
       }
     });
 
+    it(`${name} · every pattern an answer carries is its pairing's pattern in lcp's registry`, () => {
+      for (const step of v.steps) {
+        for (const { pairing, pattern, agreement } of answered(step.expect.body)) {
+          const registered = REGISTERED.get(pairing ?? "");
+          expect(registered, `${name} ${pairing}`).toBeDefined();
+          if (agreement === null) {
+            expect(pattern, `${name} ${pairing}`).toEqual(registered);
+          } else if (agreement.state === "recorded") {
+            // The record names the recorded agreement in the statement's <network> and <transaction>.
+            const statement = registered!.proves
+              .replace("<network>", () => agreement.network!)
+              .replace("<transaction>", () => agreement.transaction!);
+            expect(pattern, `${name} ${pairing}`).toEqual({ ...registered, proves: statement });
+          } else {
+            // With no agreement recorded, the record states what is missing in place of the pairing's statement.
+            const { proves: _missing, ...members } = pattern;
+            const { proves: _statement, ...expected } = registered!;
+            expect(members, `${name} ${pairing}`).toEqual(expected);
+          }
+        }
+      }
+    });
+
     it(`${name} · each stored ATR's bytes hash to the stated value`, () => {
       for (const step of v.steps) {
         if (step.stored === undefined) continue;
@@ -137,6 +191,13 @@ describe("the vectors", () => {
     const f = VECTORS["CV1"]!.fixed;
     expect(`0x${createHash("sha256").update(f.credential, "utf8").digest("hex")}`).toBe(f.credentialDigest);
     expect(f.credentialDigest).toBe("0xbc357689ffc51ab5e745f005b3df2faaab2c715f110e41fc56d4ca8fdead30d4");
+  });
+
+  it("the answers that carry a pattern, each checked against lcp's registry, are CV1, CV2, CV3, CV6, CV7, CV9 and CV10's", () => {
+    const carrying = Object.entries(VECTORS)
+      .filter(([, v]) => v.steps.some((step) => answered(step.expect.body).length > 0))
+      .map(([name]) => name);
+    expect(carrying).toEqual(["CV1", "CV2", "CV3", "CV6", "CV7", "CV9", "CV10"]);
   });
 
   it("CV1's request with an extra member \"price\": 1 fails validation against the document", () => {

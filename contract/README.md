@@ -471,8 +471,8 @@ CV10 ok 0x61c55d46c99a6199
 ```
 
 The package's own tests validate `openapi.json` against the published OAS 3.1 schema (pinned by its SHA-256), every
-vector's request and answer against the operation's schemas, every stored ATR's hash, and the refusal table against
-the document.
+vector's request and answer against the operation's schemas, every stored ATR's hash, every pattern a vector's answer
+carries against its pairing's pattern in `@integraledger/lcp`'s registry, and the refusal table against the document.
 
 ## Requirements
 
