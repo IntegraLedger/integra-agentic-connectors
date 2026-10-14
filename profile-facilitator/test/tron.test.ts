@@ -744,8 +744,8 @@ describe("repeated settles and node errors", () => {
 
   // A transaction id the node holds, in a block or its pending pool, is a consumed payment (x402's exact family: "a
   // consumed primitive MUST produce a settlement failure, never a success"), and an empty `transaction` says nothing
-  // was broadcast. So for an id the store does not hold, the node's id reads answer before the expiration check and
-  // before any other refusal.
+  // was broadcast. So for an id the store does not hold, the node's id reads, made while the settle's deadline leaves
+  // time for them, answer before the expiration refusal and before any other refusal.
   it("a /settle of an expired transaction the store does not hold and the node's blocks hold answers invalid_transaction_state with the id", async () => {
     await start({ held: () => ({ txID: TXID_V2, raw_data_hex: RAW_V2, signature: [signatureV2] }) });
     vi.setSystemTime(EXPIRATION_V2 + 1);
@@ -1118,10 +1118,9 @@ describe("the operator log", () => {
     expect(calls("/wallet/broadcasthex")).toHaveLength(0);
   });
 
-  it("a settle whose deadline passes once its store read has answered reaches the log as settle-deadline-passed before the node reads, and makes none of them", async () => {
+  it("a settle whose deadline passes once its store read has answered reaches the log as settle-deadline-passed before the node reads, and sends no node call", async () => {
     // The store's answer for the id (none held) arrives within its bound, and the facilitator goes on with it once the
-    // clock is at settleWaitMs (1,000 ms): the deadline has passed before the reads of the account, the head, the
-    // reference block and the simulation. The two id reads start before that check, and are answered.
+    // clock is at settleWaitMs (1,000 ms): the deadline has passed before the node reads, the two id reads among them.
     await start({}, 1_000);
     const read = resumeLate((call) => call === "store.read");
     const answer = post(`${base}/settle`, body(TX_V2));
@@ -1133,7 +1132,14 @@ describe("the operator log", () => {
       { event: "settle-deadline-passed", ...ABOUT, before: "node reads", settleWaitMs: 1_000 },
     ]);
     expect(entries[0]!.cause).toBeUndefined();
-    for (const path of ["/wallet/getaccount", "/wallet/getnowblock", "/wallet/getblock", "/wallet/triggerconstantcontract"]) {
+    for (const path of [
+      "/wallet/gettransactionbyid",
+      "/wallet/gettransactionfrompending",
+      "/wallet/getaccount",
+      "/wallet/getnowblock",
+      "/wallet/getblock",
+      "/wallet/triggerconstantcontract",
+    ]) {
       expect(calls(path)).toHaveLength(0);
     }
     expect((await db.pool.query("SELECT id FROM settlement")).rowCount).toBe(0);

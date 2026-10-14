@@ -293,23 +293,31 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
   }
 
   /**
-   * The expiration window, then the node reads, made together: the owner's permission, TaPoS, the ids the node holds
-   * in its blocks and in its pending pool, and the simulation. The first refusal in that order is the answer. Each call
-   * is bounded by the node call bound and by `deadline`. `ids` are the two id reads when the caller has made them.
+   * The checks made before any node call, in this order: the expiration window, then `deadline`. The first refusal is
+   * the answer. A deadline spent here sends no node call.
    */
-  async function checkNow(
-    c: Checked,
-    deadline = Infinity,
-    ids?: Promise<[InvalidReason | null, InvalidReason | null]>,
-  ): Promise<InvalidReason | null> {
+  function beforeReads(c: Checked, deadline: number): InvalidReason | null {
     const now = BigInt(Date.now());
     const expiration = c.raw.expiration;
     if (expiration <= now || expiration > now + BigInt(c.maxTimeoutSeconds) * 1000n) return "invalid_payload";
     if (deadline - performance.now() <= 0) return unexpectedVerify(log, deadlinePassed(c, "node reads"));
+    return null;
+  }
+
+  /**
+   * The node reads, made together: the owner's permission, TaPoS, the ids the node holds in its blocks and in its
+   * pending pool (`ids`), and the simulation. The first refusal in that order is the answer. Each call is bounded by
+   * the node call bound and by `deadline`.
+   */
+  async function nodeReads(
+    c: Checked,
+    deadline: number,
+    ids: Promise<[InvalidReason | null, InvalidReason | null]>,
+  ): Promise<InvalidReason | null> {
     const [account, reference, [inBlocks, inPool], simulation] = await Promise.all([
       permitted(c, deadline),
       tapos(c, deadline),
-      ids ?? idReads(c, deadline),
+      ids,
       simulated(c, deadline),
     ]);
     return [account, reference, inBlocks, inPool, simulation].find((r) => r !== null) ?? null;
@@ -326,7 +334,7 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
       return invalid(unexpectedVerify(log, { event: "store-call-failed", ...about(c), call: "read" }, e), c.payer);
     }
     if (stored.state !== "none") return invalid("invalid_transaction_state", c.payer);
-    const now = await checkNow(c);
+    const now = beforeReads(c, Infinity) ?? (await nodeReads(c, Infinity, idReads(c, Infinity)));
     return now === null ? { isValid: true, payer: c.payer } : invalid(now, c.payer);
   }
 
@@ -497,14 +505,16 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
   /**
    * Answers within `settleWaitMs`. A stored success means the payment is consumed, and gives
    * `invalid_transaction_state` with the id; any other stored final answer is given as it is. A claimed id, or a stored
-   * pending answer, is read again from the chain. For an id the store does not hold, the node's id reads answer first:
-   * an id the node holds, in a block or its pending pool, is consumed too, whatever else the checks refuse and after
-   * the expiration as before it, and a node that does not answer them gives `unexpected_settle_error`. A claimed id is
-   * never released: a broadcast the node refused as a duplicate is a consumed payment, and any other refused broadcast,
-   * or a broadcast request that cannot have reached the node, gives `unexpected_settle_error` with no transaction,
-   * which says nothing was broadcast. Each is stored final, and every repeat gets the stored answer. When the store
-   * cannot be read, the facilitator cannot know whether the transaction was broadcast, so the answer is pending with
-   * its id.
+   * pending answer, is read again from the chain. For an id the store does not hold, the expiration window and then
+   * the deadline are checked before any node call: a deadline spent there sends none, and gives
+   * `unexpected_settle_error`, or `invalid_payload` for an expiration outside the window. The node's id reads then
+   * answer first: an id the node holds, in a block or its pending pool, is consumed too, whatever else the checks
+   * refuse, the expiration window among them, and a node that does not answer them gives `unexpected_settle_error`.
+   * A claimed id is never released: a broadcast the node refused as a duplicate is a consumed payment, and any other
+   * refused broadcast, or a broadcast request that cannot have reached the node, gives `unexpected_settle_error` with
+   * no transaction, which says nothing was broadcast. Each is stored final, and every repeat gets the stored answer.
+   * When the store cannot be read, the facilitator cannot know whether the transaction was broadcast, so the answer is
+   * pending with its id.
    */
   async function settle(r: FacilitatorRequest): Promise<SettleAnswer> {
     const deadline = performance.now() + settleWaitMs;
@@ -524,8 +534,13 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     }
     const waitUntil = deadline - answerReserve(settleWaitMs);
     if (stored.state !== "none") return keep(c, await watch(c, waitUntil, true), deadline);
+    // An expiration outside the window waits for the id reads while the deadline leaves time for them.
+    const before = beforeReads(c, deadline);
+    if (before !== null && (before !== "invalid_payload" || left() <= 0)) {
+      return failed(settleReason(before), "", network);
+    }
     const ids = idReads(c, deadline);
-    const now = await checkNow(c, deadline, ids);
+    const now = before ?? (await nodeReads(c, deadline, ids));
     const held = await ids;
     if (held.includes("invalid_transaction_state")) return consumed(c);
     if (now !== null) return failed(settleReason(held.find((r) => r !== null) ?? now), "", network);
