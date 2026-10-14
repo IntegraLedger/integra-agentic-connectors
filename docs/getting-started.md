@@ -11,11 +11,11 @@ Every step is a complete program you can run.
 ## 1. Install
 
 ```sh
-npm install @integraledger/agentic-connectors
+npm install @integraledger/agentic-connectors @integraledger/lcp
 ```
 
-The package needs Node.js `>=26.10.0` and is ESM only. Node.js 26 runs TypeScript files directly, so each
-program below runs with `node <file>.ts`.
+The package needs Node.js `>=26.10.0` and is ESM only, and takes `@integraledger/lcp` (`~0.4.0`) as a peer dependency.
+Node.js 26 runs TypeScript files directly, so each program below runs with `node <file>.ts`.
 
 ## 2. Point at a door
 

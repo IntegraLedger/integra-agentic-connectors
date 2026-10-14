@@ -60,14 +60,15 @@ sequenceDiagram
 ## Install
 
 ```sh
-npm install @integraledger/profile-facilitator
+npm install @integraledger/profile-facilitator @integraledger/lcp
 ```
 
 It needs Node.js `>=26.10.0`, Postgres (the tests run on Postgres 18), and an HTTP endpoint for each network you
 serve: a Tron FullNode that keeps the block history (not a lite FullNode) and a Solidity node, or a Polkadot Asset Hub
 RPC node. A Polkadot node that keeps the state of every block (an archive node) gives the events of any block; a
 pruning node discards the state of older blocks, and a block that holds the extrinsic and whose state is discarded
-keeps the answer `settlement_pending`. It is ESM only.
+keeps the answer `settlement_pending`. It is ESM only. `@integraledger/lcp` (`~0.4.0`) is its peer dependency: install
+it beside it.
 
 ## Quickstart
 

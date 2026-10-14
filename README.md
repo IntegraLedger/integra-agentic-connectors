@@ -45,10 +45,11 @@ flowchart LR
 
 | Package | Purpose | Install |
 |---|---|---|
-| [`@integraledger/agentic-connectors`](./contract) | The seller door's contract: `openapi.json`, its TypeScript types, the refusal table and the vectors. | `npm install @integraledger/agentic-connectors` |
-| [`@integraledger/profile-facilitator`](./profile-facilitator) | An x402 facilitator for `x402/exact/tron/lcp-trc20-memo` and `x402/exact/polkadot/lcp-assets-remark`. | `npm install @integraledger/profile-facilitator` |
+| [`@integraledger/agentic-connectors`](./contract) | The seller door's contract: `openapi.json`, its TypeScript types, the refusal table and the vectors. | `npm install @integraledger/agentic-connectors @integraledger/lcp` |
+| [`@integraledger/profile-facilitator`](./profile-facilitator) | An x402 facilitator for `x402/exact/tron/lcp-trc20-memo` and `x402/exact/polkadot/lcp-assets-remark`. | `npm install @integraledger/profile-facilitator @integraledger/lcp` |
 
-Both need Node.js `>=26.10.0` and are ESM only. The facilitator also needs Postgres.
+Both need Node.js `>=26.10.0` and are ESM only, and both take `@integraledger/lcp` (`~0.4.0`) as a peer dependency. The
+facilitator also needs Postgres.
 
 ## Documentation
 

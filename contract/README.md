@@ -70,11 +70,11 @@ sequenceDiagram
 ## Install
 
 ```sh
-npm install @integraledger/agentic-connectors
+npm install @integraledger/agentic-connectors @integraledger/lcp
 ```
 
-It needs Node.js `>=26.10.0`, and it is ESM only. Its one dependency is `@integraledger/lcp`, whose `AtrHash`,
-`Json` and `LcpPattern` types it uses.
+It needs Node.js `>=26.10.0`, and it is ESM only. Its one peer dependency is `@integraledger/lcp` (`~0.4.0`), whose
+`AtrHash`, `Json` and `LcpPattern` types it uses: install it beside it.
 
 ## Quickstart
 
@@ -478,7 +478,7 @@ the document.
 
 - Node.js `>=26.10.0`.
 - ESM (`"type": "module"`).
-- `@integraledger/lcp`, installed as a dependency.
+- `@integraledger/lcp` `~0.4.0`, installed beside it as a peer dependency.
 
 ## Contributing
 

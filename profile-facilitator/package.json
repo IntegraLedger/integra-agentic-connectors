@@ -43,14 +43,17 @@
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
     "test": "vitest run"
   },
+  "peerDependencies": {
+    "@integraledger/lcp": "~0.4.0"
+  },
   "dependencies": {
-    "@integraledger/lcp": "0.2.0",
     "@noble/curves": "2.4.0",
     "@noble/hashes": "2.4.0",
     "@polkadot/api": "17.0.1",
     "pg": "8.23.0"
   },
   "devDependencies": {
+    "@integraledger/lcp": "0.4.0",
     "vitest": "5.0.1"
   }
 }
