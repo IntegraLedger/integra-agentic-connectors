@@ -56,10 +56,17 @@ jobs:
           echo "$RUNNER_TEMP/pnpm" >> "$GITHUB_PATH"
       - run: pnpm install --frozen-lockfile
       - run: pnpm -r --if-present run build
+      - run: pnpm -r --if-present run typecheck
       - name: The tests, profile-facilitator's against the Postgres service
         env:
           INTEGRA_DATABASE_URL: postgres://postgres@127.0.0.1:5432/postgres
         run: pnpm -r --if-present run test
+      - name: The generated reference pages match openapi.json, the vectors and the lcp registry
+        run: node scripts/docs.mjs --check
+      - name: Every TypeScript sample in the READMEs and docs/ type-checks, runs, and prints the output shown
+        env:
+          DATABASE_URL: postgres://postgres@127.0.0.1:5432/postgres
+        run: node scripts/samples.mjs
       - name: Pack
         run: |
           set -eu
