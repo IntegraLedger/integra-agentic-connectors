@@ -1,14 +1,16 @@
 // Compiles and runs every TypeScript sample in the READMEs and in docs/, against the packages built in this tree.
 //
 // A sample is a fenced block whose language is `ts` or `typescript`. A fenced `text` block whose info string holds
-// `output`, directly after a sample, is that sample's expected standard output. A sample whose info string holds
-// `server` is sent SIGTERM once it has printed its first line, and must then exit 0.
+// `output`, directly after a sample, is that sample's expected standard output; a sample without one fails. A sample
+// whose info string holds `server` is sent SIGTERM once it has printed its first line, and must then exit 0. A run that
+// finds no sample fails.
 //
 // A sample runs inside the package it imports (`@integraledger/profile-facilitator`, else
 // `@integraledger/agentic-connectors`), so both it and `@integraledger/lcp` resolve as they do for an installer. It
 // is type-checked with the workspace's TypeScript under scripts/tsconfig.docs.json, then run with Node. The samples reach a
 // fresh local stand-in door (scripts/stand-in-door.mjs) through SELLER_DOOR_URL and SELLER_CREDENTIAL, and Postgres through
-// DATABASE_URL, taken from DATABASE_URL or INTEGRA_DATABASE_URL.
+// DATABASE_URL, taken from DATABASE_URL or INTEGRA_DATABASE_URL; a run with neither set stops before any sample runs. Each
+// sample sees only those variables, with PATH, HOME and TMPDIR.
 //
 // Usage: node scripts/samples.mjs [--list]
 import { spawn, spawnSync } from "node:child_process";
@@ -109,12 +111,25 @@ function run(file, cwd, env, server) {
 }
 
 const all = samples();
+if (all.length === 0) {
+  console.log("no TypeScript sample in the READMEs or docs/, so nothing is checked");
+  process.exit(1);
+}
 if (process.argv.includes("--list")) {
   for (const s of all) console.log(`${s.file}:${s.line} ${s.pkg}${s.output !== undefined ? " (output)" : ""}${s.server ? " (server)" : ""}`);
   process.exit(0);
 }
 
 const database = process.env["DATABASE_URL"] || process.env["INTEGRA_DATABASE_URL"];
+if (!database) {
+  console.log("set DATABASE_URL or INTEGRA_DATABASE_URL to a Postgres database: the facilitator's samples write to it");
+  process.exit(1);
+}
+const tsc = join(root, "node_modules", ".bin", "tsc");
+if (!statSync(tsc, { throwIfNoEntry: false })?.isFile()) {
+  console.log("no TypeScript compiler in node_modules/.bin: run pnpm install first");
+  process.exit(1);
+}
 const dirs = new Map();
 for (const [i, s] of all.entries()) {
   const dir = join(PACKAGES[s.pkg], ".samples");
@@ -129,14 +144,6 @@ for (const [i, s] of all.entries()) {
 }
 
 let failed = 0;
-const tsc = [join(root, "node_modules", ".bin", "tsc"), join(root, "..", "node_modules", ".bin", "tsc")].find((f) => {
-  try {
-    return statSync(f).isFile();
-  } catch {
-    return false;
-  }
-});
-if (tsc === undefined) throw new Error("no TypeScript compiler in node_modules/.bin: run pnpm install first");
 for (const [dir, files] of dirs) {
   writeFileSync(
     join(dir, "tsconfig.json"),
@@ -152,15 +159,20 @@ for (const [dir, files] of dirs) {
 
 try {
   for (const s of all) {
+    if (s.output === undefined) {
+      failed++;
+      console.log(`FAIL ${s.file}:${s.line} has no \`text output\` block after it`);
+      continue;
+    }
     // Each sample gets a fresh stand-in door, so no sample sees another's requests.
     const door = await startDoor();
-    const env = { ...process.env, SELLER_DOOR_URL: door.url, SELLER_CREDENTIAL: CREDENTIAL };
-    if (database) env["DATABASE_URL"] = database;
+    const env = { SELLER_DOOR_URL: door.url, SELLER_CREDENTIAL: CREDENTIAL, DATABASE_URL: database };
+    for (const name of ["PATH", "HOME", "TMPDIR"]) if (process.env[name] !== undefined) env[name] = process.env[name];
     const r = await run(s.path, dirname(s.path), env, s.server);
     door.stop();
     const ok = r.code === 0;
     const got = r.stdout.replace(/\s+$/, "");
-    const matches = s.output === undefined || got === s.output.replace(/\s+$/, "");
+    const matches = got === s.output.replace(/\s+$/, "");
     if (ok && matches) {
       console.log(`ok   ${s.file}:${s.line}`);
       continue;

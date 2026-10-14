@@ -97,8 +97,11 @@ DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres node scripts/samples.mj
   `contract/openapi.json`, `scripts/refusal-meanings.json`, `contract/vectors/` and `@integraledger/lcp`'s pairing
   registry. Without `--check` it writes them.
 - `scripts/samples.mjs` type-checks and runs every TypeScript sample in the READMEs and `docs/` against the packages
-  built in this tree, compares each printed output with the one shown, and gives each sample a fresh
-  `scripts/stand-in-door.mjs` for the door.
+  built in this tree, with this tree's TypeScript, and compares what each prints with the `text output` block after
+  it. A sample without that block fails, and so does a run that finds no sample. Each sample gets a fresh
+  `scripts/stand-in-door.mjs` for the door and the Postgres database that `DATABASE_URL` (or `INTEGRA_DATABASE_URL`)
+  names; with neither set, no sample runs. A sample sees no other variable of the caller's than `PATH`, `HOME` and
+  `TMPDIR`.
 
 The documentation site is built from `docs/` by the app in `website/`, which has its own lockfile; see
 [website/README.md](./website/README.md).

@@ -28,8 +28,9 @@ Each facilitator test file creates and drops its own database on the server `INT
 ## Every sample is checked
 
 Every TypeScript sample in a README or in `docs/` is type-checked and run against the packages built in the same
-commit, and its printed output is compared with the output shown under it. The documentation site type-checks the
-same samples again with Twoslash when it builds. Run the checks after the build:
+commit, and its printed output is compared with the `text output` block after it; a sample without that block fails.
+The documentation site type-checks the same samples again with Twoslash when it builds. Run the checks after the
+build, with `DATABASE_URL` naming a Postgres database, which the facilitator's samples write to:
 
 ```sh
 node scripts/docs.mjs --check
