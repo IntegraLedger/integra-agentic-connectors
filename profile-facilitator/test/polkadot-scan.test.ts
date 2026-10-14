@@ -179,7 +179,7 @@ const body = (extrinsic = XT_V3) => ({
   paymentPayload: { x402Version: 2, accepted: O_P, payload: { extrinsic, call: CALL_V2 } },
   paymentRequirements: O_P,
 });
-/** A /settle's answer, waking its poll whenever it sleeps: a wait that ends pending ends at the end of settleWaitMs. */
+/** A /settle's answer, waking its poll whenever it sleeps; a wait that ends pending ends within settleWaitMs. */
 const settle = async (extrinsic = XT_V3) => (await clock.answered([post(`${base}/settle`, body(extrinsic))]))[0]!.json;
 const methodCalls = (method: string) =>
   node!.calls.map((c) => c.body as { method: string; params: unknown[] }).filter((b) => b.method === method);

@@ -102,7 +102,7 @@ const body = () => ({
   paymentPayload: { x402Version: 2, accepted: O_P, payload: { extrinsic: XT_V3, call: CALL_V2 } },
   paymentRequirements: O_P,
 });
-/** A /settle's answer, waking its poll whenever it sleeps: a wait that ends pending ends at the end of settleWaitMs. */
+/** A /settle's answer, waking its poll whenever it sleeps; a wait that ends pending ends within settleWaitMs. */
 const settle = async () => (await clock.answered([post(`${base}/settle`, body())]))[0]!.json;
 const submits = () => node!.calls.filter((c) => (c.body as { method: string }).method === "author_submitExtrinsic").length;
 const PENDING = { success: false, errorReason: "settlement_pending", transaction: HASH_V3, network: NETWORK };

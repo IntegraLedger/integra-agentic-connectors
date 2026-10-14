@@ -185,7 +185,7 @@ afterEach(async () => {
 /** The calls the node has received at `path`. */
 const calls = (path: string) => node.calls.filter((c) => c.path === path);
 
-/** A /settle's answer, waking its poll whenever it sleeps: a wait that ends pending ends at the end of settleWaitMs. */
+/** A /settle's answer, waking its poll whenever it sleeps; a wait that ends pending ends within settleWaitMs. */
 async function settle(): Promise<unknown> {
   const [res] = await clock.answered([post(`${base}/settle`, body(TX_V2))]);
   return res!.json;

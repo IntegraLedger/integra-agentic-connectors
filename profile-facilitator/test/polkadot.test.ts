@@ -156,7 +156,7 @@ const isValidation = (method: string, params: unknown[]) =>
   method === "state_call" && params[0] === "TaggedTransactionQueue_validate_transaction";
 const validations = () => calls("state_call").filter((b) => isValidation(b.method, b.params)).length;
 
-/** A /settle's answer, waking its poll whenever it sleeps: a wait that ends pending ends at the end of settleWaitMs. */
+/** A /settle's answer, waking its poll whenever it sleeps; a wait that ends pending ends within settleWaitMs. */
 async function settle(sent = body()): Promise<unknown> {
   const [res] = await clock.answered([post(`${base}/settle`, sent)]);
   return res!.json;

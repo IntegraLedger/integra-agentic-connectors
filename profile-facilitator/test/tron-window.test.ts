@@ -91,7 +91,7 @@ async function start(settleWaitMs: number): Promise<void> {
 const broadcasts = () => node.calls.filter((c) => c.path === "/wallet/broadcasthex").length;
 const PENDING = { success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK };
 
-/** A /settle's answer, waking its poll whenever it sleeps: a wait that ends pending ends at the end of settleWaitMs. */
+/** A /settle's answer, waking its poll whenever it sleeps; a wait that ends pending ends within settleWaitMs. */
 const settle = async () => (await clock.answered([post(`${base}/settle`, body())]))[0]!.json;
 
 beforeEach(async () => {
