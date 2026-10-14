@@ -73,12 +73,25 @@ export interface Stub {
   url: string;
   calls: Call[];
   close(): Promise<void>;
+  /** Listens again on the node's port, once `leaves` has stopped it. */
+  listen(): Promise<void>;
 }
 
-/** A local node: each POST's JSON body goes to `answer`, whose value is sent back as JSON; `hang` never answers. */
-export async function stub(answer: (path: string, body: unknown) => unknown | Promise<unknown>): Promise<Stub> {
+/**
+ * A local node: each POST's JSON body goes to `answer`, whose value is sent back as JSON; `hang` never answers.
+ *
+ * With `leaves`, the node stops listening once `leaves` is true of the calls it has received, so a later request is
+ * refused at connect and carries no byte to it, while each call it has received is answered. Each answer closes its
+ * connection, so no later request is sent over an earlier connection, and the node listens on a `freePort()`, which
+ * `listen()` takes again.
+ */
+export async function stub(
+  answer: (path: string, body: unknown) => unknown | Promise<unknown>,
+  leaves?: (calls: readonly Call[]) => boolean,
+): Promise<Stub> {
   const calls: Call[] = [];
   const open = new Set<ServerResponse>();
+  let left = false;
   const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
     const parts: Buffer[] = [];
     for await (const c of req) parts.push(c as Buffer);
@@ -86,20 +99,29 @@ export async function stub(answer: (path: string, body: unknown) => unknown | Pr
     const body: unknown = text === "" ? undefined : JSON.parse(text);
     const path = req.url ?? "";
     calls.push({ path, body });
+    if (leaves !== undefined && !left && leaves(calls)) {
+      left = true;
+      server.close();
+    }
     const value = await answer(path, body);
     if (value === HANG) {
       open.add(res);
       return;
     }
     const out = JSON.stringify(value);
-    res.writeHead(200, { "content-type": "application/json" });
+    const closing = leaves === undefined ? {} : { connection: "close" };
+    res.writeHead(200, { "content-type": "application/json", ...closing });
     res.end(out);
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const chosen = leaves === undefined ? 0 : await freePort();
+  await new Promise<void>((resolve) => server.listen(chosen, "127.0.0.1", resolve));
   const port = (server.address() as { port: number }).port;
   return {
     url: `http://127.0.0.1:${port}`,
     calls,
+    async listen() {
+      await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
+    },
     async close() {
       for (const r of open) r.destroy();
       server.closeAllConnections();

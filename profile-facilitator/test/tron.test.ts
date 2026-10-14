@@ -20,6 +20,7 @@ import {
   tronChainReads,
   V2_PAYER_HEX,
   V2_REF_BLOCK,
+  type Call,
   type Stub,
 } from "./support.js";
 
@@ -118,6 +119,8 @@ interface Node {
   held?: () => unknown;
   /** `/wallet/gettransactionfrompending`'s answer. */
   pendingPool?: () => unknown;
+  /** When the node stops listening, given the calls it has received (support.ts's `stub`). */
+  leaves?: (calls: readonly Call[]) => boolean;
 }
 
 let db: Awaited<ReturnType<typeof freshDatabase>>;
@@ -146,7 +149,7 @@ async function start(n: Node = {}, settleWaitMs = 3_000): Promise<void> {
     if (path === "/wallet/gettransactionbyid" && n.held !== undefined) return n.held();
     if (path === "/wallet/gettransactionfrompending" && n.pendingPool !== undefined) return n.pendingPool();
     return tronChainReads(path, sent) ?? {};
-  });
+  }, n.leaves);
   const port = await freePort();
   const f = await serveProfileFacilitator({
     listen: `127.0.0.1:${port}`,
@@ -723,6 +726,29 @@ describe("repeated settles and node errors", () => {
     expect(stored.rows[0]?.answer).toEqual(REFUSED);
     expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(REFUSED);
     expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
+  });
+
+  it("a broadcast refused at connect gives unexpected_settle_error with no transaction, stored final: a repeat once the node listens again gets it and broadcasts nothing", async () => {
+    // x402: `transaction` is "empty string if no transaction was broadcast", and a connection the node refuses at
+    // connect carries no byte of the broadcast to it. The node stops listening once it has received the reads /settle
+    // makes before the broadcast. Every answer to a repeated /settle for the same id is the stored one, so the claim
+    // keeps that answer, and a repeat gets it even once the node listens again.
+    const reads = [
+      "/wallet/getaccount",
+      "/wallet/getnowblock",
+      "/wallet/getblock",
+      "/wallet/gettransactionbyid",
+      "/wallet/gettransactionfrompending",
+      "/wallet/triggerconstantcontract",
+    ];
+    await start({ leaves: (calls) => reads.every((path) => calls.some((c) => c.path === path)) });
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(REFUSED);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(0);
+    const stored = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, TXID_V2]);
+    expect(stored.rows[0]?.answer).toEqual(REFUSED);
+    await node.listen();
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(REFUSED);
+    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(0);
   });
 });
 

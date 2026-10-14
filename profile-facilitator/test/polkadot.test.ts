@@ -11,7 +11,7 @@ import { ApiPromise } from "@polkadot/api";
 import { exactPolkadotRemark } from "@integraledger/lcp/polkadot";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
-import { HANG, fixture, freePort, freshDatabase, post, stub, type Stub } from "./support.js";
+import { HANG, fixture, freePort, freshDatabase, post, stub, type Call, type Stub } from "./support.js";
 
 const NETWORK = "polkadot:68d56f15f85d3136970ec16946040bc1";
 /** SHA-256("abc"), FIPS 180-2's first example: the H of the lcp vectors. */
@@ -80,6 +80,8 @@ interface Chain {
   finalized?: () => number;
   /** Whether the head read (`chain_getHeader` with no block) never answers. */
   headHangs?: boolean;
+  /** When the node stops listening, given the calls it has received (support.ts's `stub`). */
+  leaves?: (calls: readonly Call[]) => boolean;
 }
 
 let db: Awaited<ReturnType<typeof freshDatabase>>;
@@ -123,7 +125,7 @@ async function start(chain: Chain = {}, network: string = NETWORK, settleWaitMs 
       return answer(chain.events ?? events(TRANSFERRED(1337), REMARKED, SUCCESS));
     }
     return { jsonrpc: "2.0", id, error: { code: -32601, message: `no stub for ${method} ${p}` } };
-  });
+  }, chain.leaves);
   const port = await freePort();
   const f = await serveProfileFacilitator({
     listen: `127.0.0.1:${port}`,
@@ -480,6 +482,25 @@ describe("/settle", () => {
     expect((await post(`${base}/settle`, body())).json).toEqual(refused);
     const submits = node.calls.filter((c) => (c.body as { method: string }).method === "author_submitExtrinsic");
     expect(submits).toHaveLength(1);
+  });
+
+  it("a submission refused at connect gives unexpected_settle_error with no transaction, stored final: a repeat once the node listens again gets it and submits nothing", async () => {
+    // x402: `transaction` is "empty string if no transaction was broadcast", and a connection the node refuses at
+    // connect carries no byte of the submission to it. The node stops listening once it has received the validation,
+    // the last call /settle makes before the submission. Every answer to a repeated /settle for the same id is the
+    // stored one, so the claim keeps that answer, and a repeat gets it even once the node listens again.
+    const validation = (c: Call) =>
+      (c.body as { params: unknown[] }).params[0] === "TaggedTransactionQueue_validate_transaction";
+    await start({ leaves: (calls) => calls.some(validation) });
+    const refused = { success: false, errorReason: "unexpected_settle_error", transaction: "", network: NETWORK };
+    const submissions = () => node.calls.filter((c) => (c.body as { method: string }).method === "author_submitExtrinsic");
+    expect((await post(`${base}/settle`, body())).json).toEqual(refused);
+    expect(submissions()).toHaveLength(0);
+    const stored = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, HASH_V3]);
+    expect(stored.rows[0]?.answer).toEqual(refused);
+    await node.listen();
+    expect((await post(`${base}/settle`, body())).json).toEqual(refused);
+    expect(submissions()).toHaveLength(0);
   });
 
   it("two concurrent settles of an extrinsic the node refuses at submission submit once, and both give the stored refusal", async () => {
