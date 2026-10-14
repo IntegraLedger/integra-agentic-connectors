@@ -19,7 +19,7 @@ money moves.
 | `chosen` | yes | The option the payment names, as issued. On x402, the payload's `accepted`. |
 | `network` | yes | The payment's network, such as `accepted.network`. |
 | `request` | on x402 | The same request commitment `issue` received. |
-| `settleBy` | no | Unix seconds by which the payment settles, at most now + 604 800. On x402 with EIP-3009, `validBefore`. |
+| `settleBy` | no | Unix seconds by which the payment settles, at most now + 604 800. On x402 with EIP-3009, `validBefore`. Without it, the claim holds the record 604 800 seconds from the claim. |
 
 ## The answers
 

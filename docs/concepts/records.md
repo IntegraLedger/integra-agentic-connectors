@@ -28,6 +28,11 @@ stateDiagram-v2
 | `closed` | A channel pairing's close was reported and read. |
 | `stale` | A payment was claimed, and 604 800 seconds after its `settleBy` no read has shown it settled or unable to settle. Terminal: the record is never paid after that. A claim of it answers 410 `claim/lapsed`, and a report 409 `settle/not-settling`. |
 
+A claim without `settleBy` holds the record 604 800 seconds from the claim; 604 800 seconds after that, a claimed
+payment that no read has shown settled or unable to settle becomes `stale`. A settlement read is as final as the
+block it reads: a payment read as settled at a rail's latest block, before that block is final, can be reorganised
+away.
+
 ## `proves`
 
 Every record, and every `claim` answer, states what it proves:
