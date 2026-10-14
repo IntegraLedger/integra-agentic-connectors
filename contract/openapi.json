@@ -1109,6 +1109,29 @@
               }
             }
           },
+          "403": {
+            "description": "The request carries an Origin header; the door serves servers only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/Refusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "door/browser-origin"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
           "405": {
             "description": "The request's method is one this path does not serve.",
             "content": {

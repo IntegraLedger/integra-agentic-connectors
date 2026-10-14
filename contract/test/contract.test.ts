@@ -145,6 +145,16 @@ describe("the OpenAPI document", () => {
     expect([...new Set(listedCodes().map((l) => l.code))].sort()).toEqual(Object.keys(REFUSALS).sort());
   });
 
+  it("each operation lists 403 door/browser-origin: the door refuses any request that carries an Origin header", () => {
+    // The README's first rule: "The door refuses any request that carries an `Origin` header (`403 door/browser-origin`)."
+    for (const [path, item] of Object.entries(doc.paths as Record<string, Record<string, unknown>>)) {
+      for (const method of Object.keys(item)) {
+        const codes = listedCodes().filter((l) => l.path === path && l.method === method && l.status === "403");
+        expect(codes.map((l) => l.code), `${method} ${path}`).toEqual(["door/browser-origin"]);
+      }
+    }
+  });
+
   it("each operation lists 405 door/method, the answer to a method its path does not serve", () => {
     for (const [path, item] of Object.entries(doc.paths as Record<string, Record<string, unknown>>)) {
       for (const method of Object.keys(item)) {

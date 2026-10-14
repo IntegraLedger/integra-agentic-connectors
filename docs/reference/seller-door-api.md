@@ -117,6 +117,7 @@ No credential is required.
 | Status | Meaning | Body | Headers |
 |---|---|---|---|
 | 200 | This document's bytes. | `object` |  |
+| 403 | The request carries an Origin header; the door serves servers only. | [Refusal](#refusal): [`door/browser-origin`](./refusals.md#doorbrowser-origin) |  |
 | 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod) |  |
 
 ## Schemas
