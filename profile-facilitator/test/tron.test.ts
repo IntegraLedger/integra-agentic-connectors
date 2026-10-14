@@ -684,39 +684,29 @@ describe("settlement outcomes", () => {
   });
 
   it("a wait that ends on an unanswered receipt read stores the pending answer before it answers", async () => {
-    const logged: string[] = [];
-    const write = process.stderr.write.bind(process.stderr);
-    const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array, ...rest: unknown[]) => {
-      logged.push(String(chunk));
-      return (write as (c: string | Uint8Array, ...r: unknown[]) => boolean)(chunk, ...rest);
-    });
     const pendingAnswer = { success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK };
-    try {
-      // The node holds the Solidity node's receipt read, the first read of the transaction's status after the
-      // broadcast. Its bound is the end of the wait for the chain, which keeps a quarter of a 1,500 ms wait for storing
-      // the answer: 1,125 ms. Once the clock is there the node answers with a landed receipt: too late, so the answer is
-      // settlement_pending, stored and given with the clock at 1,125 ms.
-      const receipt = gate();
-      await start(
-        {
-          hold: async (path) => {
-            if (path === "/walletsolidity/gettransactioninfobyid") await receipt.opened;
-          },
+    // The node holds the Solidity node's receipt read, the first read of the transaction's status after the
+    // broadcast. Its bound is the end of the wait for the chain, which keeps a quarter of a 1,500 ms wait for storing
+    // the answer: 1,125 ms. Once the clock is there the node answers with a landed receipt: too late, so the answer is
+    // settlement_pending, stored and given with the clock at 1,125 ms.
+    const receipt = gate();
+    await start(
+      {
+        hold: async (path) => {
+          if (path === "/walletsolidity/gettransactioninfobyid") await receipt.opened;
         },
-        1_500,
-      );
-      const answer = post(`${base}/settle`, body(TX_V2));
-      await reaches(answer, () => calls("/walletsolidity/gettransactioninfobyid").length > 0);
-      await clock.advanceTo(1_125);
-      receipt.open();
-      expect((await answer).json).toEqual(pendingAnswer);
-      expect(clock.elapsed).toBe(1_125);
-      const stored = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, TXID_V2]);
-      expect(stored.rows[0]?.answer).toEqual(pendingAnswer);
-    } finally {
-      spy.mockRestore();
-    }
-    expect(logged.filter((l) => l.includes("answer-not-stored"))).toEqual([]);
+      },
+      1_500,
+    );
+    const answer = post(`${base}/settle`, body(TX_V2));
+    await reaches(answer, () => calls("/walletsolidity/gettransactioninfobyid").length > 0);
+    await clock.advanceTo(1_125);
+    receipt.open();
+    expect((await answer).json).toEqual(pendingAnswer);
+    expect(clock.elapsed).toBe(1_125);
+    const stored = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, TXID_V2]);
+    expect(stored.rows[0]?.answer).toEqual(pendingAnswer);
+    expect(entries.filter((e) => e.entry["event"] === "answer-not-stored")).toEqual([]);
   });
 });
 
