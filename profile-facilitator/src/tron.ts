@@ -6,10 +6,9 @@
  */
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { keccak_256 } from "@noble/hashes/sha3.js";
-import { isRefusal } from "@integraledger/lcp";
+import { isRefusal, pairingOf } from "@integraledger/lcp";
 import {
   decodeTronTx,
-  pairingOf,
   tronAddress,
   tronCarrier,
   tronStatus,
@@ -108,7 +107,7 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
   async function check(r: FacilitatorRequest): Promise<Checked | InvalidReason> {
     const req = r.paymentRequirements;
     if (!byNetwork.has(req.network)) return "invalid_network";
-    if (pairingOf(req as never) === undefined) return "invalid_payment_requirements";
+    if (pairingOf(req as never) !== "x402/exact/tron/lcp-trc20-memo") return "invalid_payment_requirements";
     const hex = r.paymentPayload.payload["transaction"];
     if (typeof hex !== "string") return "invalid_payload";
     const tx = decodeTronTx(hex);

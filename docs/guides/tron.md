@@ -77,15 +77,16 @@ The answer is `{isValid: true, payer}`, with `payer` the owner in base58check.
    request that cannot have reached the node, is answered `unexpected_settle_error` with an empty `transaction`:
    nothing was broadcast. Either answer is stored final and every repeat gets it. The claim is never removed, so the
    payment is broadcast at most once.
-6. Reads the transaction's status every second with `@integraledger/lcp`'s `tronStatus`: the Solidity node's
-   `gettransactioninfobyid` first, then the FullNode's. Success requires receipt result `SUCCESS` **and** a
-   `Transfer` log emitted by `asset`. The value the call returned is not read: a TRC-20 token may return false from
-   `transfer` and still transfer, and USDT-TRC20 does. A receipt with another result, or `SUCCESS` with no such log,
-   is a failure only once the Solidity node, which serves solidified blocks alone, shows it. A transaction whose
-   expiration has passed can never be included once the solidified head, read first, is two slots past it and neither
-   lookup finds it, each naming a latest block at or past that head's time, read from its node before the lookup. A
-   lookup whose node cannot give that time, or whose latest block is behind the head, leaves the answer pending. Each
-   failure is answered `invalid_transaction_state`.
+6. Reads the transaction's status every second with `@integraledger/lcp`'s `tronStatus`, by transaction id: through the
+   Solidity node's `/walletsolidity` API for solidified data first, then the FullNode's `/wallet` API at the head.
+   Success requires receipt result `SUCCESS` **and** a `Transfer` log emitted by `asset`. The value the call returned is
+   not read: a TRC-20 token may return false from `transfer` and still transfer, and USDT-TRC20 does. `tronStatus`
+   answers a receipt with another result, or `SUCCESS` with no such log, as failed at whichever lookup finds it first;
+   the facilitator takes that failure as final only from the Solidity node's lookup, which reads solidified blocks
+   alone. A transaction whose expiration has passed can never be included once the solidified head, read first, is two
+   slots past it and neither lookup finds it, each naming a latest block at or past that head's time, read from its node
+   before the lookup. A lookup whose node cannot give that time, or whose latest block is behind the head, leaves the
+   answer pending. Each failure is answered `invalid_transaction_state`.
 7. Stores the answer and returns it. A success is returned only by the settle whose write stored it, so of two
    concurrent settles of one payment, one answers success and the other `invalid_transaction_state` with the id. A
    success, or an answer with an empty `transaction`, whose write fails is answered `settlement_pending` with the id.
@@ -94,5 +95,6 @@ Success is `{success: true, transaction, network, payer}`, where `transaction` i
 
 ## Where H is on chain
 
-H is in `raw_data.data`, inside the bytes whose SHA-256 is the transaction id the payer signed. It is read by
-transaction id from a Solidity node. No index searches memos.
+H is in `raw_data.data`, inside the bytes whose SHA-256 is the transaction id the payer signed. Settlement is read by
+transaction id, through a FullNode's `/walletsolidity` API for solidified data, then its `/wallet` API at the head; H is
+read back by the same id through its `/walletsolidity` API. No index searches memos.
