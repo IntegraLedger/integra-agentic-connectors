@@ -246,7 +246,7 @@ describe("the OpenAPI document", () => {
     expect(await at(8193)).toMatchObject({ refused: true, code: "x402/request-too-large" });
   });
 
-  it("LcpPattern admits the patterns the pairings publish, with and without a named instrument", () => {
+  it("LcpPattern admits the patterns the pairings publish", () => {
     const schema = { $ref: `${CONTRACT}#/$defs/LcpPattern` };
     expect(check(schema, exactEip3009.pattern)).toEqual([]);
     expect(check(schema, exactErc7710.pattern)).toEqual([]);
