@@ -235,7 +235,6 @@ An object. A member not listed here is refused.
 | `forwardIndexable` | `boolean` | yes |  |  |
 | `publicProof` | `boolean` | yes |  |  |
 | `proves` | `string` | yes |  |  |
-| `instrument` | `"landed"` | no |  |  |
 
 ### Proves
 

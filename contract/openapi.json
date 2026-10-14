@@ -2210,11 +2210,6 @@
           },
           "proves": {
             "type": "string"
-          },
-          "instrument": {
-            "enum": [
-              "landed"
-            ]
           }
         }
       },

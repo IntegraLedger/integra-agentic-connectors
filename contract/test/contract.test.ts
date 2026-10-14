@@ -251,6 +251,11 @@ describe("the OpenAPI document", () => {
     expect(check(schema, exactEip3009.pattern)).toEqual([]);
     expect(check(schema, exactErc7710.pattern)).toEqual([]);
   });
+
+  it("LcpPattern's members are the members of the patterns in lcp's registry", () => {
+    const members = new Set(BINDINGS.flatMap((b) => Object.keys(b.pattern)));
+    expect(Object.keys(doc.components.schemas.LcpPattern.properties).sort()).toEqual([...members].sort());
+  });
 });
 
 describe("the vectors", () => {
