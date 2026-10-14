@@ -8,15 +8,10 @@ import { JsonLd } from "@/components/JsonLd";
 import { Mermaid } from "@/components/Mermaid";
 import { markdownPath } from "@/lib/llms";
 import { absoluteUrl, breadcrumbJsonLd, docSourcePath, repoFile, siteConfig } from "@/lib/site";
-import { source } from "@/lib/source";
+import { isGenerated, source } from "@/lib/source";
 
 interface PageProps {
   params: Promise<{ slug?: string[] }>;
-}
-
-/** Whether a page is generated from the package's source rather than written by hand. */
-function isGenerated(contentPath: string): boolean {
-  return contentPath.startsWith("reference/api/");
 }
 
 /** Home, then each ancestor that is a page, then the page itself. */
