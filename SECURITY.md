@@ -30,14 +30,16 @@ Security fixes are released for the latest published version of each package.
     Tron memo, the Polkadot remark), that does not transfer the required `amount` of `asset` to `payTo` on the
     required `network`, or that the payer did not sign;
   - `/settle` submitting bytes other than the ones the payer signed, settling one payment more than once, or answering
-    `success: true` for a transaction the network does not show as settled;
+    `success: true` for a transaction that no node shows in a block with its profile's success conditions;
   - a crafted request that makes it use unbounded memory or time.
 
 ## What does not
 
 By design, neither package checks amount, payee, asset, timing or payer against the ATR's content. The facilitator
-holds no key and pays no fee. It has no authentication of its own, and is meant to be served on a private interface to
-the resource servers that use it. A report that relies on one of these is not a vulnerability in these packages.
+checks that a payment carries an ATR hash in its profile's form, not which one: the resource server accepts a payment
+only when its hash is one it issued for that request. The facilitator holds no key and pays no fee. It has no
+authentication of its own, and is meant to be served on a private interface to the resource servers that use it. A
+report that relies on one of these is not a vulnerability in these packages.
 
 ## Bugs that are not vulnerabilities
 
