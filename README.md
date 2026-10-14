@@ -4,10 +4,11 @@ The seller side of proof of agreement: the contract a seller's systems speak to 
 hash into their payments, and an x402 facilitator for the LCP profiles on Tron and Polkadot.
 
 Before a buyer's agent pays, the seller's side assembles an **Agentic Transaction Record (ATR)**: the agreement's
-record, a JSON document the seller serves. The **ATR hash (H)** is SHA-256 over the ATR's exact bytes. H rides inside
-the payment, in the field the payment protocol provides, so paying is agreeing to that exact record. That is the
-pattern of the **Legal Context Protocol (LCP)**. The buyer's side runs the **buyer gate**, which compares the served
-bytes with H before anything is signed.
+record, a JSON document the seller serves. The **ATR hash (H)** is SHA-256 over the ATR's exact bytes. H is bound
+into the payment, in the field the payment protocol provides, so that where the payment the buyer approves carries H,
+that approval is the buyer's acceptance of that exact record; where it does not, the pairing's statement of what it
+proves says so. That is the pattern of the **Legal Context Protocol (LCP)**. The buyer's side runs the **buyer gate**,
+which compares the served bytes with H before anything is signed.
 
 ## How the packages fit together
 

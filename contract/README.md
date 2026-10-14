@@ -32,8 +32,9 @@ It contains no client and no server. It is the contract both sides build to.
 - **Agentic Transaction Record (ATR):** the agreement's record, a JSON document the seller serves. The door writes it
   to the seller's storage before it answers `issue`, so a storage failure means no challenge goes out.
 - **ATR hash (H):** SHA-256 over the ATR's exact bytes, written `0x` and 64 lowercase hex digits.
-- **Legal Context Protocol (LCP):** the pattern this contract serves: the payment carries H, so paying is agreeing to
-  that exact record.
+- **Legal Context Protocol (LCP):** the pattern this contract serves: H bound into the payment, so that where the
+  payment the buyer approves carries H, that approval is the buyer's acceptance of that exact record; where it does
+  not, the pairing's statement of what it proves says so.
 - **Pairing:** a payment protocol, scheme and rail combination, such as `x402/exact/eip155/eip3009`. Every offer,
   claim and report names one. The pairing ids are the ones `@integraledger/lcp` registers.
 - **Binding:** how H rides in a pairing's payment, the field its specification defines.
