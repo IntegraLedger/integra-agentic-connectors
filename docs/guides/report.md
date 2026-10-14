@@ -32,7 +32,7 @@ A report is either an **outcome** or a channel's **close**.
 |---|---|---|
 | `200` | The record as it now stands. | Done. |
 | `202` with `state: "settling"` | Accepted; the door finishes the record. | Done: this is final for you. |
-| `202` with `state: "issued"` | Accepted, and nothing was read yet. | Report again later. |
+| `202` with `state: "issued"` | Accepted; nothing is recorded, because no read checked the hash. | Report again later. On a pairing whose hash is read only through the claim, the record stays issued. |
 | `4xx` | Refused. | Do not retry the same body. |
 | `503` | Not available now. | Retry after `Retry-After` seconds. |
 

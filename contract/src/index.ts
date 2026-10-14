@@ -101,7 +101,10 @@ export interface ReportOutcome {
   outcome: "paid" | "declined";
   reference?: string;
   network?: string;
-  /** On a record with no claim: the option the payment paid, as issued, from which its read keys are taken. */
+  /**
+   * On a record with no claim, on a pairing the door can read: the option the payment paid, as issued, from which its
+   * read keys are taken.
+   */
   chosen?: Json;
   /** With `chosen`, on a surface whose issued options are tied to the request. */
   request?: RequestCommitment;

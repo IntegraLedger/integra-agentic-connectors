@@ -323,7 +323,7 @@ An object. A member not listed here is refused.
 | `outcome` | `"paid"`, `"declined"` | yes |  |  |
 | `reference` | [Reference](#reference) | no |  |  |
 | `network` | `string` | no | 1 to 64 characters |  |
-| `chosen` | any JSON value | no |  | On a record with no claim: the option the payment paid, as issued, from which its read keys are taken. |
+| `chosen` | any JSON value | no |  | On a record with no claim, on a pairing the door can read: the option the payment paid, as issued, from which its read keys are taken. |
 | `receipt` | any JSON value | no |  | On a confirm-only channel pairing's paid report: the receipt its opening answered, from which the channel is read. |
 | `request` | [RequestCommitment](#requestcommitment) | no |  |  |
 | `source` | `string` | no |  | On a paid report of an unclaimed `mpp/charge/evm/transaction` or `mpp/charge/evm/hash` payment: the credential's `source`, from which the door takes the payer's Transfer identity. |

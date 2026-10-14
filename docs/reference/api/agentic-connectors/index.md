@@ -241,7 +241,7 @@ A payment's outcome; `reference`: 1–256 characters, no control characters.
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-atrhash-5"></a> `atrHash` | `` `0x${string}` `` | - |
-| <a id="property-chosen-2"></a> `chosen?` | `Json` | On a record with no claim: the option the payment paid, as issued, from which its read keys are taken. |
+| <a id="property-chosen-2"></a> `chosen?` | `Json` | On a record with no claim, on a pairing the door can read: the option the payment paid, as issued, from which its read keys are taken. |
 | <a id="property-network-5"></a> `network?` | `string` | - |
 | <a id="property-outcome"></a> `outcome` | `"declined"` \| `"paid"` | - |
 | <a id="property-pairing-6"></a> `pairing` | `string` | - |

@@ -69,7 +69,8 @@ pairing with nothing to read, the seller's report is the settlement. Otherwise t
 the rail before it records it:
 
 - a `202` whose `state` is `settling` is final for the connector, because the door finishes it;
-- a `202` whose `state` is `issued` means nothing was read yet: report again later.
+- a `202` whose `state` is `issued` means nothing is recorded, because no read checked the hash: report again later;
+  on a pairing whose hash is read only through the claim, the record stays issued.
 
 A report of money that moved is recorded even when it comes without a claim, and the record then states what is
 missing. A `claim/in-progress` answer to a retry of the same presentation means the first attempt won.
