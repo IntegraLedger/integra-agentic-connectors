@@ -15,11 +15,16 @@
 // - x402's `exact` family: "A consumed primitive MUST produce a settlement failure, never a success";
 // - the process-wide limit of 4 chain_getBlock reads at once (BLOCK_READS): the tests hold slots of it themselves to
 //   leave one free, or none.
+//
+// Every wait the facilitator makes runs on a clock the test moves (support.ts's `controlledClock`): a settle's wait
+// ends when the test moves the clock to its end, never because the machine is slow.
 import { ApiPromise } from "@polkadot/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
 import { BLOCK_READS, blockReads } from "../src/polkadot.js";
-import { fixture, freePort, freshDatabase, post, stub, type Stub } from "./support.js";
+import { controlledClock, fixture, freePort, freshDatabase, post, reaches, stub, until, type Clock, type Stub } from "./support.js";
+
+vi.mock("../src/http.js", async (original) => (await import("./support.js")).countingSleep(await original<typeof import("../src/http.js")>()));
 
 const NETWORK = "polkadot:68d56f15f85d3136970ec16946040bc1";
 const CALL_V2 =
@@ -88,14 +93,15 @@ interface Chain {
   pruned: boolean;
   /** The holding block's chain_getBlock answer, padded to exactly this many bytes. */
   answerBytes?: number;
-  /** How long each chain_getBlock answer takes. */
-  blockDelayMs?: number;
+  /** Awaited before the node answers each chain_getBlock: the test holds the answer until what it waits for happens. */
+  holdBlock?: () => Promise<void>;
 }
 
 let chain: Chain;
 /** The chain_getBlock calls the stub is answering, and the most it answered at once. */
 let blocksInFlight = 0;
 let mostBlocksInFlight = 0;
+let clock: Clock & { restore(): void };
 let db: Awaited<ReturnType<typeof freshDatabase>>;
 let node: Stub | undefined;
 let base: string;
@@ -142,7 +148,7 @@ async function start(settleWaitMs = 1_500): Promise<void> {
       const n = Number.parseInt(params[0].slice(2), 16);
       blocksInFlight += 1;
       mostBlocksInFlight = Math.max(mostBlocksInFlight, blocksInFlight);
-      await new Promise((resolve) => setTimeout(resolve, chain.blockDelayMs ?? 0));
+      await chain.holdBlock?.();
       blocksInFlight -= 1;
       if (chain.unreadable.has(n)) return { jsonrpc: "2.0", id, error: { code: 4003, message: `Client error: UnknownBlock: ${params[0]}` } };
       return blockAnswer(id, n);
@@ -164,7 +170,7 @@ async function start(settleWaitMs = 1_500): Promise<void> {
   });
   closeFacilitator = f.close;
   base = `http://127.0.0.1:${port}`;
-  // A /verify loads the runtime metadata, so each /settle's wait is spent on the chain.
+  // A /verify loads the runtime metadata before any /settle.
   expect((await post(`${base}/verify`, body(chain.xt))).json).toEqual({ isValid: true, payer: PAYER });
 }
 
@@ -173,7 +179,8 @@ const body = (extrinsic = XT_V3) => ({
   paymentPayload: { x402Version: 2, accepted: O_P, payload: { extrinsic, call: CALL_V2 } },
   paymentRequirements: O_P,
 });
-const settle = async (extrinsic = XT_V3) => (await post(`${base}/settle`, body(extrinsic))).json;
+/** A /settle's answer, waking its poll whenever it sleeps: a wait that ends pending ends at the end of settleWaitMs. */
+const settle = async (extrinsic = XT_V3) => (await clock.answered([post(`${base}/settle`, body(extrinsic))]))[0]!.json;
 const methodCalls = (method: string) =>
   node!.calls.map((c) => c.body as { method: string; params: unknown[] }).filter((b) => b.method === method);
 const submitted = () => node !== undefined && methodCalls("author_submitExtrinsic").length > 0;
@@ -203,10 +210,12 @@ beforeEach(async () => {
   blocksInFlight = 0;
   mostBlocksInFlight = 0;
   chain = { xt: XT_V3, finalized: () => BEST - 2, head: () => BEST + 1, unreadable: new Set(), pruned: false };
+  clock = controlledClock();
   db = await freshDatabase();
 });
 
 afterEach(async () => {
+  clock.restore();
   await closeFacilitator?.();
   closeFacilitator = undefined;
   await node?.close();
@@ -268,7 +277,8 @@ describe("a block answer bounded by System.BlockLength", () => {
       expect(await settle()).toEqual(pendingV3);
     });
     expect(lines).toContainEqual(expect.objectContaining({ event: "block-unreadable", transaction: HASH_V3, block: BEST + 1 }));
-    await vi.waitFor(async () => expect((await row())?.unread).toEqual([String(BEST + 1)]));
+    await until(async () => (await row())?.unread.length === 1);
+    expect((await row())?.unread).toEqual([String(BEST + 1)]);
   });
 });
 
@@ -309,13 +319,14 @@ describe("a block the node cannot give", () => {
     chain.head = () => ERA_LAST + 10;
     await start();
     expect(await settle()).toEqual(pendingV3);
-    await vi.waitFor(async () => expect((await row())?.unread).toEqual([String(BEST)]));
+    await until(async () => (await row())?.unread.length === 1);
+    expect((await row())?.unread).toEqual([String(BEST)]);
     expect(await settle()).toEqual(pendingV3);
     // The node gives the block: none of the era's blocks holds the extrinsic, so it can never be included.
     chain.unreadable = new Set();
     expect(await settle()).toEqual({ ...pendingV3, errorReason: "invalid_transaction_state" });
     expect(methodCalls("author_submitExtrinsic")).toHaveLength(1);
-  }, 30_000);
+  });
 
   it("whose state is discarded, when it holds the extrinsic, keeps the answer settlement_pending until its events are read", async () => {
     chain.holding = BEST + 1;
@@ -324,11 +335,8 @@ describe("a block the node cannot give", () => {
     chain.head = () => BEST + 4;
     await start();
     expect(await settle()).toEqual(pendingV3);
-    await vi.waitFor(async () => {
-      const r = await row();
-      expect(r?.unread).toEqual([String(BEST + 1)]);
-      expect(Number(r?.since)).toBe(BEST + 4);
-    });
+    await until(async () => Number((await row())?.since) === BEST + 4);
+    expect((await row())?.unread).toEqual([String(BEST + 1)]);
     chain.finalized = () => ERA_LAST + 2;
     chain.head = () => ERA_LAST + 10;
     expect(await settle()).toEqual(pendingV3);
@@ -336,20 +344,17 @@ describe("a block the node cannot give", () => {
     chain.pruned = false;
     expect(await settle()).toEqual(successAt(BEST + 1));
     expect(methodCalls("author_submitExtrinsic")).toHaveLength(1);
-  }, 30_000);
+  });
 });
 
 describe("an era longer than System.BlockHashCount", () => {
   it("keeps the dedupe row until birth + BlockHashCount + 1, not the era's own end", async () => {
     chain.xt = XT_LONG;
     await start();
-    const before = Date.now();
+    const validated = Date.now();
     expect(await settle(XT_LONG)).toEqual({ ...pendingV3, transaction: HASH_LONG });
-    const after = Date.now();
-    // Validated at block 21,054,320: 21,058,402 - 21,054,320 = 4,082 blocks of 12 s.
-    const until = (await row(HASH_LONG))!.until.getTime();
-    expect(until).toBeGreaterThanOrEqual(before + 4_082 * 12_000);
-    expect(until).toBeLessThanOrEqual(after + 4_082 * 12_000);
+    // Validated at block 21,054,320, with the clock at `validated`: 21,058,402 - 21,054,320 = 4,082 blocks of 12 s.
+    expect((await row(HASH_LONG))!.until.getTime()).toBe(validated + 4_082 * 12_000);
   });
 
   it("ends the scan at birth + BlockHashCount + 1: final once that block is, and no later block is read", async () => {
@@ -394,14 +399,35 @@ describe("a success given once", () => {
 });
 
 describe("the process-wide limit on block reads", () => {
-  /** Takes `count` of the slots, so the scans have the rest; gives them back when `f` ends. */
-  async function holding(count: number, f: () => Promise<void>): Promise<void> {
-    const held = await Promise.all(Array.from({ length: count }, () => blockReads.take(1_000)));
+  /** The block reads waiting for a slot. */
+  let waitingForSlot = 0;
+  beforeEach(() => {
+    waitingForSlot = 0;
+    const take = blockReads.take.bind(blockReads);
+    vi.spyOn(blockReads, "take").mockImplementation(async (ms) => {
+      waitingForSlot += 1;
+      try {
+        return await take(ms);
+      } finally {
+        waitingForSlot -= 1;
+      }
+    });
+  });
+  afterEach(() => {
+    vi.mocked(blockReads.take).mockRestore();
+  });
+
+  /** Takes `count` of the slots, so the scans have the rest; gives them back when `f` calls `free`, or ends. */
+  async function holding(count: number, f: (free: () => void) => Promise<void>): Promise<void> {
+    const held = await Promise.all(Array.from({ length: count }, () => blockReads.take(0)));
+    const free = () => {
+      for (const release of held) release?.();
+    };
     try {
       expect(held.every((release) => release !== undefined)).toBe(true);
-      await f();
+      await f(free);
     } finally {
-      for (const release of held) release?.();
+      free();
     }
   }
 
@@ -409,7 +435,10 @@ describe("the process-wide limit on block reads", () => {
     chain.unreadable = new Set([BEST - 3, BEST + 1]);
     chain.finalized = () => BEST + 3;
     chain.head = () => BEST + 4;
-    chain.blockDelayMs = 20;
+    // The node holds each block answer until another block read is waiting for the slot or is in flight, or the other
+    // scan is asleep in its poll or has answered: the two scans' reads overlap whenever both are reading.
+    let answered = 0;
+    chain.holdBlock = () => until(() => waitingForSlot > 0 || blocksInFlight > 1 || clock.sleeping > 0 || answered > 0);
     await start(3_000);
     // A claim whose scan has read every block before BEST - 1 at finality except BEST - 3.
     await db.pool.query(
@@ -417,31 +446,35 @@ describe("the process-wide limit on block reads", () => {
       [NETWORK, HASH_V3, new Date(Date.now() + 600_000).toISOString(), BEST - 1, BEST - 3],
     );
     await holding(BLOCK_READS - 1, async () => {
-      const [a, b] = await Promise.all([settle(), settle()]);
-      expect(a).toEqual(pendingV3);
-      expect(b).toEqual(pendingV3);
+      const sent = () => post(`${base}/settle`, body()).finally(() => (answered += 1));
+      const [a, b] = await clock.answered([sent(), sent()]);
+      expect(a!.json).toEqual(pendingV3);
+      expect(b!.json).toEqual(pendingV3);
     });
     expect(mostBlocksInFlight).toBe(1);
-    await vi.waitFor(async () => {
-      const r = await row();
-      expect(r?.unread).toEqual([String(BEST - 3), String(BEST + 1)]);
-      expect(Number(r?.since)).toBe(BEST + 4);
-    });
+    await until(async () => Number((await row())?.since) === BEST + 4 && (await row())?.unread.length === 2);
+    expect((await row())?.unread).toEqual([String(BEST - 3), String(BEST + 1)]);
     expect(methodCalls("author_submitExtrinsic")).toHaveLength(0);
-  }, 30_000);
+  });
 
   it("a block read that cannot start before the deadline is recorded as unread, and read again later", async () => {
     chain.holding = BEST + 1;
     chain.finalized = () => (submitted() ? BEST + 2 : BEST - 2);
     chain.head = () => BEST + 2;
     await start();
-    await holding(BLOCK_READS, async () => {
+    await holding(BLOCK_READS, async (free) => {
       const lines = await logged(async () => {
-        expect(await settle()).toEqual(pendingV3);
+        // The first block of the scan waits for a slot; the clock moves to the end of the wait for the chain, which
+        // keeps a quarter of a 1,500 ms wait for storing the answer: 1,125 ms. The slots then come free too late.
+        const answer = post(`${base}/settle`, body());
+        await reaches(answer, () => waitingForSlot > 0);
+        await clock.advanceTo(1_125);
+        free();
+        expect((await answer).json).toEqual(pendingV3);
       });
       expect(lines).toContainEqual(expect.objectContaining({ event: "block-unreadable", transaction: HASH_V3, block: BEST - 1 }));
-      // The first block of the scan waits for a slot until the deadline; a block after it may be reached too.
-      await vi.waitFor(async () => expect((await row())?.unread).toEqual(expect.arrayContaining([String(BEST - 1)])));
+      await until(async () => (await row())?.unread.length !== 0);
+      expect((await row())?.unread).toEqual([String(BEST - 1)]);
     });
     expect(await settle()).toEqual(successAt(BEST + 1));
     expect(methodCalls("author_submitExtrinsic")).toHaveLength(1);
