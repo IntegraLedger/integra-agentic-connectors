@@ -61,7 +61,7 @@ jobs:
         env:
           INTEGRA_DATABASE_URL: postgres://postgres@127.0.0.1:5432/postgres
         run: pnpm -r --if-present run test
-      - name: The generated reference pages match openapi.json, the vectors and the lcp registry
+      - name: The generated reference pages match openapi.json, refusal-meanings.json, the vectors and the lcp registry
         run: node scripts/docs.mjs --check
       - name: Every TypeScript sample in the READMEs and docs/ type-checks, runs, and prints the output shown
         env:
