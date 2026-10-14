@@ -2748,7 +2748,7 @@
             "oneOf": [
               {
                 "const": "bad-request",
-                "description": "The request could not be read: its target or its `Host` header is not one the runtime serves (400), or its header block is larger than the runtime reads (431)."
+                "description": "The request could not be read: it is not well-formed HTTP/1.1, or its target or its `Host` header is not one the runtime serves (400), or its header block is larger than the runtime reads (431)."
               },
               {
                 "const": "method-not-allowed",

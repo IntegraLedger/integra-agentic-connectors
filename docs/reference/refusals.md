@@ -145,7 +145,7 @@ A refusal the HTTP runtime in front of the door answers itself, in the same shap
 
 | Code | Status | Meaning |
 |---|---|---|
-| <a id="bad-request"></a>`bad-request` | 400, 431 | The request could not be read: its target or its `Host` header is not one the runtime serves (400), or its header block is larger than the runtime reads (431). |
+| <a id="bad-request"></a>`bad-request` | 400, 431 | The request could not be read: it is not well-formed HTTP/1.1, or its target or its `Host` header is not one the runtime serves (400), or its header block is larger than the runtime reads (431). |
 | <a id="method-not-allowed"></a>`method-not-allowed` | 405 | The method is `CONNECT` or `TRACE`, which the runtime serves on no path. |
 | <a id="request-timeout"></a>`request-timeout` | 408 | The request did not arrive in full in time. |
 | <a id="body-too-large"></a>`body-too-large` | 413 | The body is larger than the runtime accepts for any request; the door never read it. |
