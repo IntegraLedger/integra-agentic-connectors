@@ -7,9 +7,13 @@
 // hash. Before the era's last block is final, the answer stays settlement_pending with the hash. A best block may be a
 // fork that is dropped: a block finalized at the validated height that holds the extrinsic makes the answer success.
 // Expected values: those rules, and the lcp vectors' V2 and V3.
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+// Every wait the facilitator makes runs on a clock the test moves (support.ts's `controlledClock`): a settle's wait
+// ends when the test moves the clock to its end, never because the machine is slow.
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
-import { fixture, freePort, freshDatabase, post, stub, type Stub } from "./support.js";
+import { controlledClock, fixture, freePort, freshDatabase, post, stub, type Clock, type Stub } from "./support.js";
+
+vi.mock("../src/http.js", async (original) => (await import("./support.js")).countingSleep(await original<typeof import("../src/http.js")>()));
 
 const NETWORK = "polkadot:68d56f15f85d3136970ec16946040bc1";
 const CALL_V2 =
@@ -49,6 +53,7 @@ const ERA_LAST = 21_054_377;
 const CANON_BEST = `0x${BEST.toString(16).padStart(64, "0")}`;
 let forked = false;
 
+let clock: Clock & { restore(): void };
 let db: Awaited<ReturnType<typeof freshDatabase>>;
 let node: Stub | undefined;
 let base: string;
@@ -98,6 +103,8 @@ const body = () => ({
   paymentPayload: { x402Version: 2, accepted: O_P, payload: { extrinsic: XT_V3, call: CALL_V2 } },
   paymentRequirements: O_P,
 });
+/** A /settle's answer, waking its poll whenever it sleeps: a wait that ends pending ends at the end of settleWaitMs. */
+const settle = async () => (await clock.answered([post(`${base}/settle`, body())]))[0]!.json;
 const submits = () => node!.calls.filter((c) => (c.body as { method: string }).method === "author_submitExtrinsic").length;
 const PENDING = { success: false, errorReason: "settlement_pending", transaction: HASH_V3, network: NETWORK };
 
@@ -105,10 +112,12 @@ beforeEach(async () => {
   head = BEST + 1;
   finalized = BEST - 2;
   forked = false;
+  clock = controlledClock();
   db = await freshDatabase();
 });
 
 afterEach(async () => {
+  clock.restore();
   await closeFacilitator?.();
   await node?.close();
   await db.drop();
@@ -117,10 +126,10 @@ afterEach(async () => {
 describe("the end of a Polkadot extrinsic's era", () => {
   it("with no block of the era holding it, read at finality to the era's last block, gives invalid_transaction_state with the hash", async () => {
     await start();
-    expect((await post(`${base}/settle`, body())).json).toEqual(PENDING);
+    expect(await settle()).toEqual(PENDING);
     head = ERA_LAST + 44;
     finalized = ERA_LAST + 2;
-    expect((await post(`${base}/settle`, body())).json).toEqual({
+    expect(await settle()).toEqual({
       success: false,
       errorReason: "invalid_transaction_state",
       transaction: HASH_V3,
@@ -131,11 +140,11 @@ describe("the end of a Polkadot extrinsic's era", () => {
 
   it("a block finalized at the validated height, not the best block validation read, holds it: the answer is success", async () => {
     await start();
-    expect((await post(`${base}/settle`, body())).json).toEqual(PENDING);
+    expect(await settle()).toEqual(PENDING);
     forked = true;
     head = ERA_LAST + 44;
     finalized = ERA_LAST + 2;
-    expect((await post(`${base}/settle`, body())).json).toEqual({
+    expect(await settle()).toEqual({
       success: true,
       transaction: `${CANON_BEST}-2`,
       network: NETWORK,
@@ -146,10 +155,10 @@ describe("the end of a Polkadot extrinsic's era", () => {
 
   it("with the era's last block not yet final, stays settlement_pending", async () => {
     await start();
-    expect((await post(`${base}/settle`, body())).json).toEqual(PENDING);
+    expect(await settle()).toEqual(PENDING);
     head = ERA_LAST + 44;
     finalized = ERA_LAST - 7;
-    expect((await post(`${base}/settle`, body())).json).toEqual(PENDING);
+    expect(await settle()).toEqual(PENDING);
     expect(submits()).toBe(1);
   });
 });
