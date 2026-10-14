@@ -246,6 +246,15 @@ describe("/verify, further", () => {
     expect(res.json).toEqual({ isValid: false, invalidReason: "invalid_payload" });
   });
 
+  it("refuses requirements naming another transfer method, or none, as invalid_payment_requirements", async () => {
+    // The profile's scope: extra.assetTransferMethod "lcp-trc20-memo" (required).
+    await start();
+    for (const change of [{ extra: { assetTransferMethod: "lcp-trc20" } }, { extra: {} }]) {
+      const res = await post(`${base}/verify`, body(TX_V2, { ...O, ...change }));
+      expect(res.json).toEqual({ isValid: false, invalidReason: "invalid_payment_requirements" });
+    }
+  });
+
   it("refuses requirements whose payTo, asset or amount differ from the transfer", async () => {
     await start();
     for (const change of [{ payTo: "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" }, { asset: "TCwX1UeSkVfu43HD5xNMmFqDR2Xgjdxihx" }, { amount: "10001" }]) {
