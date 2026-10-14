@@ -319,14 +319,19 @@ export const V2_PAYER_HEX = "41f39fd6e51aad88f6f4ce6ab8827279cfffb92266";
 export const V2_REF_BLOCK = { number: 86542765, id: "00000000052889ad7d1ddbe0b0adbe87d02b3cdbba73a6d485ff0392ab0e5003" };
 /** The FullNode's head in these stubs: a block 25 after V2's reference block. */
 export const V2_HEAD = 86542790;
+/**
+ * The head's time in milliseconds: 30 three-second slots after block 86542760, whose time 1790300649000 is the
+ * `blockTimeStamp` of the receipt recorded in fixtures/tron-mainnet-answers.json (`infoV1`).
+ */
+export const V2_HEAD_TIME = 1790300649000 + 30 * 3_000;
 
 /**
  * A FullNode's answers to the reads `/verify` makes before it simulates, for V2's payer and reference block, in
  * java-tron's HTTP shapes: `/wallet/getaccount` gives the default owner permission java-tron gives an account
  * (`AccountCapsule.createDefaultOwnerPermission`: the address's own key, weight 1, threshold 1); `/wallet/getnowblock`
- * the head; `/wallet/getblock` V2's reference block by number, and `{}` for a block it does not hold;
- * `/wallet/gettransactionbyid` and `/wallet/gettransactionfrompending` `{}`, the answer for an id the node does not
- * hold in its blocks or its pending pool. Undefined for any other path.
+ * the head, with its number and time; `/wallet/getblock` V2's reference block by number, and `{}` for a block it does
+ * not hold; `/wallet/gettransactionbyid` and `/wallet/gettransactionfrompending` `{}`, the answer for an id the node
+ * does not hold in its blocks or its pending pool. Undefined for any other path.
  */
 export function tronChainReads(path: string, body: unknown): unknown {
   if (path === "/wallet/getaccount") {
@@ -335,7 +340,7 @@ export function tronChainReads(path: string, body: unknown): unknown {
       owner_permission: { permission_name: "owner", threshold: 1, keys: [{ address: V2_PAYER_HEX, weight: 1 }] },
     };
   }
-  if (path === "/wallet/getnowblock") return { block_header: { raw_data: { number: V2_HEAD } } };
+  if (path === "/wallet/getnowblock") return { block_header: { raw_data: { number: V2_HEAD, timestamp: V2_HEAD_TIME } } };
   if (path === "/wallet/getblock") {
     const wanted = typeof body === "object" && body !== null ? (body as Record<string, unknown>)["id_or_num"] : undefined;
     return wanted === String(V2_REF_BLOCK.number)

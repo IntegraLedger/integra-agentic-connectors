@@ -1,9 +1,11 @@
 // The validity window's end, on Tron. A dedupe row is kept for 24 h after `until` (the transaction's `expiration`), and a
 // repeat in that time reads the stored answer, then the chain, before anything is verified again: a pending answer must
 // be able to become final, and a success already answered makes the payment consumed. A transaction is final as never
-// included once no node holds it and the latest solidified block is two 3-second slots past its expiration (the lcp tron
-// entry point's status rule: a node accepts a transaction only while `expiration` is after the head block's time).
-// Until then the answer stays settlement_pending with the id. An empty `transaction` says nothing was broadcast (x402),
+// included once the latest solidified block, read first, is two 3-second slots past its expiration and neither receipt
+// lookup finds it, each naming a latest block at or past that block's time, read from its own node before the lookup
+// (the lcp tron entry point's status rule and its reader contract: a node accepts a transaction only while
+// `expiration` is after the head block's time, and a lookup naming no time never reads failed). Until then the answer
+// stays settlement_pending with the id. An empty `transaction` says nothing was broadcast (x402),
 // so it is given for an id the store holds only as the stored answer of a broadcast the node refused or never
 // received. Expected values: those rules, and the lcp vectors' V2 (raw_data, id, payer, expiration).
 // Every wait the facilitator makes runs on a clock the test moves (support.ts's `controlledClock`): a settle's wait
@@ -13,7 +15,19 @@ import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
 import { openStore } from "../src/store.js";
-import { controlledClock, fixture, freePort, freshDatabase, post, stub, tronChainReads, type Clock, type Stub } from "./support.js";
+import {
+  controlledClock,
+  fixture,
+  freePort,
+  freshDatabase,
+  post,
+  stub,
+  tronChainReads,
+  V2_HEAD,
+  V2_HEAD_TIME,
+  type Clock,
+  type Stub,
+} from "./support.js";
 
 vi.mock("../src/http.js", async (original) => (await import("./support.js")).countingSleep(await original<typeof import("../src/http.js")>()));
 
@@ -61,6 +75,8 @@ let closeFacilitator: (() => Promise<void>) | undefined;
 let landed = true;
 /** The latest solidified block's time, in milliseconds. */
 let solidTime = NOW_V2;
+/** The FullNode's latest block's time, in milliseconds, or null for a `/wallet/getnowblock` answer that names none. */
+let headTime: number | null = V2_HEAD_TIME;
 let broadcast: unknown = { result: true, txid: TXID_V2 };
 
 async function start(settleWaitMs: number): Promise<void> {
@@ -74,6 +90,10 @@ async function start(settleWaitMs: number): Promise<void> {
     }
     if (path === "/walletsolidity/getnowblock") {
       return { blockID: "00", block_header: { raw_data: { number: 86542800, timestamp: solidTime } } };
+    }
+    if (path === "/wallet/getnowblock") {
+      const time = headTime === null ? {} : { timestamp: headTime };
+      return { block_header: { raw_data: { number: V2_HEAD, ...time } } };
     }
     return tronChainReads(path, sent) ?? {};
   });
@@ -98,6 +118,7 @@ beforeEach(async () => {
   clock = controlledClock(NOW_V2);
   landed = true;
   solidTime = NOW_V2;
+  headTime = V2_HEAD_TIME;
   broadcast = { result: true, txid: TXID_V2 };
   db = await freshDatabase();
 });
@@ -151,6 +172,61 @@ describe("the end of a Tron transaction's validity window", () => {
       transaction: TXID_V2,
       network: NETWORK,
     });
+    expect(broadcasts()).toBe(1);
+  });
+
+  it("reads each level's latest block from its own API before that level's receipt lookup", async () => {
+    // The lcp tron entry point's reader contract: a lookup that finds nothing names the time of the latest block at its
+    // level, read from the same node before the lookup; its status rule reads the solidified block first, then the
+    // Solidity node's receipt, then the FullNode's.
+    landed = false;
+    await start(1_000);
+    expect(await settle()).toEqual(PENDING);
+    vi.setSystemTime(EXPIRATION_V2 + 10_000);
+    solidTime = EXPIRATION_V2 + 6_000;
+    const from = node.calls.length;
+    expect((await post(`${base}/settle`, body())).json).toEqual({
+      success: false,
+      errorReason: "invalid_transaction_state",
+      transaction: TXID_V2,
+      network: NETWORK,
+    });
+    expect(
+      node.calls
+        .slice(from)
+        .map((c) => c.path)
+        .filter((p) => p.endsWith("/getnowblock") || p.endsWith("/gettransactioninfobyid")),
+    ).toEqual([
+      "/walletsolidity/getnowblock",
+      "/walletsolidity/getnowblock",
+      "/walletsolidity/gettransactioninfobyid",
+      "/wallet/getnowblock",
+      "/wallet/gettransactioninfobyid",
+    ]);
+  });
+
+  it("with nothing included and the solidified block two slots past the expiration, stays settlement_pending while the FullNode's latest block names no time", async () => {
+    // The reader contract: a lookup whose node cannot give its latest block's time names none, and a lookup naming no
+    // time never reads failed.
+    landed = false;
+    await start(1_000);
+    expect(await settle()).toEqual(PENDING);
+    vi.setSystemTime(EXPIRATION_V2 + 10_000);
+    solidTime = EXPIRATION_V2 + 6_000;
+    headTime = null;
+    expect(await settle()).toEqual(PENDING);
+    expect(broadcasts()).toBe(1);
+  });
+
+  it("with nothing included and the solidified block two slots past the expiration, stays settlement_pending while the FullNode's latest block is older than it", async () => {
+    // The status rule: a lookup whose node lags the solidified block read first is pending not-found.
+    landed = false;
+    await start(1_000);
+    expect(await settle()).toEqual(PENDING);
+    vi.setSystemTime(EXPIRATION_V2 + 10_000);
+    solidTime = EXPIRATION_V2 + 6_000;
+    headTime = solidTime - 3_000;
+    expect(await settle()).toEqual(PENDING);
     expect(broadcasts()).toBe(1);
   });
 

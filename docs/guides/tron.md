@@ -82,8 +82,10 @@ The answer is `{isValid: true, payer}`, with `payer` the owner in base58check.
    `Transfer` log emitted by `asset`. The value the call returned is not read: a TRC-20 token may return false from
    `transfer` and still transfer, and USDT-TRC20 does. A receipt with another result, or `SUCCESS` with no such log,
    is a failure only once the Solidity node, which serves solidified blocks alone, shows it. A transaction whose
-   expiration has passed and that no node shows once the solidified head is two slots past it can never be included.
-   Each failure is answered `invalid_transaction_state`.
+   expiration has passed can never be included once the solidified head, read first, is two slots past it and neither
+   lookup finds it, each naming a latest block at or past that head's time, read from its node before the lookup. A
+   lookup whose node cannot give that time, or whose latest block is behind the head, leaves the answer pending. Each
+   failure is answered `invalid_transaction_state`.
 7. Stores the answer and returns it. A success is returned only by the settle whose write stored it, so of two
    concurrent settles of one payment, one answers success and the other `invalid_transaction_state` with the id. A
    success, or an answer with an empty `transaction`, whose write fails is answered `settlement_pending` with the id.

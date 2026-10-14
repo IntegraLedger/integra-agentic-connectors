@@ -269,17 +269,34 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     return now === null ? { isValid: true, payer: c.payer } : invalid(now, c.payer);
   }
 
-  /** The profile's reads at the Solidity node and the FullNode, each bounded by `deadline`. */
+  /**
+   * The profile's reads at the Solidity node's `/walletsolidity` API and the FullNode's `/wallet` API, each bounded by
+   * `deadline`. A receipt lookup that finds nothing names the time of the latest block at its level, read from the same
+   * node before the lookup, or null when that read fails or its answer lacks the time.
+   */
   function reader(c: Checked, deadline: number): TronReader {
     const node = byNetwork.get(c.network)!;
     const left = () => deadline - performance.now();
+    /** `getnowblock` at `api`: the latest block's number and time in milliseconds. */
+    async function latest(api: string): Promise<{ number: bigint; timestamp: bigint }> {
+      const o = await postJson(`${api}/getnowblock`, {}, left());
+      const header = isObject(o) ? o["block_header"] : undefined;
+      const raw = isObject(header) ? header["raw_data"] : undefined;
+      const number = isObject(raw) ? raw["number"] : undefined;
+      const timestamp = isObject(raw) ? raw["timestamp"] : undefined;
+      if (!Number.isSafeInteger(number) || !Number.isSafeInteger(timestamp)) {
+        throw new NodeError("malformed", true, "getnowblock fields");
+      }
+      return { number: BigInt(number as number), timestamp: BigInt(timestamp as number) };
+    }
     return {
       network: c.network as TronReader["network"],
       async info(txid, level) {
-        const url = level === "solid" ? `${node.solidityNode}/walletsolidity` : `${node.fullNode}/wallet`;
-        const o = await postJson(`${url}/gettransactioninfobyid`, { value: txid.replace(/^0x/, "") }, left());
+        const api = level === "solid" ? `${node.solidityNode}/walletsolidity` : `${node.fullNode}/wallet`;
+        const readTo = await latest(api).then((block) => block.timestamp, () => null);
+        const o = await postJson(`${api}/gettransactioninfobyid`, { value: txid.replace(/^0x/, "") }, left());
         if (!isObject(o)) throw new NodeError("malformed", true, "gettransactioninfobyid");
-        if (Object.keys(o).length === 0) return null;
+        if (Object.keys(o).length === 0) return { notFound: true, timestamp: readTo };
         const blockNumber = o["blockNumber"];
         const result = isObject(o["receipt"]) ? o["receipt"]["result"] : undefined;
         if (!Number.isSafeInteger(blockNumber) || typeof result !== "string") {
@@ -294,16 +311,8 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
       transaction() {
         return Promise.reject(new NodeError("malformed", false, "not read by this facilitator"));
       },
-      async solidHead() {
-        const o = await postJson(`${node.solidityNode}/walletsolidity/getnowblock`, {}, left());
-        const header = isObject(o) ? o["block_header"] : undefined;
-        const raw = isObject(header) ? header["raw_data"] : undefined;
-        const number = isObject(raw) ? raw["number"] : undefined;
-        const timestamp = isObject(raw) ? raw["timestamp"] : undefined;
-        if (!Number.isSafeInteger(number) || !Number.isSafeInteger(timestamp)) {
-          throw new NodeError("malformed", true, "getnowblock fields");
-        }
-        return { number: BigInt(number as number), timestamp: BigInt(timestamp as number) };
+      solidHead() {
+        return latest(`${node.solidityNode}/walletsolidity`);
       },
     };
   }
@@ -312,9 +321,9 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
    * One read of the transaction's status through the profile's `tronStatus`: settled, at the Solidity node or the
    * FullNode, only with receipt result `SUCCESS` and a `Transfer` log from the asset, whatever the call returned (a
    * TRC-20 token may return false from `transfer` and still transfer). A failed receipt, or one with no such log, is
-   * final only when the Solidity node, which serves solidified blocks alone, shows it. A transaction no node holds,
-   * with the latest solidified block two slots past its expiration, can never be included. Anything else gives
-   * undefined.
+   * final only when the Solidity node, which serves solidified blocks alone, shows it. A transaction that neither
+   * lookup finds, with the latest solidified block, read first, two slots past its expiration, can never be included
+   * once each lookup names a latest block at or past that block's time. Anything else gives undefined.
    */
   async function outcome(c: Checked, deadline: number): Promise<SettleAnswer | undefined> {
     const reads = reader(c, deadline);
@@ -330,7 +339,7 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
         ...reads,
         async info(txid, level) {
           const info = await reads.info(txid, level);
-          if (info !== null) found = level;
+          if (!("notFound" in info)) found = level;
           return info;
         },
       },

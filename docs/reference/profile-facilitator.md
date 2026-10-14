@@ -116,7 +116,7 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   stays until a repeated `/settle` for it gives one. Each such row is a payment that passed every check and was
   claimed for submission; it is one row of fixed columns, the sweep's index does not hold it, and each repeat reads the
   chain within `settleWaitMs`. On Tron, one repeat made once the latest solidified block is two slots past the
-  expiration gives a final answer whenever the nodes answer its reads.
+  expiration gives a final answer whenever the nodes answer its reads, each naming a latest block at or past that one.
 - The facilitator writes one JSON line on standard error for what the operator should see and the answer does not
   carry: `settlement-failed` (with the events, or the receipt result and why the transfer does not count, that the
   chain shows), `settlement-expired`, `answer-not-stored`, `block-unreadable` (a finalized Polkadot block recorded

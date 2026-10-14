@@ -5,8 +5,9 @@
 // payment must find its row and read the chain.
 // Expected values: those rules, the profile's rule 5 (success: true with transaction = the id and payer = the owner,
 // once a node shows the transaction in a block with SUCCESS), the lcp tron entry point's status rule (final as never
-// included once no node holds it and the latest solidified block is two 3-second slots past the expiration), and the
-// lcp vectors' V2 (raw_data, id, payer, expiration).
+// included once the latest solidified block is two 3-second slots past the expiration and neither receipt lookup finds
+// the transaction, each naming a latest block at or past that block's time), and the lcp vectors' V2 (raw_data, id,
+// payer, expiration). The FullNode's latest block is support.ts's V2 head, with its time.
 // Every wait the facilitator makes runs on a clock the test moves (support.ts's `controlledClock`): a settle's wait
 // ends when the test moves the clock to its end, never because the machine is slow.
 import { secp256k1 } from "@noble/curves/secp256k1.js";
