@@ -84,6 +84,8 @@ let headTime: number | null = V2_HEAD_TIME;
 let solidLookupTime: number | undefined;
 let solidReads = 0;
 let broadcast: unknown = { result: true, txid: TXID_V2 };
+/** What the facilitator gave its operator log: each entry, with its cause. */
+let entries: { entry: Record<string, unknown>; cause: unknown }[] = [];
 
 async function start(settleWaitMs: number): Promise<void> {
   node = await stub(async (path, sent) => {
@@ -110,6 +112,7 @@ async function start(settleWaitMs: number): Promise<void> {
     tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],
     store: { url: db.url },
     settleWaitMs: clock.settleWait(settleWaitMs),
+    operatorLog: (entry, cause) => entries.push({ entry, cause }),
   });
   closeFacilitator = f.close;
   base = `http://127.0.0.1:${port}`;
@@ -129,6 +132,7 @@ beforeEach(async () => {
   solidLookupTime = undefined;
   solidReads = 0;
   broadcast = { result: true, txid: TXID_V2 };
+  entries = [];
   db = await freshDatabase();
 });
 
@@ -182,6 +186,23 @@ describe("the end of a Tron transaction's validity window", () => {
       network: NETWORK,
     });
     expect(broadcasts()).toBe(1);
+  });
+
+  it("with nothing included and the solidified block two slots past the expiration, gives the operator log settlement-expired, naming the payment", async () => {
+    landed = false;
+    await start(1_000);
+    expect(await settle()).toEqual(PENDING);
+    vi.setSystemTime(EXPIRATION_V2 + 10_000);
+    solidTime = EXPIRATION_V2 + 6_000;
+    expect((await post(`${base}/settle`, body())).json).toEqual({
+      success: false,
+      errorReason: "invalid_transaction_state",
+      transaction: TXID_V2,
+      network: NETWORK,
+    });
+    expect(entries.filter((e) => e.entry["event"] === "settlement-expired")).toEqual([
+      { entry: { event: "settlement-expired", network: NETWORK, payer: PAYER, transaction: TXID_V2 }, cause: undefined },
+    ]);
   });
 
   it("reads each level's latest block from its own API before that level's receipt lookup", async () => {
