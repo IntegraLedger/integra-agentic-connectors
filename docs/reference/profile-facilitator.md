@@ -125,7 +125,8 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   been answered). Each error the facilitator turns into an answer or a retry is an entry with the error as its cause:
   `verify-error`, `settle-error` and `request-error` (an error the request's handling threw), `node-call-failed` and
   `store-call-failed` (with the `call`), and `store-connection-error`. Every `unexpected_verify_error` and
-  `unexpected_settle_error` answer has an entry that names why, with the call or the bound: an error's entry above;
+  `unexpected_settle_error` answer has an entry that names why, written when it is first given (a repeated `/settle`
+  gets the stored answer), with the call or the bound: an error's entry above;
   `node-call-failed` for a node answer the facilitator cannot read, its cause a `malformed` error naming the part, and
   for a Tron broadcast the node does not accept, its cause the node's `code` and `message`; and
   `settle-deadline-passed` for a settle whose deadline passed before its node reads or its claim, with `before`, the

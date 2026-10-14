@@ -1,7 +1,8 @@
 /**
  * x402's `unexpected_verify_error` and `unexpected_settle_error`: a failure inside the facilitator, its node or its
- * store stopped a check or a settlement, and the client gets nothing it can act on. Each is given only here, once its
- * entry is in the operator log, so the operator sees why whenever a client gets one.
+ * store stopped a check or a settlement, and the client gets nothing it can act on. Each is first given only here,
+ * once its entry is in the operator log; a repeated `/settle` gets the stored answer, whose entry is the one written
+ * then.
  */
 import { failed, type InvalidReason, type OperatorEntry, type OperatorLog, type SettleAnswer } from "./answers.js";
 
