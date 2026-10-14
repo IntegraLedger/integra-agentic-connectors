@@ -2,8 +2,8 @@
 // worker.js first for the addresses run_worker_first names, the files of out/ for the rest, with the rules in
 // public/_headers. Each page, an address no page has (the 404 page), a page's Twoslash popup and a search are
 // checked. The check fails when a response for a page carries any Content-Security-Policy other than the page's own
-// in csp.json, or when a page reports a policy violation, a script error or an error on the console. Run it after
-// `pnpm build`.
+// in csp.json, when a page reports a policy violation, a script error or an error on the console, or when a page
+// carries an `a` element with no accessible name. Run it after `pnpm build`.
 import { readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join } from "node:path";
@@ -94,6 +94,60 @@ const origin = `http://127.0.0.1:${server.address().port}`;
 
 const failures = [];
 const fail = (address, what) => failures.push(`${address}: ${what}`);
+/** The number of `a` elements on each address visited. */
+const linkCounts = new Map();
+
+/** The reasons Chrome gives for leaving a node out of the accessibility tree because no reader is shown it. */
+const HIDDEN = new Set([
+  "notRendered",
+  "notVisible",
+  "ariaHiddenElement",
+  "ariaHiddenSubtree",
+  "inertElement",
+  "inertSubtree",
+]);
+
+/**
+ * The number of `a` elements on the open page, and the opening tag of each one that has no accessible name, as
+ * Chrome's accessibility tree computes the name. An `a` element the tree leaves out because it is hidden from every reader needs no name; every
+ * other `a` element needs one. Chrome computes no name for an element whose layout `content-visibility: auto` skips,
+ * so each such element is laid out while the names are read, and set back afterwards.
+ */
+async function namelessLinks(page) {
+  await page.evaluate(async () => {
+    window.__skipped = [...document.querySelectorAll("*")]
+      .filter((e) => getComputedStyle(e).contentVisibility === "auto")
+      .map((e) => [e, e.style.contentVisibility]);
+    for (const [e] of window.__skipped) e.style.contentVisibility = "visible";
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+  });
+  const cdp = await page.context().newCDPSession(page);
+  try {
+    const { root } = await cdp.send("DOM.getDocument", { depth: -1 });
+    const links = new Set();
+    const collect = (node) => {
+      if (node.nodeName === "A") links.add(node.backendNodeId);
+      for (const child of node.children ?? []) collect(child);
+    };
+    collect(root);
+    const nameless = [];
+    for (const id of links) {
+      const { nodes } = await cdp.send("Accessibility.getPartialAXTree", { backendNodeId: id, fetchRelatives: false });
+      const node = nodes.find((n) => n.backendDOMNodeId === id);
+      if (node?.ignored && node.ignoredReasons?.some((reason) => HIDDEN.has(reason.name))) continue;
+      if (String(node?.name?.value ?? "").trim() !== "") continue;
+      const { outerHTML } = await cdp.send("DOM.getOuterHTML", { backendNodeId: id });
+      const tag = outerHTML.slice(0, outerHTML.indexOf(">") + 1);
+      nameless.push(node ? tag : `${tag} (no accessibility node)`);
+    }
+    return { checked: links.size, nameless };
+  } finally {
+    await cdp.detach();
+    await page.evaluate(() => {
+      for (const [e, inline] of window.__skipped) e.style.contentVisibility = inline;
+    });
+  }
+}
 
 /** Records each policy violation the page reports, from its first script on. */
 function recordViolations() {
@@ -123,6 +177,9 @@ try {
         if (response?.status() !== status) fail(address, `answered ${response?.status()}, expected ${status}`);
         const csp = await response?.headerValue("content-security-policy");
         if (csp !== policy) fail(address, "served without the page's own Content-Security-Policy");
+        const links = await namelessLinks(page);
+        linkCounts.set(address, links.checked);
+        for (const tag of links.nameless) fail(address, `an a element with no accessible name: ${tag}`);
         if (then) await then(page).catch((e) => fail(address, `${e.message.split("\n")[0]}`));
         for (const v of await page.evaluate(() => window.__violations)) fail(address, `policy violation: ${v}`);
         for (const e of errors) fail(address, e);
@@ -148,9 +205,10 @@ try {
       await page.getByRole("dialog").getByRole("option").first().waitFor({ timeout: 10_000 });
     });
 
+    const links = [...linkCounts.values()].reduce((sum, n) => sum + n, 0);
     console.log(
       failures.length === 0
-        ? `${addresses.length} pages, the 404 page, a Twoslash popup and a search load under their own Content-Security-Policy with no violation and no error`
+        ? `${addresses.length} pages, the 404 page, a Twoslash popup and a search load under their own Content-Security-Policy with no violation and no error, and each of the ${links} a elements on these pages has a name`
         : failures.join("\n"),
     );
   });
