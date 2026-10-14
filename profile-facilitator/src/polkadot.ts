@@ -542,8 +542,8 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
    * success is an answer: a failure there waits until its block is final, and a block that cannot be read is skipped,
    * since it is read again at finality. Then, with the time left, the blocks recorded as unread before this pass are
    * read again. Once every block to the last is read at finality, and none is unread, the extrinsic can never be
-   * included, and the answer is `invalid_transaction_state` with its hash. Gives the final answer, or where the scan has
-   * got to.
+   * included, and the answer is `invalid_transaction_state` with its hash. The head is not read once `deadline` has
+   * passed. Gives the final answer, or where the scan has got to.
    */
   async function scanOnce(c: Checked, since: number, at: Scan, deadline: number): Promise<{ answer: SettleAnswer } | Scan> {
     const url = byNetwork.get(c.network)!.rpc;
@@ -565,7 +565,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       proven += 1;
     }
     next = Math.max(next, proven);
-    const head = await headHeight(c, url, left);
+    const head = left() > 0 ? await headHeight(c, url, left) : undefined;
     while (head !== undefined && next <= Math.min(head, last) && left() > 0) {
       const read = await readBlock(c, url, next, left, false);
       if (read === "stopped") return position();
@@ -593,8 +593,9 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
 
   /**
    * Scans for the extrinsic from `since`, with the stored `unread` blocks, every second until `deadline`, reading the
-   * stored answer too when `stored` is set, and answers with the first final answer either gives. Where the scan got to
-   * at finality is stored: `since` moves on, and the blocks it could not read are recorded. Submits nothing.
+   * stored answer too when `stored` is set, and answers with the first final answer either gives. Once `deadline` has
+   * passed, no pass is made: the answer is the one the wait's end gives. Where the scan got to at finality is stored:
+   * `since` moves on, and the blocks it could not read are recorded. Submits nothing.
    */
   async function scan(c: Checked, since: number, unread: number[], deadline: number, stored: boolean): Promise<SettleAnswer> {
     let at: Scan = { proven: since, next: since, unread, resolved: [] };
@@ -603,9 +604,11 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
         const row = await readStored(c, deadline);
         if (row?.state === "answered" && !isPending(row.answer)) return row.answer;
       }
-      const step = await scanOnce(c, since, at, deadline);
-      if ("answer" in step) return step.answer;
-      at = step;
+      if (deadline - performance.now() > 0) {
+        const step = await scanOnce(c, since, at, deadline);
+        if ("answer" in step) return step.answer;
+        at = step;
+      }
       if (performance.now() + POLL_MS > deadline) {
         if (at.proven > since || at.unread.length > 0 || at.resolved.length > 0) {
           const to = Math.min(at.proven, lastBlock(c, since));
@@ -672,15 +675,17 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
 
   /**
    * Reads a claimed id, or a stored pending answer, again from the chain until the answer's reserve before `deadline`,
-   * from the stored `since` and `unread`, then stores what it read.
+   * from the stored `since` and `unread`, then stores what it read. Once that wait has ended, the node is asked nothing:
+   * the answer is the stored one, as a repeat gets it, or pending with the hash.
    */
   async function follow(l: Local, since: number | null, unread: number[], deadline: number): Promise<SettleAnswer> {
-    const c = await decode(l, deadline - performance.now());
-    if (typeof c === "string" || since === null) {
-      const row = await readStored(typeof c === "string" ? { network: l.node.network, id: l.id } : c, deadline);
+    const waitUntil = deadline - answerReserve(settleWaitMs);
+    const c = waitUntil - performance.now() > 0 ? await decode(l, deadline - performance.now()) : undefined;
+    if (typeof c !== "object" || since === null) {
+      const row = await readStored(typeof c === "object" ? c : { network: l.node.network, id: l.id }, deadline);
       return row?.state === "answered" ? repeatOf(row.answer) : pending(l.id, l.node.network);
     }
-    return keep(c, await scan(c, since, unread, deadline - answerReserve(settleWaitMs), true), deadline);
+    return keep(c, await scan(c, since, unread, waitUntil, true), deadline);
   }
 
   /**

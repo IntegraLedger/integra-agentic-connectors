@@ -68,6 +68,11 @@ export function countingSleep<T extends { sleep(ms: number): Promise<void> }>(ht
 
 /** The node and store calls the facilitator has made whose answers have not arrived, as `lateResume` and `lateStore` count them. */
 let unanswered = 0;
+/**
+ * Every node call the facilitator has asked its `postJson` for since the clock was installed, by its URL and body, in
+ * order, whether or not it was sent, as `lateResume` records it.
+ */
+export const asked: { url: string; body: unknown }[] = [];
 /** The call whose answer the facilitator goes on with only when the test opens `resume` (`resumeLate`). */
 let late: { matches: (call: string, body: unknown) => boolean; arrived: boolean; resume: Gate } | undefined;
 
@@ -96,7 +101,7 @@ async function goOn<A>(call: string, body: unknown, ask: () => Promise<A>): Prom
  * The facilitator's `http.js` with its `postJson` able to go on late, for `vi.mock`: the answer to the call `resumeLate`
  * names (by its URL and body) arrives whole and within its bound, and the facilitator goes on with it only when the
  * test opens it, as it would after time spent elsewhere between that answer and its next step. Every call is the
- * module's own.
+ * module's own, and is recorded in `asked`.
  */
 export function lateResume<
   T extends { postJson(url: string, body: unknown, timeoutMs?: number, maxBytes?: number): Promise<unknown> },
@@ -104,6 +109,7 @@ export function lateResume<
   return {
     ...http,
     postJson(url: string, body: unknown, timeoutMs?: number, maxBytes?: number) {
+      asked.push({ url, body });
       return goOn(url, body, () => http.postJson(url, body, timeoutMs, maxBytes));
     },
   };
@@ -185,7 +191,7 @@ export interface Clock {
  * `setTimeout`, `setInterval`, `Date` and `performance.now()`, and `AbortSignal.timeout`, which Node runs on a timer of
  * its own, rebuilt on the fake `setTimeout`. The settle's wait, the bounds on its node and store calls, and its poll
  * then end when the test advances the clock, never because the machine is slow. `date` sets `Date`, in milliseconds
- * since the epoch. `restore()` puts the real timers back.
+ * since the epoch. `restore()` puts the real timers back. `asked` starts empty with each clock.
  */
 export function controlledClock(date?: number): Clock & { restore(): void } {
   vi.useFakeTimers({
@@ -199,6 +205,7 @@ export function controlledClock(date?: number): Clock & { restore(): void } {
   });
   sleepers.clear();
   late = undefined;
+  asked.length = 0;
   const origin = performance.now();
   let settleWaitMs: number | undefined;
   const clock = {

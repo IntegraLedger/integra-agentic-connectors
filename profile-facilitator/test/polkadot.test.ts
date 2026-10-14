@@ -15,6 +15,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { NodeError } from "../src/http.js";
 import { serveProfileFacilitator } from "../src/index.js";
 import {
+  asked,
   controlledClock,
   fixture,
   freePort,
@@ -1069,6 +1070,48 @@ describe("the operator log", () => {
       expect(entries[0]!.cause).toBeUndefined();
       expect(node.calls).toHaveLength(sent);
       expect((await db.pool.query("SELECT id FROM settlement")).rowCount).toBe(0);
+    },
+  );
+
+  // A claimed hash, or a stored settlement_pending, is read again from the chain until the wait for the chain ends, a
+  // quarter of settleWaitMs (1,000 ms) before the deadline: at 750 ms. Each row holds one answer of such a settle until
+  // the clock is there: the settle's store read, before the decode; the scan's store read, before its pass; the
+  // finalized head read, before the head read. From then on the facilitator asks for no node call and writes no entry,
+  // and the answer is settlement_pending with the hash; `kept` is the row's answer then.
+  /** Matches the `n`th store read whose answer arrives. */
+  const storeRead = (n: number) => {
+    let seen = 0;
+    return (call: string) => call === "store.read" && ++seen === n;
+  };
+  const FOLLOWED: { what: string; stored: unknown; holds: () => (call: string, sent: unknown) => boolean; kept: unknown }[] = [
+    { what: "a stored settlement_pending whose store read", stored: PENDING_V3, holds: () => storeRead(1), kept: PENDING_V3 },
+    { what: "a claimed hash whose store read", stored: null, holds: () => storeRead(1), kept: null },
+    { what: "a claimed hash whose scan's store read", stored: null, holds: () => storeRead(2), kept: PENDING_V3 },
+    { what: "a claimed hash whose finalized head read", stored: null, holds: () => isCall("chain_getHeader", FINALIZED_HASH), kept: PENDING_V3 },
+  ];
+
+  it.each(FOLLOWED)(
+    "$what answers once the wait for the chain has ended asks for no node call after it, writes no entry, and gives settlement_pending",
+    async ({ stored, holds, kept }) => {
+      await start({ finalized: () => BEST - 2 }, NETWORK, 1_000);
+      await db.pool.query("INSERT INTO settlement (network, id, answer, until, since) VALUES ($1, $2, $3, $4, $5)", [
+        NETWORK,
+        HASH_V3,
+        stored === null ? null : JSON.stringify(stored),
+        new Date(Date.now() + 600_000).toISOString(),
+        BEST + 1,
+      ]);
+      const held = resumeLate(holds());
+      const answer = post(`${base}/settle`, body());
+      await reaches(answer, held.arrived);
+      const [sent, wanted] = [node.calls.length, asked.length];
+      await clock.advanceTo(750);
+      held.resume();
+      expect((await answer).json).toEqual(PENDING_V3);
+      expect(entries).toEqual([]);
+      expect(asked.slice(wanted)).toEqual([]);
+      expect(node.calls).toHaveLength(sent);
+      expect((await db.pool.query("SELECT answer FROM settlement")).rows).toEqual([{ answer: kept }]);
     },
   );
 });
