@@ -1,13 +1,13 @@
-// The validity window's end, on Tron. A dedupe row is kept for 24 h after `until` (the transaction's `expiration`), and a
-// repeat in that time reads the stored answer, then the chain, before anything is verified again: a pending answer must
-// be able to become final, and a success already answered makes the payment consumed. A transaction is final as never
-// included once the latest solidified block, read first, is two 3-second slots past its expiration and neither receipt
-// lookup finds it, each naming a latest block at or past that block's time, read from its own node before the lookup
-// (the lcp tron entry point's status rule and its reader contract: a node accepts a transaction only while
-// `expiration` is after the head block's time, and a lookup naming no time never reads failed). Until then the answer
-// stays settlement_pending with the id. An empty `transaction` says nothing was broadcast (x402),
-// so it is given for an id the store holds only as the stored answer of a broadcast the node refused or never
-// received. Expected values: those rules, and the lcp vectors' V2 (raw_data, id, payer, expiration).
+// The validity window's end, on Tron. A dedupe row is kept for 24 h after `until` (the transaction's `expiration`), and
+// a repeat in that time reads the stored answer, then the chain, before the expiration check and the node reads are
+// made again: a pending answer must be able to become final, and a success already answered makes the payment consumed.
+// A transaction is final as never included once the latest solidified block, read first, is two 3-second slots past its
+// expiration and neither receipt lookup finds it, each naming a latest block at or past that block's time, read from
+// its own node before the lookup (the lcp tron entry point's status rule and its reader contract: a node accepts a
+// transaction only while `expiration` is after the head block's time, and a lookup naming no time never reads failed).
+// Until then the answer stays settlement_pending with the id. An empty `transaction` says nothing was broadcast (x402),
+// so it is given for an id the store holds only as the stored answer of a broadcast the node refused or never received.
+// Expected values: those rules, and the lcp vectors' V2 (raw_data, id, payer, expiration).
 // Every wait the facilitator makes runs on a clock the test moves (support.ts's `controlledClock`): a settle's wait
 // ends when the test moves the clock to its end, never because the machine is slow.
 import { secp256k1 } from "@noble/curves/secp256k1.js";

@@ -5,10 +5,10 @@
  * answer. A final answer is never replaced; a pending one is replaced by what a later read of the chain shows, or by
  * the stored answer to a broadcast or submission the node refused or never received. A row whose answer is final is
  * kept until `KEEP_AFTER_UNTIL_MS` after its validity window has ended, so a repeat in that time reads the stored
- * answer and the chain before anything is verified again. A row whose answer is not final (a claim with no answer yet,
- * or `settlement_pending`) is kept until a read of the chain, or the answer to a refused or unsent broadcast or
- * submission, makes it final, so a repeat never finds its id missing. Every call to the database is bounded by
- * `STORE_TIMEOUT_MS`.
+ * answer before the expiration check and the node reads are made again. A row whose answer is not final (a claim with
+ * no answer yet, or `settlement_pending`) is kept until a read of the chain, or the answer to a refused or unsent
+ * broadcast or submission, makes it final, so a repeat never finds its id missing. Every call to the database is
+ * bounded by `STORE_TIMEOUT_MS`.
  */
 import pg from "pg";
 import { isPending, type SettleAnswer } from "./answers.js";
