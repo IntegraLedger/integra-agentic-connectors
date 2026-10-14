@@ -1065,7 +1065,7 @@ describe("the operator log", () => {
     expect(logged("store-call-failed")).toHaveLength(1);
   });
 
-  it("a store connection the server ends while it is idle reaches the log, and the next settle is answered as before", async () => {
+  it("a store connection the server ends while it is idle reaches the log, and the next settle answers success", async () => {
     await start();
     // Ends every other connection to the test's database: the facilitator's, idle since it created the table.
     await db.pool.query(
