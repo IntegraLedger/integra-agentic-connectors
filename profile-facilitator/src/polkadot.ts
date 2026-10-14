@@ -579,9 +579,9 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
   /**
    * Stores the answer, unless the row holds a final one. A success is given only by the settle whose write stored it:
    * when the row already holds a final answer, the answer is what a repeat gets for it, and when the write fails, it is
-   * pending with the hash, for a later read of the chain. An answer with no transaction, a refused submission, is given
-   * the same way: only once it is the stored answer. Any other answer is given whether or not it is stored; a failed
-   * write leaves the row for a later read of the chain.
+   * pending with the hash, for a later read of the chain. An answer with no transaction, a refused submission or one
+   * that cannot have reached the node, is given the same way: only once it is the stored answer. Any other answer is
+   * given whether or not it is stored; a failed write leaves the row for a later read of the chain.
    */
   async function keep(c: { network: string; id: string }, answer: SettleAnswer, deadline: number): Promise<SettleAnswer> {
     let wrote: boolean;
@@ -613,11 +613,12 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
    * Answers within `settleWaitMs`. The stored answer is read before the node is asked anything, and a final one is
    * given as a repeat gets it. A claimed id, or a stored pending answer, is read again from the chain. A claimed id is
    * never released: a submission the node refused as one it has already seen is a consumed payment, and any other
-   * refused submission gives `unexpected_settle_error` with no transaction, which says nothing was submitted. Each is
-   * stored final, and every repeat gets the stored answer. When the store cannot be read, the facilitator cannot know
-   * whether the extrinsic was submitted, so the answer is pending with its hash. The scan starts after the finalized
-   * head read before validation (never before the era's birth): validation at the best block shows the extrinsic absent
-   * from that block's ancestry, and the finalized head is in every later best chain.
+   * refused submission, or a submission request that cannot have reached the node, gives `unexpected_settle_error`
+   * with no transaction, which says nothing was submitted. Each is stored final, and every repeat gets the stored
+   * answer. When the store cannot be read, the facilitator cannot know whether the extrinsic was submitted, so the
+   * answer is pending with its hash. The scan starts after the finalized head read before validation (never before the
+   * era's birth): validation at the best block shows the extrinsic absent from that block's ancestry, and the
+   * finalized head is in every later best chain.
    */
   async function settle(r: FacilitatorRequest): Promise<SettleAnswer> {
     const deadline = performance.now() + settleWaitMs;

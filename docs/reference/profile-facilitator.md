@@ -81,8 +81,8 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   after `until`, so a repeat in that time reads the stored answer before anything is verified again.
 - A row whose answer is not final (claimed with no answer, or `settlement_pending`) is kept, whatever its age, until a
   repeated `/settle` reads the chain and writes a final answer, or the answer to a refused or unsent broadcast or
-  submission makes it final. A repeat therefore always finds the id of a payment that was submitted, and never answers
-  with an empty `transaction` for it.
+  submission makes it final. A repeat therefore always finds the id of a payment this facilitator submitted, and never
+  answers with an empty `transaction` for it.
 - A claim is never removed. A broadcast or submission the node refuses, or that cannot have reached it, stores its
   answer, final, in the claimed row: `invalid_transaction_state` with the id when the node says it already holds the
   transaction, and `unexpected_settle_error` with an empty `transaction` for any other refusal or a request that cannot

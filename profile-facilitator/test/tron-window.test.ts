@@ -4,8 +4,8 @@
 // included once no node holds it and the latest solidified block is two 3-second slots past its expiration (the lcp tron
 // entry point's status rule: a node accepts a transaction only while `expiration` is after the head block's time).
 // Until then the answer stays settlement_pending with the id. An empty `transaction` says nothing was broadcast (x402),
-// so it is given for an id the store holds only as the stored answer of a broadcast the node refused. Expected values:
-// those rules, and the lcp vectors' V2 (raw_data, id, payer, expiration).
+// so it is given for an id the store holds only as the stored answer of a broadcast the node refused or never
+// received. Expected values: those rules, and the lcp vectors' V2 (raw_data, id, payer, expiration).
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
