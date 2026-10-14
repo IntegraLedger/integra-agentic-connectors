@@ -12,16 +12,16 @@ A pairing names a payment protocol, scheme and rail, such as `x402/exact/eip155/
 The columns:
 
 - **Pattern:** how the pairing carries the ATR hash (the pattern's `pattern`).
-- **Buyer signs:** the buyer's approval signs the hash (`buyerSigns`).
-- **On chain:** the hash is written on chain with the payment (`onChain`).
-- **Public proof:** something public carries the hash (`publicProof`). Where it is "no", a seller that configures the agreement step gets one; see [the agreement step](../guides/agreement-step.md).
+- **Buyer signs:** the buyer's signature covers the hash, or a value derived from it that no second ATR can feasibly be made to match; a part of 7 or 8 bytes does not count (`buyerSigns`).
+- **Binding on chain:** the binding is visible on a public ledger after settlement (LCP §8.3): the settlement carries the hash, part of it, or a value derived from it (`onChain`).
+- **Public proof:** settlement leaves a public record that commits to the hash (`publicProof`). Where that record holds only 8 bytes of the hash, or 7 bytes derived from the challenge id that carries it, it binds the hash only through those bytes, and the pairing's sentence below says so. Where it is "no", a seller that configures the agreement step gets one; see [the agreement step](../guides/agreement-step.md).
 - **Claim:** "yes" when `claim` takes the payment: its binding checks that the payment carries the hash (`claims`), or it has the read keys a settlement read uses (`reference`). "no" when it has neither, and the door answers `claim/nothing-to-check`, so you report instead.
 - **Push:** "yes" when the buyer broadcasts the payment before the claim, so a failed check is answered `declined`, never refused.
 - **Profile:** the LCP profile that defines the binding, where one does.
 
 ## x402
 
-| Pairing | Pattern | Buyer signs | On chain | Public proof | Claim | Push | Profile |
+| Pairing | Pattern | Buyer signs | Binding on chain | Public proof | Claim | Push | Profile |
 |---|---|---|---|---|---|---|---|
 | `x402/auth-capture/eip155/eip3009` | `id-reuse` | yes | yes | yes | yes | no | `x402/auth-capture/eip155` |
 | `x402/auth-capture/eip155/permit2` | `id-reuse` | yes | yes | yes | yes | no | `x402/auth-capture/eip155` |
@@ -55,7 +55,7 @@ The columns:
 
 ## MPP
 
-| Pairing | Pattern | Buyer signs | On chain | Public proof | Claim | Push | Profile |
+| Pairing | Pattern | Buyer signs | Binding on chain | Public proof | Claim | Push | Profile |
 |---|---|---|---|---|---|---|---|
 | `mpp/charge/card` | `opaque-challenge` | no | no | no | no | no |  |
 | `mpp/charge/evm/authorization` | `id-reuse` | yes | yes | yes | yes | no |  |
@@ -86,7 +86,7 @@ The columns:
 
 ## Card
 
-| Pairing | Pattern | Buyer signs | On chain | Public proof | Claim | Push | Profile |
+| Pairing | Pattern | Buyer signs | Binding on chain | Public proof | Claim | Push | Profile |
 |---|---|---|---|---|---|---|---|
 | `card/mastercard-vi/autonomous` | `id-reuse` | yes | no | no | yes | no | `card/mastercard-vi` |
 | `card/mastercard-vi/immediate` | `id-reuse` | yes | no | no | yes | no | `card/mastercard-vi` |
@@ -95,20 +95,20 @@ The columns:
 
 ## ACP
 
-| Pairing | Pattern | Buyer signs | On chain | Public proof | Claim | Push | Profile |
+| Pairing | Pattern | Buyer signs | Binding on chain | Public proof | Claim | Push | Profile |
 |---|---|---|---|---|---|---|---|
 | `acp/checkout/delegated` | `native-field` | no | no | no | no | no | `acp/checkout/session-id` |
 | `acp/checkout/undelegated` | `http-advisory` | no | no | no | no | no | `acp/checkout/session-id` |
 
 ## AP2
 
-| Pairing | Pattern | Buyer signs | On chain | Public proof | Claim | Push | Profile |
+| Pairing | Pattern | Buyer signs | Binding on chain | Public proof | Claim | Push | Profile |
 |---|---|---|---|---|---|---|---|
 | `ap2/checkout-mandate` | `opaque-challenge` | yes | no | no | yes | no | `ap2/checkout-mandate` |
 
 ## UCP
 
-| Pairing | Pattern | Buyer signs | On chain | Public proof | Claim | Push | Profile |
+| Pairing | Pattern | Buyer signs | Binding on chain | Public proof | Claim | Push | Profile |
 |---|---|---|---|---|---|---|---|
 | `ucp/booking/ap2-mandate` | `opaque-challenge` | yes | no | no | yes | no | `ucp/checkout/legal-context` |
 | `ucp/booking/unsigned` | `http-advisory` | no | no | no | no | no | `ucp/checkout/legal-context` |
@@ -117,7 +117,7 @@ The columns:
 
 ## ACK
 
-| Pairing | Pattern | Buyer signs | On chain | Public proof | Claim | Push | Profile |
+| Pairing | Pattern | Buyer signs | Binding on chain | Public proof | Claim | Push | Profile |
 |---|---|---|---|---|---|---|---|
 | `ack/payment-request` | `native-field` | no | no | no | no | no | `ack/payment-request` |
 

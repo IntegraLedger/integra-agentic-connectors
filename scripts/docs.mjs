@@ -342,9 +342,9 @@ function pairingsPage() {
     "The columns:",
     "",
     `- **Pattern:** how the pairing carries the ATR hash (the pattern's ${code("pattern")}).`,
-    `- **Buyer signs:** the buyer's approval signs the hash (${code("buyerSigns")}).`,
-    `- **On chain:** the hash is written on chain with the payment (${code("onChain")}).`,
-    `- **Public proof:** something public carries the hash (${code("publicProof")}). Where it is "no", a seller that configures the agreement step gets one; see [the agreement step](../guides/agreement-step.md).`,
+    `- **Buyer signs:** the buyer's signature covers the hash, or a value derived from it that no second ATR can feasibly be made to match; a part of 7 or 8 bytes does not count (${code("buyerSigns")}).`,
+    `- **Binding on chain:** the binding is visible on a public ledger after settlement (LCP §8.3): the settlement carries the hash, part of it, or a value derived from it (${code("onChain")}).`,
+    `- **Public proof:** settlement leaves a public record that commits to the hash (${code("publicProof")}). Where that record holds only 8 bytes of the hash, or 7 bytes derived from the challenge id that carries it, it binds the hash only through those bytes, and the pairing's sentence below says so. Where it is "no", a seller that configures the agreement step gets one; see [the agreement step](../guides/agreement-step.md).`,
     `- **Claim:** "yes" when ${code("claim")} takes the payment: its binding checks that the payment carries the hash (${code("claims")}), or it has the read keys a settlement read uses (${code("reference")}). "no" when it has neither, and the door answers ${code("claim/nothing-to-check")}, so you report instead.`,
     `- **Push:** "yes" when the buyer broadcasts the payment before the claim, so a failed check is answered ${code("declined")}, never refused.`,
     `- **Profile:** the LCP profile that defines the binding, where one does.`,
@@ -353,7 +353,7 @@ function pairingsPage() {
   for (const [surface, label] of Object.entries(SURFACES)) {
     const group = bindings.filter((b) => b.id.startsWith(`${surface}/`));
     if (group.length === 0) continue;
-    out.push(`## ${label}`, "", "| Pairing | Pattern | Buyer signs | On chain | Public proof | Claim | Push | Profile |", "|---|---|---|---|---|---|---|---|");
+    out.push(`## ${label}`, "", "| Pairing | Pattern | Buyer signs | Binding on chain | Public proof | Claim | Push | Profile |", "|---|---|---|---|---|---|---|---|");
     for (const b of group) {
       const p = b.pattern;
       out.push(

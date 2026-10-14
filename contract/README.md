@@ -260,7 +260,8 @@ facilitator's settle answer) or `seller-report` (on a pairing with nothing to re
 
 Where a pairing's payment carries no public proof of H, a seller can require the **agreement step**. `issue` then
 answers with `agreement: {url, network, pairing}`. Before the full payment, the buyer's agent pays a nominal amount at
-`agreement.url`, on `agreement.network`, in a payment whose signed payload carries H.
+`agreement.url`, on `agreement.network`, through `agreement.pairing`: a pairing whose `publicProof` is true, so its
+settlement leaves a public record that commits to H.
 
 - Place `agreement.url` beside the carriers: on MPP as `opaque.legalContextAgreementUrl`; elsewhere as
   `legalContextAgreementUrl` beside `legalContextUrl`, or in the protocol's own place beside the link.
