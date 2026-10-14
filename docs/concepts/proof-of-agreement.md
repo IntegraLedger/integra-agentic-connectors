@@ -50,8 +50,9 @@ true
 
 ## The Legal Context Protocol (LCP)
 
-The **Legal Context Protocol (LCP)** is the pattern these packages serve: the payment carries H, so paying is
-agreeing to that exact record. Whatever the protocol and rail, the pattern is the same:
+The **Legal Context Protocol (LCP)** is the pattern these packages serve: H bound into the payment, so that where the
+payment the buyer approves carries H, that approval is the buyer's acceptance of that exact record; where it does not,
+the pairing's statement of what it proves says so. Whatever the protocol and rail, the pattern is the same:
 
 1. The seller assembles the ATR, stores it where the buyer can fetch it, and puts H and the link in the payment
    request.
