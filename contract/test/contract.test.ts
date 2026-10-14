@@ -1,5 +1,6 @@
 // The contract's checks: the document is valid OpenAPI 3.1 (checked with Ajv2020 against the published OAS 3.1 schema, pinned by its
-// SHA-256); every vector's request and expected answer validate against the operation's schemas; each stored ATR's
+// SHA-256); each refusal code an operation lists has the status the closed refusal table gives it (the README's
+// table); every vector's request and expected answer validate against the operation's schemas; each stored ATR's
 // bytes hash to the value the vector states (the values were computed with sha256sum and openssl dgst over bytes
 // written by hand); every pattern an answer carries is its pairing's pattern in @integraledger/lcp's registry
 // (BINDINGS); the embedded document and vectors equal the files they are written from; and a request with an extra
@@ -75,6 +76,29 @@ function answered(body: Json): { pairing: string | undefined; pattern: LcpPatter
   return found;
 }
 
+/** The door's refusal codes a response lists: the code enum beside each `Refusal` reference in its schema. */
+function doorCodes(response: Schema): string[] {
+  const schema = (response["content"] as Record<string, { schema: Schema }> | undefined)?.["application/json"]?.schema;
+  const branches = (schema?.["oneOf"] as Schema[] | undefined) ?? (schema !== undefined ? [schema] : []);
+  return branches.flatMap((b) => {
+    const all = b["allOf"] as [Schema, { properties: { code: { enum: string[] } } }] | undefined;
+    return all?.[0]["$ref"] === "#/components/schemas/Refusal" ? all[1].properties.code.enum : [];
+  });
+}
+
+/** Every door refusal code each operation lists, with the status it is listed under. */
+function listedCodes(): { method: string; path: string; status: string; code: string }[] {
+  const out: { method: string; path: string; status: string; code: string }[] = [];
+  for (const [path, item] of Object.entries(doc.paths as Record<string, Record<string, { responses: Record<string, Schema> }>>)) {
+    for (const [method, op] of Object.entries(item)) {
+      for (const [status, response] of Object.entries(op.responses)) {
+        for (const code of doorCodes(response)) out.push({ method, path, status, code });
+      }
+    }
+  }
+  return out;
+}
+
 function check(schema: Schema, value: unknown): string[] {
   const validate = ajv.compile(schema);
   return validate(value) ? [] : (validate.errors ?? []).map((e) => `${e.instancePath} ${e.message}`);
@@ -109,6 +133,12 @@ describe("the OpenAPI document", () => {
 
   it("the refusal schema's codes are exactly the closed table", () => {
     expect([...doc.components.schemas.Refusal.properties.code.enum].sort()).toEqual(Object.keys(REFUSALS).sort());
+  });
+
+  it("each operation lists a door refusal code at the status the closed table gives it", () => {
+    for (const { method, path, status, code } of listedCodes()) {
+      expect(REFUSALS[code], `${method} ${path} ${code}`).toBe(Number(status));
+    }
   });
 
   it("the record's and the agreement leg's states are the same closed lists in the types and the document", () => {

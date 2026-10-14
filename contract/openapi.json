@@ -142,9 +142,7 @@
                       "properties": {
                         "code": {
                           "enum": [
-                            "door/not-found",
-                            "door/resource-unknown",
-                            "claim/unknown"
+                            "door/resource-unknown"
                           ]
                         }
                       }
@@ -168,15 +166,7 @@
                         "code": {
                           "enum": [
                             "issue/mint-request-reused",
-                            "issue/mint-request-lapsed",
-                            "claim/in-progress",
-                            "claim/paid",
-                            "claim/not-this-request",
-                            "claim/channel-open",
-                            "claim/channel-not-open",
-                            "report/pairing-mismatch",
-                            "settle/other-reference",
-                            "settle/not-settling"
+                            "issue/mint-request-lapsed"
                           ]
                         }
                       }
@@ -246,9 +236,6 @@
                         "code": {
                           "enum": [
                             "door/request-required",
-                            "door/chosen-required",
-                            "door/reference-required",
-                            "door/receipt-required",
                             "issue/input-bounds",
                             "issue/pairing-not-served",
                             "issue/offer-refused",
@@ -258,10 +245,7 @@
                             "core/slot-duplicate",
                             "core/content-not-json",
                             "core/binding-not-json",
-                            "core/too-large",
-                            "claim/pairing-unknown",
-                            "claim/not-bound",
-                            "claim/nothing-to-check"
+                            "core/too-large"
                           ]
                         }
                       }
@@ -288,9 +272,7 @@
                             "issue/contributor-unavailable",
                             "issue/storage-unavailable",
                             "issue/store-unavailable",
-                            "issue/capacity",
-                            "claim/store-unavailable",
-                            "settle/store-unavailable"
+                            "issue/capacity"
                           ]
                         }
                       }
@@ -437,7 +419,6 @@
                       "properties": {
                         "code": {
                           "enum": [
-                            "door/not-found",
                             "door/resource-unknown",
                             "claim/unknown"
                           ]
@@ -462,16 +443,11 @@
                       "properties": {
                         "code": {
                           "enum": [
-                            "issue/mint-request-reused",
-                            "issue/mint-request-lapsed",
                             "claim/in-progress",
                             "claim/paid",
                             "claim/not-this-request",
                             "claim/channel-open",
                             "claim/channel-not-open",
-                            "report/pairing-mismatch",
-                            "settle/other-reference",
-                            "settle/not-settling",
                             "claim/agreement-first",
                             "claim/instrument-claimed"
                           ]
@@ -566,19 +542,6 @@
                         "code": {
                           "enum": [
                             "door/request-required",
-                            "door/chosen-required",
-                            "door/reference-required",
-                            "door/receipt-required",
-                            "issue/input-bounds",
-                            "issue/pairing-not-served",
-                            "issue/offer-refused",
-                            "issue/mixed-protocols",
-                            "core/slot-name",
-                            "core/slot-reserved",
-                            "core/slot-duplicate",
-                            "core/content-not-json",
-                            "core/binding-not-json",
-                            "core/too-large",
                             "claim/pairing-unknown",
                             "claim/not-bound",
                             "claim/nothing-to-check"
@@ -604,14 +567,8 @@
                       "properties": {
                         "code": {
                           "enum": [
-                            "issue/deadline",
-                            "issue/contributor-unavailable",
-                            "issue/storage-unavailable",
-                            "issue/store-unavailable",
-                            "issue/capacity",
                             "claim/store-unavailable",
-                            "claim/read-unavailable",
-                            "settle/store-unavailable"
+                            "claim/read-unavailable"
                           ]
                         }
                       }
@@ -761,9 +718,7 @@
                       "properties": {
                         "code": {
                           "enum": [
-                            "door/not-found",
-                            "door/resource-unknown",
-                            "claim/unknown"
+                            "door/not-found"
                           ]
                         }
                       }
@@ -786,13 +741,6 @@
                       "properties": {
                         "code": {
                           "enum": [
-                            "issue/mint-request-reused",
-                            "issue/mint-request-lapsed",
-                            "claim/in-progress",
-                            "claim/paid",
-                            "claim/not-this-request",
-                            "claim/channel-open",
-                            "claim/channel-not-open",
                             "report/pairing-mismatch",
                             "settle/other-reference",
                             "settle/not-settling"
@@ -864,23 +812,10 @@
                       "properties": {
                         "code": {
                           "enum": [
-                            "door/request-required",
                             "door/chosen-required",
                             "door/reference-required",
                             "door/receipt-required",
-                            "issue/input-bounds",
-                            "issue/pairing-not-served",
-                            "issue/offer-refused",
-                            "issue/mixed-protocols",
-                            "core/slot-name",
-                            "core/slot-reserved",
-                            "core/slot-duplicate",
-                            "core/content-not-json",
-                            "core/binding-not-json",
-                            "core/too-large",
-                            "claim/pairing-unknown",
-                            "claim/not-bound",
-                            "claim/nothing-to-check"
+                            "claim/pairing-unknown"
                           ]
                         }
                       }
@@ -903,12 +838,6 @@
                       "properties": {
                         "code": {
                           "enum": [
-                            "issue/deadline",
-                            "issue/contributor-unavailable",
-                            "issue/storage-unavailable",
-                            "issue/store-unavailable",
-                            "issue/capacity",
-                            "claim/store-unavailable",
                             "settle/store-unavailable"
                           ]
                         }
@@ -1026,9 +955,7 @@
                       "properties": {
                         "code": {
                           "enum": [
-                            "door/not-found",
-                            "door/resource-unknown",
-                            "claim/unknown"
+                            "door/not-found"
                           ]
                         }
                       }
