@@ -345,7 +345,7 @@ function pairingsPage() {
     `- **Buyer signs:** the buyer's approval signs the hash (${code("buyerSigns")}).`,
     `- **On chain:** the hash is written on chain with the payment (${code("onChain")}).`,
     `- **Public proof:** something public carries the hash (${code("publicProof")}). Where it is "no", a seller that configures the agreement step gets one; see [the agreement step](../guides/agreement-step.md).`,
-    `- **Claim:** "yes" when ${code("claim")} checks the payment; "no" when there is nothing to check and the door answers ${code("claim/nothing-to-check")}, so you report instead.`,
+    `- **Claim:** "yes" when ${code("claim")} takes the payment: its binding checks that the payment carries the hash (${code("claims")}), or it has the read keys a settlement read uses (${code("reference")}). "no" when it has neither, and the door answers ${code("claim/nothing-to-check")}, so you report instead.`,
     `- **Push:** "yes" when the buyer broadcasts the payment before the claim, so a failed check is answered ${code("declined")}, never refused.`,
     `- **Profile:** the LCP profile that defines the binding, where one does.`,
     "",
@@ -357,7 +357,7 @@ function pairingsPage() {
     for (const b of group) {
       const p = b.pattern;
       out.push(
-        `| ${code(b.id)} | ${code(p.pattern)} | ${yes(p.buyerSigns)} | ${yes(p.onChain)} | ${yes(p.publicProof)} | ${yes(b.claims)} | ${yes(typeof b.landedTx === "function")} | ${p.profile ? code(p.profile) : ""} |`,
+        `| ${code(b.id)} | ${code(p.pattern)} | ${yes(p.buyerSigns)} | ${yes(p.onChain)} | ${yes(p.publicProof)} | ${yes(b.claims || typeof b.reference === "function")} | ${yes(typeof b.landedTx === "function")} | ${p.profile ? code(p.profile) : ""} |`,
       );
     }
     out.push("");

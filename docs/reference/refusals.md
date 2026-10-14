@@ -122,7 +122,7 @@ The request cannot be served as sent.
 | <a id="coretoo-large"></a>`core/too-large` | The ATR would be larger than the size the door allows. |
 | <a id="claimpairing-unknown"></a>`claim/pairing-unknown` | The pairing is not one this payment or the chosen option offers. |
 | <a id="claimnot-bound"></a>`claim/not-bound` | The payment carries no ATR hash the door can read in the pairing's field. |
-| <a id="claimnothing-to-check"></a>`claim/nothing-to-check` | The pairing carries nothing the buyer signs. Report the payment instead. |
+| <a id="claimnothing-to-check"></a>`claim/nothing-to-check` | The pairing has nothing a claim can check or read: its binding has `claims` false and no `reference`. Report the payment instead. |
 
 ## 503
 

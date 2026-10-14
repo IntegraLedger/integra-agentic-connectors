@@ -207,8 +207,9 @@ settling claimed: true
 409 claim/in-progress
 ```
 
-A `409 claim/in-progress` on a retry of the same presentation means the first attempt won. A pairing whose payment
-carries nothing the buyer signs answers `422 claim/nothing-to-check`: report it instead.
+A `409 claim/in-progress` on a retry of the same presentation means the first attempt won. A pairing with nothing a
+claim can check or read, whose binding has `claims` false and no `reference`, answers `422 claim/nothing-to-check`:
+report it instead.
 
 A **pushed** payment is one the buyer broadcast before the claim. If its check fails, the money has already moved, so
 the door answers `200` with `state: "declined"`, the check's `code`, the hash the payment is bound to (or `null`) and

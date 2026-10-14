@@ -33,7 +33,7 @@ money moves.
 | `422 claim/not-bound` | The payment carries no H the door can read. | Refuse the payment. |
 | `404 claim/unknown` | No record matches the H the payment carries. | Refuse the payment. |
 | `409 claim/not-this-request` | The payment is not for the options and request this ATR was issued for. | Refuse the payment. |
-| `422 claim/nothing-to-check` | The pairing carries nothing the buyer signs. | Report the payment instead. |
+| `422 claim/nothing-to-check` | The pairing has nothing a claim can check or read: its binding has `claims` false and no `reference`. | Report the payment instead. |
 
 Every refusal code is in [the refusal reference](../reference/refusals.md).
 

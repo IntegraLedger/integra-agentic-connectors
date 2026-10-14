@@ -15,7 +15,7 @@ The columns:
 - **Buyer signs:** the buyer's approval signs the hash (`buyerSigns`).
 - **On chain:** the hash is written on chain with the payment (`onChain`).
 - **Public proof:** something public carries the hash (`publicProof`). Where it is "no", a seller that configures the agreement step gets one; see [the agreement step](../guides/agreement-step.md).
-- **Claim:** "yes" when `claim` checks the payment; "no" when there is nothing to check and the door answers `claim/nothing-to-check`, so you report instead.
+- **Claim:** "yes" when `claim` takes the payment: its binding checks that the payment carries the hash (`claims`), or it has the read keys a settlement read uses (`reference`). "no" when it has neither, and the door answers `claim/nothing-to-check`, so you report instead.
 - **Push:** "yes" when the buyer broadcasts the payment before the claim, so a failed check is answered `declined`, never refused.
 - **Profile:** the LCP profile that defines the binding, where one does.
 
@@ -29,16 +29,16 @@ The columns:
 | `x402/batch-settlement/eip155` | `native-field` | yes | yes | yes | yes | no | `x402/batch-settlement/eip155` |
 | `x402/batch-settlement/solana` | `native-field` | yes | yes | yes | yes | no |  |
 | `x402/exact/algorand` | `native-field` | yes | yes | yes | yes | no | `x402/exact/algorand/note` |
-| `x402/exact/aptos` | `http-advisory` | no | no | no | no | no |  |
+| `x402/exact/aptos` | `http-advisory` | no | no | no | yes | no |  |
 | `x402/exact/cardano` | `native-field` | yes | yes | yes | yes | no | `x402/exact/cardano` |
 | `x402/exact/casper` | `native-field` | yes | yes | yes | yes | no | `x402/exact/casper` |
 | `x402/exact/ccd` | `native-field` | yes | yes | yes | yes | no | `x402/exact/ccd` |
 | `x402/exact/eip155/eip3009` | `native-field` | yes | yes | yes | yes | no | `x402/exact/eip155/eip3009` |
-| `x402/exact/eip155/erc7710` | `http-advisory` | no | no | no | no | no |  |
+| `x402/exact/eip155/erc7710` | `http-advisory` | no | no | no | yes | no |  |
 | `x402/exact/eip155/erc7710-salt` | `native-field` | yes | yes | yes | yes | no | `x402/exact/eip155/erc7710-salt` |
 | `x402/exact/eip155/permit2` | `native-field` | yes | yes | yes | yes | no | `x402/exact/eip155/permit2` |
 | `x402/exact/hedera` | `native-field` | yes | yes | yes | yes | no | `x402/exact/hedera` |
-| `x402/exact/hedera/transfer-executor` | `http-advisory` | no | no | no | no | no |  |
+| `x402/exact/hedera/transfer-executor` | `http-advisory` | no | no | no | yes | no |  |
 | `x402/exact/lnbtc` | `native-field` | no | no | no | yes | no | `x402/exact/lnbtc` |
 | `x402/exact/lnbtc/invoice-named` | `http-advisory` | no | no | no | yes | no |  |
 | `x402/exact/near` | `native-field` | yes | yes | yes | yes | no | `x402/exact/near/memo` |
@@ -59,9 +59,9 @@ The columns:
 |---|---|---|---|---|---|---|---|
 | `mpp/charge/card` | `opaque-challenge` | no | no | no | no | no |  |
 | `mpp/charge/evm/authorization` | `id-reuse` | yes | yes | yes | yes | no |  |
-| `mpp/charge/evm/hash` | `opaque-challenge` | no | no | no | no | no |  |
+| `mpp/charge/evm/hash` | `opaque-challenge` | no | no | no | yes | no |  |
 | `mpp/charge/evm/permit2` | `id-reuse` | yes | yes | yes | yes | no |  |
-| `mpp/charge/evm/transaction` | `opaque-challenge` | no | no | no | no | no |  |
+| `mpp/charge/evm/transaction` | `opaque-challenge` | no | no | no | yes | no |  |
 | `mpp/charge/hedera` | `id-reuse` | no | yes | yes | yes | yes |  |
 | `mpp/charge/lightning` | `native-field` | no | no | no | yes | no | `mpp/charge` |
 | `mpp/charge/nearintents` | `opaque-challenge` | no | no | no | no | no |  |
