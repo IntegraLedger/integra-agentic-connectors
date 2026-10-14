@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Writes src/embedded.ts: the text of openapi.json and of each vectors/CV<n>.json, in number order, so the built package
 // carries them as code and reads no file when it loads. Each file must be UTF-8 whose text encodes back to the same
-// bytes.
+// bytes, and vectors/ holds nothing else: the package ships every file in it.
 import { readFileSync, readdirSync, writeFileSync } from "node:fs";
 
 const root = new URL("../", import.meta.url);
@@ -15,9 +15,10 @@ function text(path) {
   return s;
 }
 
-const vectors = readdirSync(new URL("vectors/", root))
-  .filter((f) => /^CV[0-9]+\.json$/.test(f))
-  .sort((a, b) => Number(a.slice(2, -5)) - Number(b.slice(2, -5)));
+const vectors = readdirSync(new URL("vectors/", root));
+const stray = vectors.filter((f) => !/^CV[1-9][0-9]*\.json$/.test(f));
+if (stray.length > 0) throw new Error(`vectors/ holds files not named CV<n>.json, and the package ships them: ${stray.join(", ")}`);
+vectors.sort((a, b) => Number(a.slice(2, -5)) - Number(b.slice(2, -5)));
 
 const lines = [
   "// Written by scripts/embed.mjs from openapi.json and vectors/CV<n>.json: each file's text.",

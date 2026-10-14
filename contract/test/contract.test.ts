@@ -378,11 +378,12 @@ describe("the vectors", () => {
     expect(carrying).toEqual(["CV1", "CV2", "CV3", "CV6", "CV7", "CV9", "CV10"]);
   });
 
-  it("OPENAPI_BYTES are openapi.json's bytes, and VECTORS are each vectors/CV<n>.json parsed, in number order", () => {
+  it("OPENAPI_BYTES are openapi.json's bytes, vectors/ holds only CV<n>.json files, and VECTORS are each one parsed, in number order", () => {
     expect(Buffer.from(OPENAPI_BYTES).equals(readFileSync(new URL("../openapi.json", import.meta.url)))).toBe(true);
-    const files = readdirSync(new URL("../vectors/", import.meta.url))
-      .filter((f) => /^CV[0-9]+\.json$/.test(f))
-      .sort((a, b) => Number(a.slice(2, -5)) - Number(b.slice(2, -5)));
+    // The package ships every file in vectors/, so each one is a vector that VECTORS holds.
+    const files = readdirSync(new URL("../vectors/", import.meta.url));
+    expect(files.filter((f) => !/^CV[1-9][0-9]*\.json$/.test(f))).toEqual([]);
+    files.sort((a, b) => Number(a.slice(2, -5)) - Number(b.slice(2, -5)));
     expect(Object.keys(VECTORS)).toEqual(files.map((f) => f.slice(0, -5)));
     for (const f of files) {
       expect(VECTORS[f.slice(0, -5)], f).toEqual(JSON.parse(readFileSync(new URL(`../vectors/${f}`, import.meta.url), "utf8")));
