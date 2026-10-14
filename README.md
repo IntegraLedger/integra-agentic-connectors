@@ -94,8 +94,8 @@ DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres node scripts/samples.mj
 ```
 
 - `scripts/docs.mjs --check` confirms that the generated reference pages in `docs/reference/` match their sources:
-  `contract/openapi.json`, `contract/vectors/` and `@integraledger/lcp`'s pairing registry. Without `--check` it
-  writes them.
+  `contract/openapi.json`, `scripts/refusal-meanings.json`, `contract/vectors/` and `@integraledger/lcp`'s pairing
+  registry. Without `--check` it writes them.
 - `scripts/samples.mjs` type-checks and runs every TypeScript sample in the READMEs and `docs/` against the packages
   built in this tree, compares each printed output with the one shown, and gives each sample a fresh
   `scripts/stand-in-door.mjs` for the door.
