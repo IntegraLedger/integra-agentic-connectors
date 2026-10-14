@@ -3,14 +3,18 @@
 // table); every vector's request and expected answer validate against the operation's schemas; each stored ATR's
 // bytes hash to the value the vector states (the values were computed with sha256sum and openssl dgst over bytes
 // written by hand); every pattern an answer carries is its pairing's pattern in @integraledger/lcp's registry
-// (BINDINGS); the embedded document and vectors equal the files they are written from; and a request with an extra
-// member fails validation against the document.
+// (BINDINGS); the embedded document and vectors equal the files they are written from; a request with an extra
+// member fails validation against the document; and a paid report carries the credential's `source` that lcp's MPP
+// vectors take the payer's read keys from.
 import { createHash } from "node:crypto";
 import { readdirSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
+import { dirname, join } from "node:path";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
 import { describe, expect, it } from "vitest";
-import { BINDINGS, isRefusal, type Json, type LcpPattern } from "@integraledger/lcp";
+import { BINDINGS, isRefusal, type AtrHash, type Json, type LcpPattern } from "@integraledger/lcp";
+import { evmHash } from "@integraledger/lcp/mpp";
 import { exactEip3009, exactErc7710, requestCommitment } from "@integraledger/lcp/x402";
 import {
   OPENAPI_BYTES,
@@ -20,6 +24,7 @@ import {
   type IssueResponse,
   type Proves,
   type RecordView,
+  type ReportOutcome,
 } from "../src/index.js";
 
 const addFormats = addFormatsModule as unknown as (a: Ajv2020) => Ajv2020;
@@ -312,6 +317,37 @@ describe("the OpenAPI document", () => {
   it("LcpPattern's members are the members of the patterns in lcp's registry", () => {
     const members = new Set(BINDINGS.flatMap((b) => Object.keys(b.pattern)));
     expect(Object.keys(doc.components.schemas.LcpPattern.properties).sort()).toEqual([...members].sort());
+  });
+
+  it("a paid report of an unclaimed mpp/charge/evm/hash payment carries the credential's source, from which the payer's Transfer is read", async () => {
+    // Every value is lcp's MPP vectors': mpp-challenge.json's H and its EVM charge challenge (realm, R_E as base64url,
+    // expires), and mpp-charge-evm-hash.json's payer, the payer's transaction (MV12.hash), and the read keys and the
+    // refusal MV12 states. The source is the payer's did:pkh DID, `did:pkh:` and the payer's CAIP-10 account on MV12's
+    // network.
+    const lcpDir = dirname(dirname(createRequire(import.meta.url).resolve("@integraledger/lcp")));
+    const vectors = (file: string): unknown => JSON.parse(readFileSync(join(lcpDir, "vectors", file), "utf8"));
+    const challenges = vectors("mpp-challenge.json") as { fixed: { H: AtrHash; realm: string; expires: string; R_E: string } };
+    const hash = vectors("mpp-charge-evm-hash.json") as {
+      fixed: { payer: string };
+      MV12: { hash: string; expectReference: { network: string }; expectNoSource: Json };
+    };
+    const { H, realm, expires, R_E } = challenges.fixed;
+    const chosen = { realm, method: "evm", intent: "charge", request: Buffer.from(R_E, "utf8").toString("base64url"), expires };
+    const network = hash.MV12.expectReference.network;
+    const report: ReportOutcome = {
+      atrHash: H,
+      pairing: "mpp/charge/evm/hash",
+      outcome: "paid",
+      reference: hash.MV12.hash,
+      network,
+      chosen,
+      source: `did:pkh:${network}:${hash.fixed.payer}`,
+    };
+    const schema = { $ref: `${CONTRACT}#/$defs/ReportOutcome` };
+    expect(check(schema, report)).toEqual([]);
+    expect(check(schema, { ...report, source: 1 })).not.toEqual([]);
+    expect(await evmHash.reference({ challenge: report.chosen, source: report.source })).toEqual(hash.MV12.expectReference);
+    expect(await evmHash.reference({ challenge: report.chosen })).toEqual(hash.MV12.expectNoSource);
   });
 });
 

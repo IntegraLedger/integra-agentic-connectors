@@ -107,6 +107,11 @@ export interface ReportOutcome {
   request?: RequestCommitment;
   /** On a confirm-only channel pairing's paid report: the receipt its opening answered, from which the channel is read. */
   receipt?: Json;
+  /**
+   * On a paid report of an unclaimed `mpp/charge/evm/transaction` or `mpp/charge/evm/hash` payment: the credential's
+   * `source`, from which the door takes the payer's Transfer identity.
+   */
+  source?: string;
 }
 /** A channel pairing's close: the close transaction as `reference`. */
 export interface ReportClosed {

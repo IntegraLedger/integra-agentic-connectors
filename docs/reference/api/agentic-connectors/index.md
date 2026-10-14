@@ -248,6 +248,7 @@ A payment's outcome; `reference`: 1–256 characters, no control characters.
 | <a id="property-receipt"></a> `receipt?` | `Json` | On a confirm-only channel pairing's paid report: the receipt its opening answered, from which the channel is read. |
 | <a id="property-reference-1"></a> `reference?` | `string` | - |
 | <a id="property-request-2"></a> `request?` | [`RequestCommitment`](#requestcommitment) | With `chosen`, on a surface whose issued options are tied to the request. |
+| <a id="property-source"></a> `source?` | `string` | On a paid report of an unclaimed `mpp/charge/evm/transaction` or `mpp/charge/evm/hash` payment: the credential's `source`, from which the door takes the payer's Transfer identity. |
 
 ***
 
@@ -294,7 +295,7 @@ One vector: requests to the door and the answers they must produce.
 | `fixed.storageBase` | `string` | - |
 | `fixed.tenant` | `string` | - |
 | <a id="property-name"></a> `name` | `string` | - |
-| <a id="property-source"></a> `source` | `string` | - |
+| <a id="property-source-1"></a> `source` | `string` | - |
 | <a id="property-steps"></a> `steps` | `object`[] | - |
 
 ## Type Aliases

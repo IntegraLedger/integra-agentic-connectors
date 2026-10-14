@@ -24,6 +24,7 @@ A report is either an **outcome** or a channel's **close**.
 | `chosen` | on a record with no claim | no | The option the payment paid, as issued. The door takes the payment's read keys from it. |
 | `request` | with `chosen`, on x402 | | The request commitment the option was issued for. |
 | `receipt` | on a confirm-only channel pairing's `paid` | | The receipt the channel's opening answered. |
+| `source` | on `paid`, for an unclaimed `mpp/charge/evm/transaction` or `mpp/charge/evm/hash` payment | | The credential's `source`. The door takes the payer's Transfer identity from it. |
 
 ## The answers
 
@@ -76,6 +77,8 @@ nothing read yet: report again later
 
 Where the pairing reads H from the payment but you did not claim it, send `chosen` (and `request` on x402) with the
 report. The door reads the payment with the keys it takes from them, and the record states `claimed: false`.
+On a paid report of an unclaimed `mpp/charge/evm/transaction` or `mpp/charge/evm/hash` payment, send the
+credential's `source` as well: the door takes the payer's Transfer identity from it.
 
 ## Declined
 

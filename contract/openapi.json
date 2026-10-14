@@ -2489,6 +2489,10 @@
           },
           "request": {
             "$ref": "#/components/schemas/RequestCommitment"
+          },
+          "source": {
+            "type": "string",
+            "description": "On a paid report of an unclaimed `mpp/charge/evm/transaction` or `mpp/charge/evm/hash` payment: the credential's `source`, from which the door takes the payer's Transfer identity."
           }
         }
       },

@@ -326,6 +326,7 @@ An object. A member not listed here is refused.
 | `chosen` | any JSON value | no |  | On a record with no claim: the option the payment paid, as issued, from which its read keys are taken. |
 | `receipt` | any JSON value | no |  | On a confirm-only channel pairing's paid report: the receipt its opening answered, from which the channel is read. |
 | `request` | [RequestCommitment](#requestcommitment) | no |  |  |
+| `source` | `string` | no |  | On a paid report of an unclaimed `mpp/charge/evm/transaction` or `mpp/charge/evm/hash` payment: the credential's `source`, from which the door takes the payer's Transfer identity. |
 
 ### ReportClosed
 
