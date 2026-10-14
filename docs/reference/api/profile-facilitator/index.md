@@ -20,18 +20,6 @@ description: "The exports of @integraledger/profile-facilitator."
 | `store.url` | `string` | - |
 | <a id="property-tron"></a> `tron?` | `object`[] | - |
 
-## Type Aliases
-
-### SettleAnswer
-
-> **SettleAnswer** = \{ `network`: `string`; `payer`: `string`; `success`: `true`; `transaction`: `string`; \} \| \{ `errorReason`: `string`; `network`: `string`; `success`: `false`; `transaction`: `string`; \}
-
-***
-
-### VerifyAnswer
-
-> **VerifyAnswer** = \{ `isValid`: `true`; `payer`: `string`; \} \| \{ `invalidReason`: `InvalidReason`; `isValid`: `false`; `payer?`: `string`; \}
-
 ## Functions
 
 ### serveProfileFacilitator()

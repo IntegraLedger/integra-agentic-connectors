@@ -362,16 +362,14 @@ The package's entry point exports:
 |---|---|---|
 | `serveProfileFacilitator(config)` | `(c: ProfileFacilitatorConfig) => Promise<{ close(): Promise<void> }>` | Opens the store, starts the HTTP server and resolves once it listens. |
 | `ProfileFacilitatorConfig` | interface | The configuration above. |
-| `VerifyAnswer` | type | `{isValid: true, payer}` or `{isValid: false, invalidReason, payer?}`. |
-| `SettleAnswer` | type | `{success: true, transaction, network, payer}` or `{success: false, errorReason, transaction, network}`. |
 
 ### HTTP API
 
 | Request | Answer |
 |---|---|
 | `GET /supported` | `200` `{kinds, extensions: [], signers: {}}`, one kind per configured network. |
-| `POST /verify` | `200` with a `VerifyAnswer`; `400` `{isValid: false, invalidReason: "invalid_payload"}` when the body is not JSON. |
-| `POST /settle` | `200` with a `SettleAnswer`; `400` with `errorReason` `invalid_payload` when the body is not JSON. |
+| `POST /verify` | `200` `{isValid: true, payer}` or `{isValid: false, invalidReason, payer?}`; `400` `{isValid: false, invalidReason: "invalid_payload"}` when the body is not JSON. |
+| `POST /settle` | `200` `{success: true, transaction, network, payer}` or `{success: false, errorReason, transaction, network}`; `400` with `errorReason` `invalid_payload` when the body is not JSON. |
 | A body over 64 KiB | `413`, and the connection is closed. |
 | Another method on a served path | `405` `{error}`. |
 | Any other path | `404` `{error}`. |

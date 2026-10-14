@@ -13,8 +13,6 @@ import { createPolkadot } from "./polkadot.js";
 import { openStore, type SettlementStore } from "./store.js";
 import { createTron } from "./tron.js";
 
-export type { SettleAnswer, VerifyAnswer } from "./answers.js";
-
 export interface ProfileFacilitatorConfig {
   /** "host:port" */
   listen: string;
