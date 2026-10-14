@@ -6,6 +6,16 @@
 @source "../../node_modules/fumadocs-ui/dist/**/*.js";
 @source "../../node_modules/fumadocs-twoslash/dist/**/*.js";
 
+/* Light-mode text colours that are at least 4.5:1 (WCAG 2.2 AA) on the page and card backgrounds: the muted text,
+   and the code samples, which sit on white. */
+html:not(.dark) {
+  --color-fd-muted-foreground: #666666;
+}
+
+html:not(.dark) figure.shiki {
+  background-color: #ffffff;
+}
+
 /* Code keeps every character as typed. */
 code,
 pre,

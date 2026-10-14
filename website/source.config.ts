@@ -84,7 +84,9 @@ export default defineConfig({
     ],
     rehypePlugins: (plugins) => [[rehypeUncheckedUnder, [apiDir]], rehypeMermaid, ...plugins],
     rehypeCodeOptions: {
-      themes: { light: "github-light", dark: "github-dark" },
+      // Every text colour of these two themes is at least 4.5:1 on its code background (global.css):
+      // white in light mode, the card colour in dark mode.
+      themes: { light: "github-light-default", dark: "github-dark-default" },
       transformers: [
         ...(rehypeCodeDefaultOptions.transformers ?? []),
         transformerTwoslash({
