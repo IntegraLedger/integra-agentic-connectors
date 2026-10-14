@@ -513,6 +513,40 @@ describe("the vectors", () => {
     expect(record.proves).toEqual({ claimed: false, pattern: null, settledBy: null });
   });
 
+  it("every link and agreement URL an answer carries is a random token's path, never one built from the hash", () => {
+    // A token: at least 16 random bytes, base64url without padding (RFC 4648 §5).
+    const isToken = (t: string) => /^[A-Za-z0-9_-]+$/.test(t) && Buffer.from(t, "base64url").length >= 16;
+    let links = 0;
+    let agreements = 0;
+    for (const [name, v] of Object.entries(VECTORS)) {
+      const f = v.fixed;
+      expect(f.linkTokens, name).toHaveLength(f.atrIds.length);
+      for (const t of [...f.linkTokens, ...(f.agreementTokens ?? [])]) expect(isToken(t), `${name} ${t}`).toBe(true);
+      for (const step of v.steps) {
+        const b = step.expect.body as Record<string, unknown>;
+        if (typeof b["link"] === "string") {
+          const issue = b as unknown as IssueResponse;
+          const token = f.linkTokens[f.atrIds.findIndex((_, i) => issue.link === `${f.storageBase}${f.linkTokens[i]}`)];
+          expect(token, `${name} link`).toBeDefined();
+          expect(issue.carriers.legalContext.legalContextUrl, name).toBe(issue.link);
+          expect(issue.carriers.legal_context.legal_context_url, name).toBe(issue.link);
+          expect(issue.link.toLowerCase().includes(issue.atrHash.slice(2).toLowerCase()), name).toBe(false);
+          links++;
+          const agreement = (b["agreement"] as { url: string } | undefined)?.url;
+          if (agreement !== undefined) {
+            const host = f.agreement?.host ?? f.hosts?.[0];
+            expect((f.agreementTokens ?? []).map((t) => `https://${host}/agreement/${t}`), name).toContain(agreement);
+            expect(agreement.toLowerCase().includes(issue.atrHash.slice(2).toLowerCase()), name).toBe(false);
+            agreements++;
+          }
+        }
+      }
+    }
+    // The vectors that issue (CV1, CV2 twice, CV3, CV6, CV7, CV9, CV10, CV11, CV12), two with the agreement step.
+    expect(links).toBe(10);
+    expect(agreements).toBe(2);
+  });
+
   it("OPENAPI_BYTES are openapi.json's bytes, vectors/ holds only CV<n>.json files, and VECTORS are each one parsed, in number order", () => {
     expect(Buffer.from(OPENAPI_BYTES).equals(readFileSync(new URL("../openapi.json", import.meta.url)))).toBe(true);
     // The package ships every file in vectors/, so each one is a vector that VECTORS holds.

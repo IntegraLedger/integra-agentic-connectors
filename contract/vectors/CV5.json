@@ -16,6 +16,9 @@
     "clock": 1790000000,
     "atrIds": [
       "6f1c2b0e-8d4a-4c3b-9e2f-1a7d5c9b3e50"
+    ],
+    "linkTokens": [
+      "UW9VslJ1ntPf-n2oOmLDWw"
     ]
   },
   "steps": [
@@ -123,5 +126,5 @@
       }
     }
   ],
-  "source": "RFC 6750 §2.1 and §3 for the 401 and its WWW-Authenticate challenge. The door serves servers only, so a request that carries an Origin header is refused 403."
+  "source": "RFC 6750 §2.1 and §3 for the 401 and its WWW-Authenticate challenge. The door serves servers only, so a request that carries an Origin header is refused 403. fixed.linkTokens holds its ATR id's link token, 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='); no step answers a link."
 }

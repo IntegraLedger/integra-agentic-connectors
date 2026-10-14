@@ -20,10 +20,12 @@ The package exports them, parsed, as `VECTORS`. [The vectors reference](../refer
 A vector is `{name, fixed, steps, source}`.
 
 - `fixed` names every value the steps depend on: the tenant, its credential and that credential's SHA-256, the
-  declared resources and their pairings, the storage base, the clock (Unix seconds) and the ATR identifiers the steps
-  mint, in order. Where a step needs the agreement step, it also names the tenant's hosts and its agreement: the
-  nominal payment's pairing, network, asset, payee, amount and time bound, and the `host` its URL is on when the
-  tenant has more than one. Where a step reads the rail, `reader` states what the network's reader answers: its
+  declared resources and their pairings, the storage base, the clock (Unix seconds), the ATR identifiers the steps
+  mint, in order, and `linkTokens`, one random token per identifier: the ATR is served at the storage base followed
+  by its token, the answer's `link`, never at a path built from the hash. Where a step needs the agreement step, it
+  also names the tenant's hosts and its agreement: the nominal payment's pairing, network, asset, payee, amount and
+  time bound, and the `host` its URL is on when the tenant has more than one; and `agreementTokens`, one random token
+  per agreement URL, in issue order: the URL is `https://<host>/agreement/<token>`. Where a step reads the rail, `reader` states what the network's reader answers: its
   `finalized` and `safe` block marks and each receipt it holds. A vector with no `reader` has none, and nothing is
   read.
 - Each step is `{agreed?, request, expect, stored?, storedFiles?}`:
@@ -98,8 +100,8 @@ ok   CV12 step 2: POST /report -> 202
 every step answered as its vector expects
 ```
 
-A real door also writes the ATR to storage: check each `stored` step's bytes at `<storageBase><atrHash>`, and that
-their SHA-256 is `stored.sha256`.
+A real door also writes the ATR to storage: check each `stored` step's bytes at the `link` its issue answers, the
+storage base followed by the record's link token, and that their SHA-256 is `stored.sha256`.
 
 ## Check the stored bytes without a door
 

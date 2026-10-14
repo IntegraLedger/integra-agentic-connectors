@@ -288,11 +288,13 @@ One vector: requests to the door and the answers they must produce.
 | `fixed.agreement.network` | `string` | - |
 | `fixed.agreement.pairing` | `string` | - |
 | `fixed.agreement.payTo` | `string` | - |
+| `fixed.agreementTokens?` | `string`[] | One agreement token per record that needs the agreement step, in the order the steps issue them: random, base64url without padding. The agreement URL is `https://<host>/agreement/` followed by its token. |
 | `fixed.atrIds` | `string`[] | - |
 | `fixed.clock` | `number` | - |
 | `fixed.credential` | `string` | - |
 | `fixed.credentialDigest` | `string` | - |
 | `fixed.hosts?` | `string`[] | The tenant's hosts: an agreement URL is on the agreement's `host`, or on the tenant's only host. |
+| `fixed.linkTokens` | `string`[] | One link token per `atrIds` entry, in the same order: random, base64url without padding. The ATR minted with that id is served at `storageBase` followed by its token, which is the answer's `link`, never a path built from the hash. |
 | `fixed.reader?` | `object` | What the network's reader answers: its `finalized` and `safe` block marks, and the receipt of each transaction it holds, as `eth_getTransactionReceipt` gives it, with block numbers as decimal strings. A vector with no reader has none, and nothing is read on its network. |
 | `fixed.reader.finalized` | `string` | - |
 | `fixed.reader.network` | `string` | - |

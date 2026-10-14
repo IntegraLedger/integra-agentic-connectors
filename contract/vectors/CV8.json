@@ -14,7 +14,8 @@
     ],
     "storageBase": "https://atr.seller.example/",
     "clock": 1790000000,
-    "atrIds": []
+    "atrIds": [],
+    "linkTokens": []
   },
   "steps": [
     {

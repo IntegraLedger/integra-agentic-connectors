@@ -26,7 +26,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV1
 
-**issue.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. Content: printf '%s' '"Pay 10000 base units of USDC for one report."' | base64. The option is the accepted option of the payment example in x402's MCP transport specification (specs/transports-v2/mcp.md), and the request's bodyDigest is the SHA-256 of an empty body: printf '' | sha256sum.
+**issue.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. Content: printf '%s' '"Pay 10000 base units of USDC for one report."' | base64. The option is the accepted option of the payment example in x402's MCP transport specification (specs/transports-v2/mcp.md), and the request's bodyDigest is the SHA-256 of an empty body: printf '' | sha256sum. The link is storageBase followed by fixed.linkTokens[0], 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='): a path from a random token, never from the hash. legalContextUrl and legal_context_url are the same link.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
@@ -34,7 +34,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV2
 
-**repeat.** Source: Step 1 is CV1: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. Content: printf '%s' '"Pay 10000 base units of USDC for one report."' | base64. Step 2 sends step 1's request again: its answer is step 1's body, byte for byte, and the storage holds one file.
+**repeat.** Source: Step 1 is CV1: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. Content: printf '%s' '"Pay 10000 base units of USDC for one report."' | base64. Step 2 sends step 1's request again: its answer is step 1's body, byte for byte, and the storage holds one file. The link is storageBase followed by fixed.linkTokens[0], 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='): a path from a random token, never from the hash. legalContextUrl and legal_context_url are the same link.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
@@ -43,7 +43,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV3
 
-**reused id.** Source: Step 1 is CV1: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. Content: printf '%s' '"Pay 10000 base units of USDC for one report."' | base64. Step 2 sends step 1's request with the option's amount "100": other offers under the same mint request id, which names one checkout state, are refused 409 issue/mint-request-reused.
+**reused id.** Source: Step 1 is CV1: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. Content: printf '%s' '"Pay 10000 base units of USDC for one report."' | base64. Step 2 sends step 1's request with the option's amount "100": other offers under the same mint request id, which names one checkout state, are refused 409 issue/mint-request-reused. The link is storageBase followed by fixed.linkTokens[0], 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='): a path from a random token, never from the hash. legalContextUrl and legal_context_url are the same link.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
@@ -52,7 +52,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV4
 
-**content not JSON.** Source: printf '%s' '&#123;"a":1&#125; &#123;"b":2&#125;' | base64: two JSON values in one slot are not one JSON value (RFC 8259).
+**content not JSON.** Source: printf '%s' '&#123;"a":1&#125; &#123;"b":2&#125;' | base64: two JSON values in one slot are not one JSON value (RFC 8259). fixed.linkTokens holds its ATR id's link token, 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='); no step answers a link.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
@@ -60,7 +60,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV5
 
-**refusals before work.** Source: RFC 6750 §2.1 and §3 for the 401 and its WWW-Authenticate challenge. The door serves servers only, so a request that carries an Origin header is refused 403.
+**refusals before work.** Source: RFC 6750 §2.1 and §3 for the 401 and its WWW-Authenticate challenge. The door serves servers only, so a request that carries an Origin header is refused 403. fixed.linkTokens holds its ATR id's link token, 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='); no step answers a link.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
@@ -69,7 +69,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV6
 
-**claim.** Source: The signature is x402's MCP example signature; the claim checks that the authorization's nonce is the hash, not the signature's validity.
+**claim.** Source: The signature is x402's MCP example signature; the claim checks that the authorization's nonce is the hash, not the signature's validity. The link is storageBase followed by fixed.linkTokens[0], 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='): a path from a random token, never from the hash. legalContextUrl and legal_context_url are the same link.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
@@ -79,7 +79,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV7
 
-**a report with no claim, not read yet.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. fixed names no reader, so nothing answers for the reported transaction. This pairing's hash can be read from the transaction alone, so the door records nothing yet and answers 202 with the record issued: report again later.
+**a report with no claim, not read yet.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. fixed names no reader, so nothing answers for the reported transaction. This pairing's hash can be read from the transaction alone, so the door records nothing yet and answers 202 with the record issued: report again later. The link is storageBase followed by fixed.linkTokens[0], 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='): a path from a random token, never from the hash. legalContextUrl and legal_context_url are the same link.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
@@ -96,7 +96,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV9
 
-**plain card checkout.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. The checkout bytes: printf '%s' '&#123;"id":"chk_1001","total":&#123;"currency":"USD","amount":27999&#125;&#125;' | base64. The reference is Wix's documented providerTransactionId example. fixed.agreement is a stated input. expiresAt: date -u -d @1790000900. The agreement URL is https://&lt;the tenant's first host&gt;/agreement/&lt;atrHash&gt;; the agreement transaction is a stated input, recorded before the report. Once the agreement is recorded, the pattern's statement names it: sed 's/&lt;network&gt;/eip155:84532/; s/&lt;transaction&gt;/&lt;the agreement transaction&gt;/'.
+**plain card checkout.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. The checkout bytes: printf '%s' '&#123;"id":"chk_1001","total":&#123;"currency":"USD","amount":27999&#125;&#125;' | base64. The reference is Wix's documented providerTransactionId example. fixed.agreement is a stated input. expiresAt: date -u -d @1790000900. The agreement URL is https://&lt;the tenant's first host&gt;/agreement/ followed by fixed.agreementTokens[0], 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='): a path from a random token, never from the hash, which a connector places exactly as issue returns it; the agreement transaction is a stated input, recorded before the report. Once the agreement is recorded, the pattern's statement names it: sed 's/&lt;network&gt;/eip155:84532/; s/&lt;transaction&gt;/&lt;the agreement transaction&gt;/'. The link is storageBase followed by fixed.linkTokens[0], 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='): a path from a random token, never from the hash. legalContextUrl and legal_context_url are the same link.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
@@ -107,7 +107,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV10
 
-**a card payment reported before the agreement is recorded.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. The checkout bytes: printf '%s' '&#123;"id":"chk_1002","total":&#123;"currency":"USD","amount":27999&#125;&#125;' | base64. expiresAt: date -u -d @1790000900. The agreement URL is https://&lt;the tenant's first host&gt;/agreement/&lt;atrHash&gt;. fixed.agreement is a stated input. The reference is Wix's documented providerTransactionId example. The payment has moved, so it is recorded on the seller's report, and the record states what is missing: no agreement was recorded before this payment, and nothing public carries this ATR's hash.
+**a card payment reported before the agreement is recorded.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. The checkout bytes: printf '%s' '&#123;"id":"chk_1002","total":&#123;"currency":"USD","amount":27999&#125;&#125;' | base64. expiresAt: date -u -d @1790000900. The agreement URL is https://&lt;the tenant's first host&gt;/agreement/ followed by fixed.agreementTokens[0], 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='): a path from a random token, never from the hash, which a connector places exactly as issue returns it. fixed.agreement is a stated input. The reference is Wix's documented providerTransactionId example. The payment has moved, so it is recorded on the seller's report, and the record states what is missing: no agreement was recorded before this payment, and nothing public carries this ATR's hash. The link is storageBase followed by fixed.linkTokens[0], 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='): a path from a random token, never from the hash. legalContextUrl and legal_context_url are the same link.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
@@ -117,7 +117,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV11
 
-**a report with no claim, read settled.** Source: Step 1 is CV7's issue: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. fixed.reader holds the reported transaction's receipt in the form of lcp 0.4.0's vectors/x402-exact-eip155-eip3009.json V6, with its two event topics: the token's AuthorizationUsed log (EIP-3009) whose nonce topic is this ATR's hash, then its Transfer (ERC-20) of printf '%064x' 10000 from the payer, the address of x402's MCP example, to payTo. The receipt's block is at the reader's finalized mark. With no claim, the door reads the hash from the transaction alone (the pairing's recover), so the record is paid on that read.
+**a report with no claim, read settled.** Source: Step 1 is CV7's issue: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. fixed.reader holds the reported transaction's receipt in the form of lcp 0.4.0's vectors/x402-exact-eip155-eip3009.json V6, with its two event topics: the token's AuthorizationUsed log (EIP-3009) whose nonce topic is this ATR's hash, then its Transfer (ERC-20) of printf '%064x' 10000 from the payer, the address of x402's MCP example, to payTo. The receipt's block is at the reader's finalized mark. With no claim, the door reads the hash from the transaction alone (the pairing's recover), so the record is paid on that read. The link is storageBase followed by fixed.linkTokens[0], 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='): a path from a random token, never from the hash. legalContextUrl and legal_context_url are the same link.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
@@ -126,7 +126,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV12
 
-**a report with no claim on a pairing whose hash is read only through the claim.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. The option is lcp 0.4.0's vectors/x402-auth-capture-eip155-eip3009.json fixed.option. In lcp 0.4.0's registry this pairing has status and no recover: with no claim, no read of the transaction can check the hash. fixed.reader is that file's EV6 reader (network, finalized and safe marks) with one receipt, keyed by the reported transaction: status 1 at EV6's expected block 100, holding EV6's authorizedAndTransfer logs (the escrow's PaymentAuthorized, then the token's Transfer), with the PaymentAuthorized log's second topic this ATR's payment hash, authCaptureEip3009.reference(payment).bindingLog.value for the payment authCaptureEip3009.build gives for this ATR's hash from that file's fixed payer, now and option, as lcp 0.4.0's test/x402-evm-breadth.test.ts builds EV6's. The receipt holds this ATR's payment at the reader's finalized mark, and with no claim the read checks no hash: nothing is recorded, and the report is answered 202 with the record issued, settlement null and proves (claimed false, no pattern, nothing settled it), so the record is unpaid.
+**a report with no claim on a pairing whose hash is read only through the claim.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. The option is lcp 0.4.0's vectors/x402-auth-capture-eip155-eip3009.json fixed.option. In lcp 0.4.0's registry this pairing has status and no recover: with no claim, no read of the transaction can check the hash. fixed.reader is that file's EV6 reader (network, finalized and safe marks) with one receipt, keyed by the reported transaction: status 1 at EV6's expected block 100, holding EV6's authorizedAndTransfer logs (the escrow's PaymentAuthorized, then the token's Transfer), with the PaymentAuthorized log's second topic this ATR's payment hash, authCaptureEip3009.reference(payment).bindingLog.value for the payment authCaptureEip3009.build gives for this ATR's hash from that file's fixed payer, now and option, as lcp 0.4.0's test/x402-evm-breadth.test.ts builds EV6's. The receipt holds this ATR's payment at the reader's finalized mark, and with no claim the read checks no hash: nothing is recorded, and the report is answered 202 with the record issued, settlement null and proves (claimed false, no pattern, nothing settled it), so the record is unpaid. The link is storageBase followed by fixed.linkTokens[0], 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='): a path from a random token, never from the hash. legalContextUrl and legal_context_url are the same link.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|

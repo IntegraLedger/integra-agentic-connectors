@@ -17,6 +17,9 @@
     "atrIds": [
       "6f1c2b0e-8d4a-4c3b-9e2f-1a7d5c9b3e51"
     ],
+    "linkTokens": [
+      "NYzul1P1-_xhfoC-ayjpVA"
+    ],
     "reader": {
       "network": "eip155:84532",
       "finalized": "100",
@@ -97,7 +100,7 @@
         "status": 200,
         "body": {
           "atrHash": "0x44f9a0d126d985d37b81447205a70c6d2ecd386a9fca859ddd5f61496ec33733",
-          "link": "https://atr.seller.example/0x44f9a0d126d985d37b81447205a70c6d2ecd386a9fca859ddd5f61496ec33733",
+          "link": "https://atr.seller.example/NYzul1P1-_xhfoC-ayjpVA",
           "expiresAt": "2026-09-21T14:14:20.000Z",
           "mintRequestId": "chk_7Q2:v3",
           "carriers": {
@@ -105,12 +108,12 @@
             "legalContext": {
               "type": "sha256",
               "value": "0x44f9a0d126d985d37b81447205a70c6d2ecd386a9fca859ddd5f61496ec33733",
-              "legalContextUrl": "https://atr.seller.example/0x44f9a0d126d985d37b81447205a70c6d2ecd386a9fca859ddd5f61496ec33733"
+              "legalContextUrl": "https://atr.seller.example/NYzul1P1-_xhfoC-ayjpVA"
             },
             "legal_context": {
               "type": "sha256",
               "value": "0x44f9a0d126d985d37b81447205a70c6d2ecd386a9fca859ddd5f61496ec33733",
-              "legal_context_url": "https://atr.seller.example/0x44f9a0d126d985d37b81447205a70c6d2ecd386a9fca859ddd5f61496ec33733"
+              "legal_context_url": "https://atr.seller.example/NYzul1P1-_xhfoC-ayjpVA"
             }
           },
           "pairings": [
@@ -202,5 +205,5 @@
       }
     }
   ],
-  "source": "Step 1 is CV7's issue: printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. fixed.reader holds the reported transaction's receipt in the form of lcp 0.4.0's vectors/x402-exact-eip155-eip3009.json V6, with its two event topics: the token's AuthorizationUsed log (EIP-3009) whose nonce topic is this ATR's hash, then its Transfer (ERC-20) of printf '%064x' 10000 from the payer, the address of x402's MCP example, to payTo. The receipt's block is at the reader's finalized mark. With no claim, the door reads the hash from the transaction alone (the pairing's recover), so the record is paid on that read."
+  "source": "Step 1 is CV7's issue: printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. fixed.reader holds the reported transaction's receipt in the form of lcp 0.4.0's vectors/x402-exact-eip155-eip3009.json V6, with its two event topics: the token's AuthorizationUsed log (EIP-3009) whose nonce topic is this ATR's hash, then its Transfer (ERC-20) of printf '%064x' 10000 from the payer, the address of x402's MCP example, to payTo. The receipt's block is at the reader's finalized mark. With no claim, the door reads the hash from the transaction alone (the pairing's recover), so the record is paid on that read. The link is storageBase followed by fixed.linkTokens[0], 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='): a path from a random token, never from the hash. legalContextUrl and legal_context_url are the same link."
 }

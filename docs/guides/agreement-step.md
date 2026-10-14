@@ -32,7 +32,8 @@ sequenceDiagram
 ```
 
 1. `issue` answers with `agreement: {url, network, pairing}`. The URL is on the tenant's host, at
-   `/agreement/<atrHash>`.
+   `/agreement/<token>`, where the token is random and never built from the hash. Place `agreement.url` exactly as
+   `issue` returns it.
 2. Place `agreement.url` where the buyer's agent can see it, beside the carriers:
    - on MPP, as `opaque.legalContextAgreementUrl`;
    - elsewhere, as `legalContextAgreementUrl` beside `legalContextUrl`, or the protocol's own place beside the link.

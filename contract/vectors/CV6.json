@@ -16,6 +16,9 @@
     "clock": 1790000000,
     "atrIds": [
       "6f1c2b0e-8d4a-4c3b-9e2f-1a7d5c9b3e50"
+    ],
+    "linkTokens": [
+      "UW9VslJ1ntPf-n2oOmLDWw"
     ]
   },
   "steps": [
@@ -66,7 +69,7 @@
         "status": 200,
         "body": {
           "atrHash": "0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3",
-          "link": "https://atr.seller.example/0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3",
+          "link": "https://atr.seller.example/UW9VslJ1ntPf-n2oOmLDWw",
           "expiresAt": "2026-09-21T14:14:20.000Z",
           "mintRequestId": "chk_7Q2:v1",
           "carriers": {
@@ -74,12 +77,12 @@
             "legalContext": {
               "type": "sha256",
               "value": "0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3",
-              "legalContextUrl": "https://atr.seller.example/0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3"
+              "legalContextUrl": "https://atr.seller.example/UW9VslJ1ntPf-n2oOmLDWw"
             },
             "legal_context": {
               "type": "sha256",
               "value": "0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3",
-              "legal_context_url": "https://atr.seller.example/0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3"
+              "legal_context_url": "https://atr.seller.example/UW9VslJ1ntPf-n2oOmLDWw"
             }
           },
           "pairings": [
@@ -255,5 +258,5 @@
       }
     }
   ],
-  "source": "The signature is x402's MCP example signature; the claim checks that the authorization's nonce is the hash, not the signature's validity."
+  "source": "The signature is x402's MCP example signature; the claim checks that the authorization's nonce is the hash, not the signature's validity. The link is storageBase followed by fixed.linkTokens[0], 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='): a path from a random token, never from the hash. legalContextUrl and legal_context_url are the same link."
 }

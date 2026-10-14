@@ -230,6 +230,11 @@ export interface Vector {
     storageBase: string;
     clock: number;
     atrIds: string[];
+    /**
+     * One link token per `atrIds` entry, in the same order: random, base64url without padding. The ATR minted with that
+     * id is served at `storageBase` followed by its token, which is the answer's `link`, never a path built from the hash.
+     */
+    linkTokens: string[];
     /** The tenant's hosts: an agreement URL is on the agreement's `host`, or on the tenant's only host. */
     hosts?: string[];
     /** The tenant's agreement step: the nominal payment's pairing, network, asset, payee, amount and time bound. */
@@ -244,6 +249,11 @@ export interface Vector {
       /** The tenant host the agreement URL is on; required when `hosts` has more than one. */
       host?: string;
     };
+    /**
+     * One agreement token per record that needs the agreement step, in the order the steps issue them: random, base64url
+     * without padding. The agreement URL is `https://<host>/agreement/` followed by its token.
+     */
+    agreementTokens?: string[];
     /**
      * What the network's reader answers: its `finalized` and `safe` block marks, and the receipt of each transaction it
      * holds, as `eth_getTransactionReceipt` gives it, with block numbers as decimal strings. A vector with no reader

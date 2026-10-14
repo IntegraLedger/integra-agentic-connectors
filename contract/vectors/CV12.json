@@ -17,6 +17,9 @@
     "atrIds": [
       "6f1c2b0e-8d4a-4c3b-9e2f-1a7d5c9b3e54"
     ],
+    "linkTokens": [
+      "t21tN1vS81yol0yNOW_9fw"
+    ],
     "reader": {
       "network": "eip155:84532",
       "finalized": "100",
@@ -103,7 +106,7 @@
         "status": 200,
         "body": {
           "atrHash": "0xb8722010481cfbea6d8b6d7faa4e5ab986092682dec60c28b4c4a9e2118b99fd",
-          "link": "https://atr.seller.example/0xb8722010481cfbea6d8b6d7faa4e5ab986092682dec60c28b4c4a9e2118b99fd",
+          "link": "https://atr.seller.example/t21tN1vS81yol0yNOW_9fw",
           "expiresAt": "2026-09-21T14:14:20.000Z",
           "mintRequestId": "chk_7Q2:v4",
           "carriers": {
@@ -111,12 +114,12 @@
             "legalContext": {
               "type": "sha256",
               "value": "0xb8722010481cfbea6d8b6d7faa4e5ab986092682dec60c28b4c4a9e2118b99fd",
-              "legalContextUrl": "https://atr.seller.example/0xb8722010481cfbea6d8b6d7faa4e5ab986092682dec60c28b4c4a9e2118b99fd"
+              "legalContextUrl": "https://atr.seller.example/t21tN1vS81yol0yNOW_9fw"
             },
             "legal_context": {
               "type": "sha256",
               "value": "0xb8722010481cfbea6d8b6d7faa4e5ab986092682dec60c28b4c4a9e2118b99fd",
-              "legal_context_url": "https://atr.seller.example/0xb8722010481cfbea6d8b6d7faa4e5ab986092682dec60c28b4c4a9e2118b99fd"
+              "legal_context_url": "https://atr.seller.example/t21tN1vS81yol0yNOW_9fw"
             }
           },
           "pairings": [
@@ -201,5 +204,5 @@
       }
     }
   ],
-  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. The option is lcp 0.4.0's vectors/x402-auth-capture-eip155-eip3009.json fixed.option. In lcp 0.4.0's registry this pairing has status and no recover: with no claim, no read of the transaction can check the hash. fixed.reader is that file's EV6 reader (network, finalized and safe marks) with one receipt, keyed by the reported transaction: status 1 at EV6's expected block 100, holding EV6's authorizedAndTransfer logs (the escrow's PaymentAuthorized, then the token's Transfer), with the PaymentAuthorized log's second topic this ATR's payment hash, authCaptureEip3009.reference(payment).bindingLog.value for the payment authCaptureEip3009.build gives for this ATR's hash from that file's fixed payer, now and option, as lcp 0.4.0's test/x402-evm-breadth.test.ts builds EV6's. The receipt holds this ATR's payment at the reader's finalized mark, and with no claim the read checks no hash: nothing is recorded, and the report is answered 202 with the record issued, settlement null and proves (claimed false, no pattern, nothing settled it), so the record is unpaid."
+  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. The option is lcp 0.4.0's vectors/x402-auth-capture-eip155-eip3009.json fixed.option. In lcp 0.4.0's registry this pairing has status and no recover: with no claim, no read of the transaction can check the hash. fixed.reader is that file's EV6 reader (network, finalized and safe marks) with one receipt, keyed by the reported transaction: status 1 at EV6's expected block 100, holding EV6's authorizedAndTransfer logs (the escrow's PaymentAuthorized, then the token's Transfer), with the PaymentAuthorized log's second topic this ATR's payment hash, authCaptureEip3009.reference(payment).bindingLog.value for the payment authCaptureEip3009.build gives for this ATR's hash from that file's fixed payer, now and option, as lcp 0.4.0's test/x402-evm-breadth.test.ts builds EV6's. The receipt holds this ATR's payment at the reader's finalized mark, and with no claim the read checks no hash: nothing is recorded, and the report is answered 202 with the record issued, settlement null and proves (claimed false, no pattern, nothing settled it), so the record is unpaid. The link is storageBase followed by fixed.linkTokens[0], 16 random bytes in base64url without padding (head -c 16 /dev/urandom | basenc --base64url | tr -d '='): a path from a random token, never from the hash. legalContextUrl and legal_context_url are the same link."
 }

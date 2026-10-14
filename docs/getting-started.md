@@ -96,8 +96,8 @@ console.log("until", issued.expiresAt);
 
 ```text output
 H:    0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3
-link: https://atr.seller.example/0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3
-x402: {"type":"sha256","value":"0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3","legalContextUrl":"https://atr.seller.example/0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3"}
+link: https://atr.seller.example/UW9VslJ1ntPf-n2oOmLDWw
+x402: {"type":"sha256","value":"0x3c2394624c8c9a61ebaf7d8750a6f9ac21bf73e6369b7c0b64c83e34509cc3d3","legalContextUrl":"https://atr.seller.example/UW9VslJ1ntPf-n2oOmLDWw"}
 until 2026-09-21T14:14:20.000Z
 ```
 

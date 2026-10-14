@@ -59,7 +59,7 @@ console.log("report:", reported.status, record.state, record.settlement?.referen
 ```
 
 ```text output
-agreement URL: https://seller.example/agreement/0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39145d46842f825d8
+agreement URL: https://seller.example/agreement/c9Vjx6x4iePLPYu52lMiWA
 claim: 422 claim/nothing-to-check
 report: 200 paid pi_3Nma8hD7mauJ7ZJt0bKKZkRT seller-report
 ```
