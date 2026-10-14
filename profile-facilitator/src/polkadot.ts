@@ -231,26 +231,41 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       return undefined;
     });
 
-  /** The network's metadata, loaded once and loaded again when the node's runtime version changes. */
-  async function apiFor(node: PolkadotNode, timeoutMs = NODE_TIMEOUT_MS): Promise<ApiPromise> {
+  /**
+   * The network's metadata, loaded once and loaded again when the node's runtime version changes, within `timeoutMs`:
+   * the version read, the wait for a load another request started, and the wait for a new load. One failed load is one
+   * failure, with one operator entry. A load that fails while the request that started it waits is that request's
+   * failure, which it reports; one that fails once that request has stopped waiting goes to the operator log from the
+   * handler below, with that request's payment `fields` and the load's cause.
+   */
+  async function apiFor(node: PolkadotNode, fields: Record<string, string>, timeoutMs: number): Promise<ApiPromise> {
+    const deadline = performance.now() + timeoutMs;
+    const left = () => deadline - performance.now();
     const version = await rpc(node.rpc, "state_getRuntimeVersion", [], timeoutMs);
     const spec = isObject(version) ? version["specVersion"] : undefined;
     if (typeof spec !== "number") throw new NodeError("malformed", true, "state_getRuntimeVersion: no specVersion");
     let loading = apis.get(node.network);
     if (loading !== undefined) {
-      // A load that failed has gone to the operator log from its handler below; a new one is made.
-      const api = await loading.catch(() => undefined);
+      // A load that failed has gone to the operator log, from the request that started it or from the handler below;
+      // a new one is made.
+      const api = await within(loading.catch(() => undefined), left());
       if (api !== undefined && api.runtimeVersion.specVersion.toNumber() === spec) return api;
       apis.delete(node.network);
       void api?.disconnect();
     }
     const fresh = load(node);
     apis.set(node.network, fresh);
+    let waiting = true;
+    // Registered before the wait below, so a failure that ends the wait reaches this handler while `waiting` holds.
     fresh.catch((e: unknown) => {
-      log({ event: "node-call-failed", network: node.network, call: "metadata" }, e);
       if (apis.get(node.network) === fresh) apis.delete(node.network);
+      if (!waiting) log({ event: "node-call-failed", ...fields, call: "metadata" }, e);
     });
-    return fresh;
+    try {
+      return await within(fresh, left());
+    } finally {
+      waiting = false;
+    }
   }
 
   async function load(node: PolkadotNode): Promise<ApiPromise> {
@@ -295,12 +310,12 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
 
   /** The checks of rule 5 that decode the extrinsic with the network's metadata, within `timeoutMs`. */
   async function decode(l: Local, timeoutMs: number): Promise<Checked | InvalidReason> {
+    const fields = about({ network: l.node.network, id: l.id });
     let api: ApiPromise;
     try {
-      api = await within(apiFor(l.node, timeoutMs), timeoutMs);
+      api = await apiFor(l.node, fields, timeoutMs);
     } catch (e) {
-      const entry = { event: "node-call-failed", ...about({ network: l.node.network, id: l.id }), call: "metadata" };
-      return unexpectedVerify(log, entry, e);
+      return unexpectedVerify(log, { event: "node-call-failed", ...fields, call: "metadata" }, e);
     }
     let xt;
     try {
@@ -713,7 +728,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
   async function close(): Promise<void> {
     const all = [...apis];
     apis.clear();
-    // A load that failed has gone to the operator log from `apiFor`; a failed disconnect goes there here.
+    // A load that failed has gone to the operator log from `decode` or `apiFor`; a failed disconnect goes there here.
     await Promise.all(
       all.map(([network, p]) =>
         p.then(

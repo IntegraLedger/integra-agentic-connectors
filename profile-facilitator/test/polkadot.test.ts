@@ -747,6 +747,53 @@ describe("the operator log", () => {
     expect((logged("node-call-failed")[0]!.cause as Error).message).toBe(INTERNAL.message);
   });
 
+  // One failed metadata load is one failure: it reaches the log once, from the request that started the load while it
+  // waits, and from the load's own handler once that request has stopped waiting. The node at OTHER answers another
+  // chain's genesis, so every load there fails once the node has given the metadata.
+  const OTHER = "polkadot:67f9723393ef76214df0118c34bbbd3d";
+  const LOAD_ENTRY = { event: "node-call-failed", network: OTHER, transaction: HASH_V3, call: "metadata" };
+  const ANOTHER_CHAIN = `the node at ${OTHER} serves another chain`;
+  const isMetadata = (method: string, params: unknown[]) =>
+    method === "state_call" && params[0] === "Metadata_metadata_at_version";
+
+  it("a metadata load that fails reaches the log once, with the network, the hash, the call and the load's cause, and the answer is unchanged", async () => {
+    await start({}, OTHER);
+    expect((await post(`${base}/verify`, body(XT_V3, CALL_V2, { ...O_P, network: OTHER }))).json).toEqual({
+      isValid: false,
+      invalidReason: "unexpected_verify_error",
+    });
+    expect(entries.map((e) => e.entry)).toEqual([LOAD_ENTRY]);
+    expect((entries[0]!.cause as Error).message).toBe(ANOTHER_CHAIN);
+  });
+
+  it("a metadata load that fails once the settle that started it has stopped waiting reaches the log once, with the load's cause, after that settle's own entry", async () => {
+    // The node holds the metadata until the clock is at settleWaitMs (1,000 ms): the settle's wait ends, and its entry's
+    // cause is the timeout. The load then fails. A /verify that follows waits for that load before it makes its own,
+    // which fails while the /verify waits.
+    const metadata = gate();
+    await start(
+      {
+        hold: async (method, params) => {
+          if (isMetadata(method, params)) await metadata.opened;
+        },
+      },
+      OTHER,
+      1_000,
+    );
+    const sent = body(XT_V3, CALL_V2, { ...O_P, network: OTHER });
+    const answer = post(`${base}/settle`, sent);
+    await reaches(answer, () => calls("state_call").some((b) => isMetadata(b.method, b.params)));
+    await clock.advanceTo(1_000);
+    expect((await answer).json).toEqual({ success: false, errorReason: "unexpected_settle_error", transaction: "", network: OTHER });
+    expect(entries.map((e) => e.entry)).toEqual([LOAD_ENTRY]);
+    expect(entries[0]!.cause).toBeInstanceOf(NodeError);
+    expect((entries[0]!.cause as NodeError).code).toBe("timeout");
+    metadata.open();
+    expect((await post(`${base}/verify`, sent)).json).toEqual({ isValid: false, invalidReason: "unexpected_verify_error" });
+    expect(entries.map((e) => e.entry)).toEqual([LOAD_ENTRY, LOAD_ENTRY, LOAD_ENTRY]);
+    expect(entries.slice(1).map((e) => (e.cause as Error).message)).toEqual([ANOTHER_CHAIN, ANOTHER_CHAIN]);
+  });
+
   it("a store call that fails reaches the log with the network, the hash and the call, and the answer is pending with the hash", async () => {
     // The store is read before the extrinsic is decoded, so the entry names no payer.
     await start();
