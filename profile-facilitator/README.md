@@ -165,6 +165,7 @@ open connections, disconnects from the Polkadot nodes and closes the Postgres po
 | `polkadot` | `{ network, rpc }[]`, optional | One entry per network, `polkadot:68d56f15f85d3136970ec16946040bc1` or `polkadot:67f9723393ef76214df0118c34bbbd3d`. `rpc` is an HTTP JSON-RPC endpoint that serves `state_call` and `author_submitExtrinsic`. |
 | `store` | `{ url }` | The Postgres connection string. Postgres holds the deduplication table only. |
 | `settleWaitMs` | `number` | How long `/settle` waits for inclusion before it answers `settlement_pending`. A value that is not a positive finite number means 30 000. |
+| `operatorLog` | `(entry, cause?) => void`, optional | Receives every entry for the operator (see "Bounds and logs"). `entry` is `{ event, network?, payer?, transaction?, … }`, naming the payment where it is known; `cause` is the error behind it, when there is one. The answer to the client is the same either way and carries nothing from the cause. A log that throws, or returns a promise that rejects, changes no answer: the entry is written by the default, with an `operator-log-failed` entry. The default writes one JSON line per entry on standard error, the cause as `cause` (its name, message, stack and `cause` chain). |
 
 The facilitator serves only the networks it is configured with. A request for any other network is answered
 `invalid_network`. At start it creates its table if it does not exist; a Polkadot node's runtime metadata is loaded on
@@ -466,11 +467,17 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   claimed for submission; it is one row of fixed columns, the sweep's index does not hold it, and each repeat reads the
   chain within `settleWaitMs`. On Tron, one repeat made once the latest solidified block is two slots past the
   expiration gives a final answer whenever the nodes answer its reads, each naming a latest block at or past that one.
-- The facilitator writes one JSON line on standard error for what the operator should see and the answer does not
-  carry: `settlement-failed` (with the events, or the receipt result and why the transfer does not count, that the
-  chain shows), `settlement-expired`, `answer-not-stored`, `block-unreadable` (a finalized Polkadot block recorded
-  as unread, with the node's reason) and `settlement-consumed` (a repeated `/settle` of a Polkadot payment whose
-  success has been answered).
+- The facilitator gives its operator log (`operatorLog`; by default one JSON line on standard error) what the operator
+  should see and the answer does not carry, each entry with `network`, `payer` and `transaction` where they are known:
+  `settlement-failed` (with the events, or the receipt result and why the transfer does not count, that the chain
+  shows), `settlement-expired`, `answer-not-stored`, `block-unreadable` (a Polkadot block the node does not give, with
+  the node's reason; `final` when it was read at finality and is recorded as unread), `block-read-stopped` (a block read
+  the settle's deadline ended) and `settlement-consumed` (a repeated `/settle` of a Polkadot payment whose success has
+  been answered). Each error the facilitator turns into an answer or a retry is an entry with the error as its cause:
+  `verify-error`, `settle-error` and `request-error` (an error the request's handling threw), `node-call-failed` and
+  `store-call-failed` (with the `call`), and `store-connection-error`. A request refused for its own bytes (a body that
+  is not JSON, a signature that recovers no key, an extrinsic that does not decode) is answered to its client and not
+  logged.
 
 ## Security model and guarantees
 

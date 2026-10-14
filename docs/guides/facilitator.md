@@ -115,6 +115,7 @@ open connections, disconnects from the Polkadot nodes and closes the Postgres po
 | `polkadot` | `{ network, rpc }[]`, optional | One entry per network, `polkadot:68d56f15f85d3136970ec16946040bc1` or `polkadot:67f9723393ef76214df0118c34bbbd3d`. `rpc` is an HTTP JSON-RPC endpoint that serves `state_call` and `author_submitExtrinsic`. |
 | `store` | `{ url }` | The Postgres connection string. Postgres holds the deduplication table only. |
 | `settleWaitMs` | `number` | How long `/settle` waits for inclusion before it answers `settlement_pending`. A value that is not a positive finite number means 30 000. |
+| `operatorLog` | `(entry, cause?) => void`, optional | Receives every entry for the operator, listed under [Bounds and logs](../reference/profile-facilitator.md#bounds-and-logs). `entry` is `{ event, network?, payer?, transaction?, … }`, naming the payment where it is known; `cause` is the error behind it, when there is one. The answer to the client is the same either way and carries nothing from the cause. A log that throws, or returns a promise that rejects, changes no answer: the entry is written by the default, with an `operator-log-failed` entry. The default writes one JSON line per entry on standard error, the cause as `cause` (its name, message, stack and `cause` chain). |
 
 The facilitator serves only the networks it is configured with. A request for any other network is answered
 `invalid_network`. At start it creates its table if it does not exist; a Polkadot node's runtime metadata is loaded on

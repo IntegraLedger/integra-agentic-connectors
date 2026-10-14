@@ -116,8 +116,14 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   claimed for submission; it is one row of fixed columns, the sweep's index does not hold it, and each repeat reads the
   chain within `settleWaitMs`. On Tron, one repeat made once the latest solidified block is two slots past the
   expiration gives a final answer whenever the nodes answer its reads, each naming a latest block at or past that one.
-- The facilitator writes one JSON line on standard error for what the operator should see and the answer does not
-  carry: `settlement-failed` (with the events, or the receipt result and why the transfer does not count, that the
-  chain shows), `settlement-expired`, `answer-not-stored`, `block-unreadable` (a finalized Polkadot block recorded
-  as unread, with the node's reason) and `settlement-consumed` (a repeated `/settle` of a Polkadot payment whose
-  success has been answered).
+- The facilitator gives its operator log (`operatorLog`; by default one JSON line on standard error) what the operator
+  should see and the answer does not carry, each entry with `network`, `payer` and `transaction` where they are known:
+  `settlement-failed` (with the events, or the receipt result and why the transfer does not count, that the chain
+  shows), `settlement-expired`, `answer-not-stored`, `block-unreadable` (a Polkadot block the node does not give, with
+  the node's reason; `final` when it was read at finality and is recorded as unread), `block-read-stopped` (a block read
+  the settle's deadline ended) and `settlement-consumed` (a repeated `/settle` of a Polkadot payment whose success has
+  been answered). Each error the facilitator turns into an answer or a retry is an entry with the error as its cause:
+  `verify-error`, `settle-error` and `request-error` (an error the request's handling threw), `node-call-failed` and
+  `store-call-failed` (with the `call`), and `store-connection-error`. A request refused for its own bytes (a body that
+  is not JSON, a signature that recovers no key, an extrinsic that does not decode) is answered to its client and not
+  logged.
