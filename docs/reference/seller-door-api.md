@@ -34,16 +34,19 @@ Requires the seller credential: `Authorization: Bearer isk_…`.
 | Status | Meaning | Body | Headers |
 |---|---|---|---|
 | 200 | The ATR is in the seller's storage; place these values before approval. | [IssueResponse](#issueresponse) |  |
-| 400 | The body is not the operation's JSON object. | [Refusal](#refusal): [`door/malformed`](./refusals.md#doormalformed) |  |
+| 400 | The body is not the operation's JSON object, or the runtime could not read the request. | [Refusal](#refusal): [`door/malformed`](./refusals.md#doormalformed); [RuntimeRefusal](#runtimerefusal): [`bad-request`](./refusals.md#bad-request) |  |
 | 401 | No valid seller credential. | [Refusal](#refusal): [`door/unauthenticated`](./refusals.md#doorunauthenticated) | `WWW-Authenticate`: `Bearer realm="seller-door"` |
 | 403 | The request carries an Origin header; the door serves servers only. | [Refusal](#refusal): [`door/browser-origin`](./refusals.md#doorbrowser-origin) |  |
 | 404 | Nothing known by that name for this tenant. | [Refusal](#refusal): [`door/resource-unknown`](./refusals.md#doorresource-unknown) |  |
-| 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod) |  |
+| 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod); [RuntimeRefusal](#runtimerefusal): [`method-not-allowed`](./refusals.md#method-not-allowed) |  |
+| 408 | The request did not arrive in full in time. | [RuntimeRefusal](#runtimerefusal): [`request-timeout`](./refusals.md#request-timeout) |  |
 | 409 | The record is in a state that does not allow this. | [Refusal](#refusal): [`issue/mint-request-reused`](./refusals.md#issuemint-request-reused), [`issue/mint-request-lapsed`](./refusals.md#issuemint-request-lapsed) |  |
-| 413 | The body is larger than this operation accepts. | [Refusal](#refusal): [`door/too-large`](./refusals.md#doortoo-large) |  |
+| 413 | The body is larger than this operation, or the runtime, accepts. | [Refusal](#refusal): [`door/too-large`](./refusals.md#doortoo-large); [RuntimeRefusal](#runtimerefusal): [`body-too-large`](./refusals.md#body-too-large) |  |
 | 415 | The body is not application/json. | [Refusal](#refusal): [`door/media-type`](./refusals.md#doormedia-type) |  |
 | 422 | The request cannot be served as sent. | [Refusal](#refusal): [`door/request-required`](./refusals.md#doorrequest-required), [`issue/input-bounds`](./refusals.md#issueinput-bounds), [`issue/pairing-not-served`](./refusals.md#issuepairing-not-served), [`issue/offer-refused`](./refusals.md#issueoffer-refused), [`issue/mixed-protocols`](./refusals.md#issuemixed-protocols), [`core/slot-name`](./refusals.md#coreslot-name), [`core/slot-reserved`](./refusals.md#coreslot-reserved), [`core/slot-duplicate`](./refusals.md#coreslot-duplicate), [`core/content-not-json`](./refusals.md#corecontent-not-json), [`core/binding-not-json`](./refusals.md#corebinding-not-json), [`core/too-large`](./refusals.md#coretoo-large) |  |
-| 503 | Not available now; retry after one second. | [Refusal](#refusal): [`issue/deadline`](./refusals.md#issuedeadline), [`issue/contributor-unavailable`](./refusals.md#issuecontributor-unavailable), [`issue/storage-unavailable`](./refusals.md#issuestorage-unavailable), [`issue/store-unavailable`](./refusals.md#issuestore-unavailable), [`issue/capacity`](./refusals.md#issuecapacity) | `Retry-After`: `1` |
+| 431 | The request's header block is larger than the runtime reads. | [RuntimeRefusal](#runtimerefusal): [`bad-request`](./refusals.md#bad-request) |  |
+| 500 | The request could not be served; quote the `correlationId` to the door's operator. | [RuntimeRefusal](#runtimerefusal): [`fault`](./refusals.md#fault) |  |
+| 503 | Not available now; retry after one second. | [Refusal](#refusal): [`issue/deadline`](./refusals.md#issuedeadline), [`issue/contributor-unavailable`](./refusals.md#issuecontributor-unavailable), [`issue/storage-unavailable`](./refusals.md#issuestorage-unavailable), [`issue/store-unavailable`](./refusals.md#issuestore-unavailable), [`issue/capacity`](./refusals.md#issuecapacity); [RuntimeRefusal](#runtimerefusal): [`at-capacity`](./refusals.md#at-capacity) | `Retry-After`: `1` |
 
 ### claim
 
@@ -56,17 +59,20 @@ Requires the seller credential: `Authorization: Bearer isk_…`.
 | Status | Meaning | Body | Headers |
 |---|---|---|---|
 | 200 | Claimed, and the record is settling; or, for a pushed payment that landed and then failed the check, declined. | [ClaimResponse](#claimresponse) or [ClaimDeclined](#claimdeclined) |  |
-| 400 | The body is not the operation's JSON object. | [Refusal](#refusal): [`door/malformed`](./refusals.md#doormalformed) |  |
+| 400 | The body is not the operation's JSON object, or the runtime could not read the request. | [Refusal](#refusal): [`door/malformed`](./refusals.md#doormalformed); [RuntimeRefusal](#runtimerefusal): [`bad-request`](./refusals.md#bad-request) |  |
 | 401 | No valid seller credential. | [Refusal](#refusal): [`door/unauthenticated`](./refusals.md#doorunauthenticated) | `WWW-Authenticate`: `Bearer realm="seller-door"` |
 | 403 | The request carries an Origin header; the door serves servers only. | [Refusal](#refusal): [`door/browser-origin`](./refusals.md#doorbrowser-origin) |  |
 | 404 | Nothing known by that name for this tenant. | [Refusal](#refusal): [`door/resource-unknown`](./refusals.md#doorresource-unknown), [`claim/unknown`](./refusals.md#claimunknown) |  |
-| 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod) |  |
+| 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod); [RuntimeRefusal](#runtimerefusal): [`method-not-allowed`](./refusals.md#method-not-allowed) |  |
+| 408 | The request did not arrive in full in time. | [RuntimeRefusal](#runtimerefusal): [`request-timeout`](./refusals.md#request-timeout) |  |
 | 409 | The record is in a state that does not allow this. | [Refusal](#refusal): [`claim/in-progress`](./refusals.md#claimin-progress), [`claim/paid`](./refusals.md#claimpaid), [`claim/not-this-request`](./refusals.md#claimnot-this-request), [`claim/channel-open`](./refusals.md#claimchannel-open), [`claim/channel-not-open`](./refusals.md#claimchannel-not-open), [`claim/agreement-first`](./refusals.md#claimagreement-first), [`claim/instrument-claimed`](./refusals.md#claiminstrument-claimed) |  |
 | 410 | The challenge has lapsed. | [Refusal](#refusal): [`claim/lapsed`](./refusals.md#claimlapsed) |  |
-| 413 | The body is larger than this operation accepts. | [Refusal](#refusal): [`door/too-large`](./refusals.md#doortoo-large) |  |
+| 413 | The body is larger than this operation, or the runtime, accepts. | [Refusal](#refusal): [`door/too-large`](./refusals.md#doortoo-large); [RuntimeRefusal](#runtimerefusal): [`body-too-large`](./refusals.md#body-too-large) |  |
 | 415 | The body is not application/json. | [Refusal](#refusal): [`door/media-type`](./refusals.md#doormedia-type) |  |
 | 422 | The request cannot be served as sent. | [Refusal](#refusal): [`door/request-required`](./refusals.md#doorrequest-required), [`claim/pairing-unknown`](./refusals.md#claimpairing-unknown), [`claim/not-bound`](./refusals.md#claimnot-bound), [`claim/nothing-to-check`](./refusals.md#claimnothing-to-check) |  |
-| 503 | Not available now; retry after one second. | [Refusal](#refusal): [`claim/store-unavailable`](./refusals.md#claimstore-unavailable), [`claim/read-unavailable`](./refusals.md#claimread-unavailable) | `Retry-After`: `1` |
+| 431 | The request's header block is larger than the runtime reads. | [RuntimeRefusal](#runtimerefusal): [`bad-request`](./refusals.md#bad-request) |  |
+| 500 | The request could not be served; quote the `correlationId` to the door's operator. | [RuntimeRefusal](#runtimerefusal): [`fault`](./refusals.md#fault) |  |
+| 503 | Not available now; retry after one second. | [Refusal](#refusal): [`claim/store-unavailable`](./refusals.md#claimstore-unavailable), [`claim/read-unavailable`](./refusals.md#claimread-unavailable); [RuntimeRefusal](#runtimerefusal): [`at-capacity`](./refusals.md#at-capacity) | `Retry-After`: `1` |
 
 ### report
 
@@ -80,16 +86,19 @@ Requires the seller credential: `Authorization: Bearer isk_…`.
 |---|---|---|---|
 | 200 | The record as it now stands. | [RecordView](#recordview) |  |
 | 202 | Accepted; nothing final was read yet. A settling record is finished by the seller door; an issued one is reported again later. | [RecordView](#recordview) |  |
-| 400 | The body is not the operation's JSON object. | [Refusal](#refusal): [`door/malformed`](./refusals.md#doormalformed) |  |
+| 400 | The body is not the operation's JSON object, or the runtime could not read the request. | [Refusal](#refusal): [`door/malformed`](./refusals.md#doormalformed); [RuntimeRefusal](#runtimerefusal): [`bad-request`](./refusals.md#bad-request) |  |
 | 401 | No valid seller credential. | [Refusal](#refusal): [`door/unauthenticated`](./refusals.md#doorunauthenticated) | `WWW-Authenticate`: `Bearer realm="seller-door"` |
 | 403 | The request carries an Origin header; the door serves servers only. | [Refusal](#refusal): [`door/browser-origin`](./refusals.md#doorbrowser-origin) |  |
 | 404 | Nothing known by that name for this tenant. | [Refusal](#refusal): [`door/not-found`](./refusals.md#doornot-found) |  |
-| 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod) |  |
+| 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod); [RuntimeRefusal](#runtimerefusal): [`method-not-allowed`](./refusals.md#method-not-allowed) |  |
+| 408 | The request did not arrive in full in time. | [RuntimeRefusal](#runtimerefusal): [`request-timeout`](./refusals.md#request-timeout) |  |
 | 409 | The record is in a state that does not allow this. | [Refusal](#refusal): [`report/pairing-mismatch`](./refusals.md#reportpairing-mismatch), [`settle/other-reference`](./refusals.md#settleother-reference), [`settle/not-settling`](./refusals.md#settlenot-settling) |  |
-| 413 | The body is larger than this operation accepts. | [Refusal](#refusal): [`door/too-large`](./refusals.md#doortoo-large) |  |
+| 413 | The body is larger than this operation, or the runtime, accepts. | [Refusal](#refusal): [`door/too-large`](./refusals.md#doortoo-large); [RuntimeRefusal](#runtimerefusal): [`body-too-large`](./refusals.md#body-too-large) |  |
 | 415 | The body is not application/json. | [Refusal](#refusal): [`door/media-type`](./refusals.md#doormedia-type) |  |
 | 422 | The request cannot be served as sent. | [Refusal](#refusal): [`door/chosen-required`](./refusals.md#doorchosen-required), [`door/reference-required`](./refusals.md#doorreference-required), [`door/receipt-required`](./refusals.md#doorreceipt-required), [`claim/pairing-unknown`](./refusals.md#claimpairing-unknown) |  |
-| 503 | Not available now; retry after one second. | [Refusal](#refusal): [`settle/store-unavailable`](./refusals.md#settlestore-unavailable) | `Retry-After`: `1` |
+| 431 | The request's header block is larger than the runtime reads. | [RuntimeRefusal](#runtimerefusal): [`bad-request`](./refusals.md#bad-request) |  |
+| 500 | The request could not be served; quote the `correlationId` to the door's operator. | [RuntimeRefusal](#runtimerefusal): [`fault`](./refusals.md#fault) |  |
+| 503 | Not available now; retry after one second. | [Refusal](#refusal): [`settle/store-unavailable`](./refusals.md#settlestore-unavailable); [RuntimeRefusal](#runtimerefusal): [`at-capacity`](./refusals.md#at-capacity) | `Retry-After`: `1` |
 
 ### status
 
@@ -102,11 +111,16 @@ Requires the seller credential: `Authorization: Bearer isk_…`.
 | Status | Meaning | Body | Headers |
 |---|---|---|---|
 | 200 | The record. | [RecordView](#recordview) |  |
+| 400 | The request could not be read. | [RuntimeRefusal](#runtimerefusal): [`bad-request`](./refusals.md#bad-request) |  |
 | 401 | No valid seller credential. | [Refusal](#refusal): [`door/unauthenticated`](./refusals.md#doorunauthenticated) | `WWW-Authenticate`: `Bearer realm="seller-door"` |
 | 403 | The request carries an Origin header; the door serves servers only. | [Refusal](#refusal): [`door/browser-origin`](./refusals.md#doorbrowser-origin) |  |
 | 404 | Nothing known by that name for this tenant. | [Refusal](#refusal): [`door/not-found`](./refusals.md#doornot-found) |  |
-| 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod) |  |
-| 503 | Not available now; retry after one second. | [Refusal](#refusal): [`settle/store-unavailable`](./refusals.md#settlestore-unavailable) | `Retry-After`: `1` |
+| 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod); [RuntimeRefusal](#runtimerefusal): [`method-not-allowed`](./refusals.md#method-not-allowed) |  |
+| 408 | The request did not arrive in full in time. | [RuntimeRefusal](#runtimerefusal): [`request-timeout`](./refusals.md#request-timeout) |  |
+| 413 | The body is larger than the runtime accepts for any request. | [RuntimeRefusal](#runtimerefusal): [`body-too-large`](./refusals.md#body-too-large) |  |
+| 431 | The request's header block is larger than the runtime reads. | [RuntimeRefusal](#runtimerefusal): [`bad-request`](./refusals.md#bad-request) |  |
+| 500 | The request could not be served; quote the `correlationId` to the door's operator. | [RuntimeRefusal](#runtimerefusal): [`fault`](./refusals.md#fault) |  |
+| 503 | Not available now; retry after one second. | [Refusal](#refusal): [`settle/store-unavailable`](./refusals.md#settlestore-unavailable); [RuntimeRefusal](#runtimerefusal): [`at-capacity`](./refusals.md#at-capacity) | `Retry-After`: `1` |
 
 ### openapi
 
@@ -117,8 +131,14 @@ No credential is required.
 | Status | Meaning | Body | Headers |
 |---|---|---|---|
 | 200 | This document's bytes. | `object` |  |
+| 400 | The request could not be read. | [RuntimeRefusal](#runtimerefusal): [`bad-request`](./refusals.md#bad-request) |  |
 | 403 | The request carries an Origin header; the door serves servers only. | [Refusal](#refusal): [`door/browser-origin`](./refusals.md#doorbrowser-origin) |  |
-| 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod) |  |
+| 405 | The request's method is one this path does not serve. | [Refusal](#refusal): [`door/method`](./refusals.md#doormethod); [RuntimeRefusal](#runtimerefusal): [`method-not-allowed`](./refusals.md#method-not-allowed) |  |
+| 408 | The request did not arrive in full in time. | [RuntimeRefusal](#runtimerefusal): [`request-timeout`](./refusals.md#request-timeout) |  |
+| 413 | The body is larger than the runtime accepts for any request. | [RuntimeRefusal](#runtimerefusal): [`body-too-large`](./refusals.md#body-too-large) |  |
+| 431 | The request's header block is larger than the runtime reads. | [RuntimeRefusal](#runtimerefusal): [`bad-request`](./refusals.md#bad-request) |  |
+| 500 | The request could not be served; quote the `correlationId` to the door's operator. | [RuntimeRefusal](#runtimerefusal): [`fault`](./refusals.md#fault) |  |
+| 503 | The runtime is at capacity; retry after one second. | [RuntimeRefusal](#runtimerefusal): [`at-capacity`](./refusals.md#at-capacity) | `Retry-After`: `1` |
 
 ## Schemas
 
@@ -367,5 +387,17 @@ An object. A member not listed here is refused.
 | Field | Type | Required | Constraints | Description |
 |---|---|---|---|---|
 | `code` | `"door/malformed"`, `"door/unauthenticated"`, `"door/browser-origin"`, `"door/not-found"`, `"door/resource-unknown"`, `"claim/unknown"`, `"door/method"`, `"door/too-large"`, `"door/media-type"`, `"issue/mint-request-reused"`, `"issue/mint-request-lapsed"`, `"claim/in-progress"`, `"claim/paid"`, `"claim/not-this-request"`, `"claim/channel-open"`, `"claim/channel-not-open"`, `"claim/agreement-first"`, `"claim/instrument-claimed"`, `"report/pairing-mismatch"`, `"settle/other-reference"`, `"settle/not-settling"`, `"claim/lapsed"`, `"door/request-required"`, `"door/chosen-required"`, `"door/reference-required"`, `"door/receipt-required"`, `"issue/input-bounds"`, `"issue/pairing-not-served"`, `"issue/offer-refused"`, `"issue/mixed-protocols"`, `"core/slot-name"`, `"core/slot-reserved"`, `"core/slot-duplicate"`, `"core/content-not-json"`, `"core/binding-not-json"`, `"core/too-large"`, `"claim/pairing-unknown"`, `"claim/not-bound"`, `"claim/nothing-to-check"`, `"issue/deadline"`, `"issue/contributor-unavailable"`, `"issue/storage-unavailable"`, `"issue/store-unavailable"`, `"issue/capacity"`, `"claim/store-unavailable"`, `"claim/read-unavailable"`, `"settle/store-unavailable"` | yes |  |  |
+| `sentence` | `string` | yes |  |  |
+| `correlationId` | `string` | yes | at least 1 character |  |
+
+### RuntimeRefusal
+
+A refusal the HTTP runtime in front of the door answers itself, in the same shape as the door's: before the door reads the request, or where the door gives no answer. Its codes are the runtime's own and are not in the door's closed refusal table.
+
+An object. A member not listed here is refused.
+
+| Field | Type | Required | Constraints | Description |
+|---|---|---|---|---|
+| `code` | `"bad-request"` or `"method-not-allowed"` or `"request-timeout"` or `"body-too-large"` or `"fault"` or `"at-capacity"` | yes |  |  |
 | `sentence` | `string` | yes |  |  |
 | `correlationId` | `string` | yes | at least 1 character |  |

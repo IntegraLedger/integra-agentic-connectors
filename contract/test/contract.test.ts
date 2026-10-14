@@ -76,23 +76,26 @@ function answered(body: Json): { pairing: string | undefined; pattern: LcpPatter
   return found;
 }
 
-/** The door's refusal codes a response lists: the code enum beside each `Refusal` reference in its schema. */
-function doorCodes(response: Schema): string[] {
+/**
+ * The refusal codes a response lists for one component: the code enum beside each reference to it in the response's
+ * schema. `Refusal` is the door's; `RuntimeRefusal` is the runtime's in front of it.
+ */
+function codesOf(response: Schema, component: "Refusal" | "RuntimeRefusal"): string[] {
   const schema = (response["content"] as Record<string, { schema: Schema }> | undefined)?.["application/json"]?.schema;
   const branches = (schema?.["oneOf"] as Schema[] | undefined) ?? (schema !== undefined ? [schema] : []);
   return branches.flatMap((b) => {
     const all = b["allOf"] as [Schema, { properties: { code: { enum: string[] } } }] | undefined;
-    return all?.[0]["$ref"] === "#/components/schemas/Refusal" ? all[1].properties.code.enum : [];
+    return all?.[0]["$ref"] === `#/components/schemas/${component}` ? all[1].properties.code.enum : [];
   });
 }
 
-/** Every door refusal code each operation lists, with the status it is listed under. */
-function listedCodes(): { method: string; path: string; status: string; code: string }[] {
+/** Every refusal code of one component each operation lists, with the status it is listed under. */
+function listedCodes(component: "Refusal" | "RuntimeRefusal" = "Refusal"): { method: string; path: string; status: string; code: string }[] {
   const out: { method: string; path: string; status: string; code: string }[] = [];
   for (const [path, item] of Object.entries(doc.paths as Record<string, Record<string, { responses: Record<string, Schema> }>>)) {
     for (const [method, op] of Object.entries(item)) {
       for (const [status, response] of Object.entries(op.responses)) {
-        for (const code of doorCodes(response)) out.push({ method, path, status, code });
+        for (const code of codesOf(response, component)) out.push({ method, path, status, code });
       }
     }
   }
@@ -151,6 +154,36 @@ describe("the OpenAPI document", () => {
       for (const method of Object.keys(item)) {
         const codes = listedCodes().filter((l) => l.path === path && l.method === method && l.status === "403");
         expect(codes.map((l) => l.code), `${method} ${path}`).toEqual(["door/browser-origin"]);
+      }
+    }
+  });
+
+  it("the runtime in front of the door answers codes of its own, none of them in the closed table", () => {
+    const codes = (doc.components.schemas.RuntimeRefusal.properties.code.oneOf as { const: string }[]).map((c) => c.const);
+    expect(codes).toEqual(["bad-request", "method-not-allowed", "request-timeout", "body-too-large", "fault", "at-capacity"]);
+    for (const c of codes) expect(REFUSALS[c], c).toBeUndefined();
+    expect(doc.components.schemas.RuntimeRefusal.required).toEqual(doc.components.schemas.Refusal.required);
+  });
+
+  it("each operation lists the runtime's answers at their HTTP statuses", () => {
+    // Each code at the status HTTP gives its case: 400 and 431 a request that cannot be read (RFC 9110 §15.5.1, RFC 6585
+    // §5), 405 a method not served (§15.5.6), 408 a request not received in time (§15.5.9), 413 content too large
+    // (§15.5.14), 500 a fault (§15.6.1) and 503 a service unavailable for now (§15.6.4).
+    const expected = [
+      ["400", "bad-request"],
+      ["405", "method-not-allowed"],
+      ["408", "request-timeout"],
+      ["413", "body-too-large"],
+      ["431", "bad-request"],
+      ["500", "fault"],
+      ["503", "at-capacity"],
+    ];
+    for (const [path, item] of Object.entries(doc.paths as Record<string, Record<string, unknown>>)) {
+      for (const method of Object.keys(item)) {
+        const listed = listedCodes("RuntimeRefusal")
+          .filter((l) => l.path === path && l.method === method)
+          .map((l) => [l.status, l.code]);
+        expect(listed, `${method} ${path}`).toEqual(expected);
       }
     }
   });

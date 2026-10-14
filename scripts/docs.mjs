@@ -116,8 +116,18 @@ function schemaSection(name, s) {
   return out.join("\n");
 }
 
-function refusalCodes(schema) {
-  return schema?.allOf?.[1]?.properties?.code?.enum;
+/** A response's refusal branches: the schema each names (`Refusal` or `RuntimeRefusal`), its codes and its description. */
+function refusalBranches(schema) {
+  const branches = schema?.oneOf ?? (schema ? [schema] : []);
+  return branches.flatMap((b) => {
+    const codes = b.allOf?.[1]?.properties?.code?.enum;
+    return codes ? [{ name: refName(b.allOf[0].$ref), codes, description: b.description }] : [];
+  });
+}
+
+/** A refusal code's anchor on the refusals page. */
+function anchor(c) {
+  return c.replaceAll("/", "").toLowerCase();
 }
 
 function apiPage() {
@@ -161,8 +171,15 @@ function apiPage() {
     out.push("| Status | Meaning | Body | Headers |", "|---|---|---|---|");
     for (const [status, r] of Object.entries(op.responses)) {
       const schema = r.content?.["application/json"]?.schema;
-      const codes = refusalCodes(schema);
-      const bodyCell = codes ? `[Refusal](#refusal): ${codes.map((c) => `[${code(c)}](./refusals.md#${c.replaceAll("/", "").toLowerCase()})`).join(", ")}` : schema ? typeOf(schema) : "";
+      const branches = refusalBranches(schema);
+      const bodyCell =
+        branches.length > 0
+          ? branches
+              .map((b) => `[${b.name}](#${b.name.toLowerCase()}): ${b.codes.map((c) => `[${code(c)}](./refusals.md#${anchor(c)})`).join(", ")}`)
+              .join("; ")
+          : schema
+            ? typeOf(schema)
+            : "";
       const headers = Object.entries(r.headers ?? {})
         .map(([h, v]) => `${code(h)}: ${"const" in (v.schema ?? {}) ? code(v.schema.const) : cell(prose(v.description))}`)
         .join("; ");
@@ -182,31 +199,42 @@ function refusalsPage() {
   if (missing.length > 0 || extra.length > 0) {
     throw new Error(`scripts/refusal-meanings.json: missing ${missing.join(", ") || "none"}; not in openapi.json ${extra.join(", ") || "none"}`);
   }
+  const runtimeCodes = schemas.RuntimeRefusal.properties.code.oneOf;
   const statusOf = new Map();
   const described = new Map();
+  const runtimeStatuses = new Map(runtimeCodes.map((c) => [c.const, new Set()]));
   for (const item of Object.values(doc.paths)) {
     for (const op of Object.values(item)) {
       for (const [status, r] of Object.entries(op.responses)) {
-        const codes = refusalCodes(r.content?.["application/json"]?.schema);
-        if (!codes) continue;
-        if (!described.has(status)) described.set(status, r.description);
-        for (const c of codes) statusOf.set(c, Number(status));
+        for (const b of refusalBranches(r.content?.["application/json"]?.schema)) {
+          if (b.name === "RuntimeRefusal") {
+            for (const c of b.codes) {
+              if (!runtimeStatuses.has(c)) throw new Error(`openapi.json: ${c} is not a RuntimeRefusal code`);
+              runtimeStatuses.get(c).add(Number(status));
+            }
+            continue;
+          }
+          if (!described.has(status)) described.set(status, b.description ?? r.description);
+          for (const c of b.codes) statusOf.set(c, Number(status));
+        }
       }
     }
   }
   const out = [
     frontmatter(
       "Refusal codes",
-      "Every code the seller door refuses with, its HTTP status and what it means.",
+      "Every code the seller door refuses with, and the codes the runtime in front of it answers: each one's HTTP status and what it means.",
       "contract/openapi.json and scripts/refusal-meanings.json",
     ),
     "# Refusal codes",
     "",
-    `A refusal is a JSON object ${code('{"code", "sentence", "correlationId"}')}. The ${code("code")} is one of the ${all.length} below and is stable. The ${code("sentence")} is for people and may be reworded. The ${code("correlationId")} names the call in the door's log.`,
+    `A refusal is a JSON object ${code('{"code", "sentence", "correlationId"}')}. The ${code("code")} of a refusal the door answers is one of the ${all.length} below and is stable. The ${code("sentence")} is for people and may be reworded. The ${code("correlationId")} names the call in the door's log.`,
     "",
     `Every ${code("503")} answer carries ${code("Retry-After: 1")}: retry the same request after a second. Every other refusal is final for the request as sent, except ${code("claim/agreement-first")}, where the same claim can be sent again once ${code("status")} shows the agreement ${code("recorded")}, and ${code("settle/not-settling")} answering a ${code("declined")} report sent before the payment is claimed, where the same report can be sent again once it is claimed.`,
     "",
     `The same codes are exported as ${code("REFUSALS")} from ${code("@integraledger/agentic-connectors")}, each with its status.`,
+    "",
+    `The HTTP runtime in front of the door answers a few codes of its own, in the same shape: they are listed under [the runtime in front of the door](#the-runtime-in-front-of-the-door).`,
     "",
   ];
   const byStatus = new Map();
@@ -219,9 +247,17 @@ function refusalsPage() {
     out.push(`## ${status}`, "");
     if (described.has(String(status))) out.push(prose(described.get(String(status))), "");
     out.push("| Code | Meaning |", "|---|---|");
-    for (const c of byStatus.get(status)) out.push(`| <a id="${c.replaceAll("/", "").toLowerCase()}"></a>${code(c)} | ${cell(prose(meanings[c]))} |`);
+    for (const c of byStatus.get(status)) out.push(`| <a id="${anchor(c)}"></a>${code(c)} | ${cell(prose(meanings[c]))} |`);
     out.push("");
   }
+  out.push("## The runtime in front of the door", "", prose(schemas.RuntimeRefusal.description), "");
+  out.push("| Code | Status | Meaning |", "|---|---|---|");
+  for (const { const: c, description } of runtimeCodes) {
+    const statuses = [...runtimeStatuses.get(c)].sort((a, b) => a - b);
+    if (statuses.length === 0) throw new Error(`openapi.json: no operation lists ${c}`);
+    out.push(`| <a id="${anchor(c)}"></a>${code(c)} | ${statuses.join(", ")} | ${cell(prose(description))} |`);
+  }
+  out.push("");
   return `${out.join("\n").replace(/\n+$/, "")}\n`;
 }
 

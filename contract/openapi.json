@@ -51,22 +51,44 @@
             }
           },
           "400": {
-            "description": "The body is not the operation's JSON object.",
+            "description": "The body is not the operation's JSON object, or the runtime could not read the request.",
             "content": {
               "application/json": {
                 "schema": {
-                  "allOf": [
+                  "oneOf": [
                     {
-                      "$ref": "#/components/schemas/Refusal"
+                      "description": "The body is not the operation's JSON object.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Refusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "door/malformed"
+                              ]
+                            }
+                          }
+                        }
+                      ]
                     },
                     {
-                      "properties": {
-                        "code": {
-                          "enum": [
-                            "door/malformed"
-                          ]
+                      "description": "The runtime could not read the request.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/RuntimeRefusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "bad-request"
+                              ]
+                            }
+                          }
                         }
-                      }
+                      ]
                     }
                   ]
                 }
@@ -157,15 +179,60 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "oneOf": [
+                    {
+                      "description": "The request's method is one this path does not serve.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Refusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "door/method"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "description": "The method is `CONNECT` or `TRACE`, which the runtime serves on no path.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/RuntimeRefusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "method-not-allowed"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "The request did not arrive in full in time.",
+            "content": {
+              "application/json": {
+                "schema": {
                   "allOf": [
                     {
-                      "$ref": "#/components/schemas/Refusal"
+                      "$ref": "#/components/schemas/RuntimeRefusal"
                     },
                     {
                       "properties": {
                         "code": {
                           "enum": [
-                            "door/method"
+                            "request-timeout"
                           ]
                         }
                       }
@@ -200,22 +267,44 @@
             }
           },
           "413": {
-            "description": "The body is larger than this operation accepts.",
+            "description": "The body is larger than this operation, or the runtime, accepts.",
             "content": {
               "application/json": {
                 "schema": {
-                  "allOf": [
+                  "oneOf": [
                     {
-                      "$ref": "#/components/schemas/Refusal"
+                      "description": "The body is larger than this operation accepts.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Refusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "door/too-large"
+                              ]
+                            }
+                          }
+                        }
+                      ]
                     },
                     {
-                      "properties": {
-                        "code": {
-                          "enum": [
-                            "door/too-large"
-                          ]
+                      "description": "The body is larger than the runtime accepts for any request.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/RuntimeRefusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "body-too-large"
+                              ]
+                            }
+                          }
                         }
-                      }
+                      ]
                     }
                   ]
                 }
@@ -278,27 +367,95 @@
               }
             }
           },
-          "503": {
-            "description": "Not available now; retry after one second.",
+          "431": {
+            "description": "The request's header block is larger than the runtime reads.",
             "content": {
               "application/json": {
                 "schema": {
                   "allOf": [
                     {
-                      "$ref": "#/components/schemas/Refusal"
+                      "$ref": "#/components/schemas/RuntimeRefusal"
                     },
                     {
                       "properties": {
                         "code": {
                           "enum": [
-                            "issue/deadline",
-                            "issue/contributor-unavailable",
-                            "issue/storage-unavailable",
-                            "issue/store-unavailable",
-                            "issue/capacity"
+                            "bad-request"
                           ]
                         }
                       }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The request could not be served; quote the `correlationId` to the door's operator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/RuntimeRefusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "fault"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not available now; retry after one second.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "description": "Not available now; retry after one second.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Refusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "issue/deadline",
+                                "issue/contributor-unavailable",
+                                "issue/storage-unavailable",
+                                "issue/store-unavailable",
+                                "issue/capacity"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "description": "The runtime is at capacity; retry after one second.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/RuntimeRefusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "at-capacity"
+                              ]
+                            }
+                          }
+                        }
+                      ]
                     }
                   ]
                 }
@@ -351,22 +508,44 @@
             }
           },
           "400": {
-            "description": "The body is not the operation's JSON object.",
+            "description": "The body is not the operation's JSON object, or the runtime could not read the request.",
             "content": {
               "application/json": {
                 "schema": {
-                  "allOf": [
+                  "oneOf": [
                     {
-                      "$ref": "#/components/schemas/Refusal"
+                      "description": "The body is not the operation's JSON object.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Refusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "door/malformed"
+                              ]
+                            }
+                          }
+                        }
+                      ]
                     },
                     {
-                      "properties": {
-                        "code": {
-                          "enum": [
-                            "door/malformed"
-                          ]
+                      "description": "The runtime could not read the request.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/RuntimeRefusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "bad-request"
+                              ]
+                            }
+                          }
                         }
-                      }
+                      ]
                     }
                   ]
                 }
@@ -458,15 +637,60 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "oneOf": [
+                    {
+                      "description": "The request's method is one this path does not serve.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Refusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "door/method"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "description": "The method is `CONNECT` or `TRACE`, which the runtime serves on no path.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/RuntimeRefusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "method-not-allowed"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "The request did not arrive in full in time.",
+            "content": {
+              "application/json": {
+                "schema": {
                   "allOf": [
                     {
-                      "$ref": "#/components/schemas/Refusal"
+                      "$ref": "#/components/schemas/RuntimeRefusal"
                     },
                     {
                       "properties": {
                         "code": {
                           "enum": [
-                            "door/method"
+                            "request-timeout"
                           ]
                         }
                       }
@@ -529,22 +753,44 @@
             }
           },
           "413": {
-            "description": "The body is larger than this operation accepts.",
+            "description": "The body is larger than this operation, or the runtime, accepts.",
             "content": {
               "application/json": {
                 "schema": {
-                  "allOf": [
+                  "oneOf": [
                     {
-                      "$ref": "#/components/schemas/Refusal"
+                      "description": "The body is larger than this operation accepts.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Refusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "door/too-large"
+                              ]
+                            }
+                          }
+                        }
+                      ]
                     },
                     {
-                      "properties": {
-                        "code": {
-                          "enum": [
-                            "door/too-large"
-                          ]
+                      "description": "The body is larger than the runtime accepts for any request.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/RuntimeRefusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "body-too-large"
+                              ]
+                            }
+                          }
                         }
-                      }
+                      ]
                     }
                   ]
                 }
@@ -600,24 +846,92 @@
               }
             }
           },
-          "503": {
-            "description": "Not available now; retry after one second.",
+          "431": {
+            "description": "The request's header block is larger than the runtime reads.",
             "content": {
               "application/json": {
                 "schema": {
                   "allOf": [
                     {
-                      "$ref": "#/components/schemas/Refusal"
+                      "$ref": "#/components/schemas/RuntimeRefusal"
                     },
                     {
                       "properties": {
                         "code": {
                           "enum": [
-                            "claim/store-unavailable",
-                            "claim/read-unavailable"
+                            "bad-request"
                           ]
                         }
                       }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The request could not be served; quote the `correlationId` to the door's operator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/RuntimeRefusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "fault"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not available now; retry after one second.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "description": "Not available now; retry after one second.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Refusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "claim/store-unavailable",
+                                "claim/read-unavailable"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "description": "The runtime is at capacity; retry after one second.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/RuntimeRefusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "at-capacity"
+                              ]
+                            }
+                          }
+                        }
+                      ]
                     }
                   ]
                 }
@@ -673,22 +987,44 @@
             }
           },
           "400": {
-            "description": "The body is not the operation's JSON object.",
+            "description": "The body is not the operation's JSON object, or the runtime could not read the request.",
             "content": {
               "application/json": {
                 "schema": {
-                  "allOf": [
+                  "oneOf": [
                     {
-                      "$ref": "#/components/schemas/Refusal"
+                      "description": "The body is not the operation's JSON object.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Refusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "door/malformed"
+                              ]
+                            }
+                          }
+                        }
+                      ]
                     },
                     {
-                      "properties": {
-                        "code": {
-                          "enum": [
-                            "door/malformed"
-                          ]
+                      "description": "The runtime could not read the request.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/RuntimeRefusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "bad-request"
+                              ]
+                            }
+                          }
                         }
-                      }
+                      ]
                     }
                   ]
                 }
@@ -779,15 +1115,60 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "oneOf": [
+                    {
+                      "description": "The request's method is one this path does not serve.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Refusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "door/method"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "description": "The method is `CONNECT` or `TRACE`, which the runtime serves on no path.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/RuntimeRefusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "method-not-allowed"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "The request did not arrive in full in time.",
+            "content": {
+              "application/json": {
+                "schema": {
                   "allOf": [
                     {
-                      "$ref": "#/components/schemas/Refusal"
+                      "$ref": "#/components/schemas/RuntimeRefusal"
                     },
                     {
                       "properties": {
                         "code": {
                           "enum": [
-                            "door/method"
+                            "request-timeout"
                           ]
                         }
                       }
@@ -823,22 +1204,44 @@
             }
           },
           "413": {
-            "description": "The body is larger than this operation accepts.",
+            "description": "The body is larger than this operation, or the runtime, accepts.",
             "content": {
               "application/json": {
                 "schema": {
-                  "allOf": [
+                  "oneOf": [
                     {
-                      "$ref": "#/components/schemas/Refusal"
+                      "description": "The body is larger than this operation accepts.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Refusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "door/too-large"
+                              ]
+                            }
+                          }
+                        }
+                      ]
                     },
                     {
-                      "properties": {
-                        "code": {
-                          "enum": [
-                            "door/too-large"
-                          ]
+                      "description": "The body is larger than the runtime accepts for any request.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/RuntimeRefusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "body-too-large"
+                              ]
+                            }
+                          }
                         }
-                      }
+                      ]
                     }
                   ]
                 }
@@ -894,23 +1297,91 @@
               }
             }
           },
-          "503": {
-            "description": "Not available now; retry after one second.",
+          "431": {
+            "description": "The request's header block is larger than the runtime reads.",
             "content": {
               "application/json": {
                 "schema": {
                   "allOf": [
                     {
-                      "$ref": "#/components/schemas/Refusal"
+                      "$ref": "#/components/schemas/RuntimeRefusal"
                     },
                     {
                       "properties": {
                         "code": {
                           "enum": [
-                            "settle/store-unavailable"
+                            "bad-request"
                           ]
                         }
                       }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The request could not be served; quote the `correlationId` to the door's operator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/RuntimeRefusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "fault"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not available now; retry after one second.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "description": "Not available now; retry after one second.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Refusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "settle/store-unavailable"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "description": "The runtime is at capacity; retry after one second.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/RuntimeRefusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "at-capacity"
+                              ]
+                            }
+                          }
+                        }
+                      ]
                     }
                   ]
                 }
@@ -951,6 +1422,29 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/RecordView"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/RuntimeRefusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "bad-request"
+                          ]
+                        }
+                      }
+                    }
+                  ]
                 }
               }
             }
@@ -1039,15 +1533,129 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "oneOf": [
+                    {
+                      "description": "The request's method is one this path does not serve.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Refusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "door/method"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "description": "The method is `CONNECT` or `TRACE`, which the runtime serves on no path.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/RuntimeRefusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "method-not-allowed"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "The request did not arrive in full in time.",
+            "content": {
+              "application/json": {
+                "schema": {
                   "allOf": [
                     {
-                      "$ref": "#/components/schemas/Refusal"
+                      "$ref": "#/components/schemas/RuntimeRefusal"
                     },
                     {
                       "properties": {
                         "code": {
                           "enum": [
-                            "door/method"
+                            "request-timeout"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is larger than the runtime accepts for any request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/RuntimeRefusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "body-too-large"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "431": {
+            "description": "The request's header block is larger than the runtime reads.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/RuntimeRefusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "bad-request"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The request could not be served; quote the `correlationId` to the door's operator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/RuntimeRefusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "fault"
                           ]
                         }
                       }
@@ -1062,18 +1670,40 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "allOf": [
+                  "oneOf": [
                     {
-                      "$ref": "#/components/schemas/Refusal"
+                      "description": "Not available now; retry after one second.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Refusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "settle/store-unavailable"
+                              ]
+                            }
+                          }
+                        }
+                      ]
                     },
                     {
-                      "properties": {
-                        "code": {
-                          "enum": [
-                            "settle/store-unavailable"
-                          ]
+                      "description": "The runtime is at capacity; retry after one second.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/RuntimeRefusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "at-capacity"
+                              ]
+                            }
+                          }
                         }
-                      }
+                      ]
                     }
                   ]
                 }
@@ -1109,6 +1739,29 @@
               }
             }
           },
+          "400": {
+            "description": "The request could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/RuntimeRefusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "bad-request"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
           "403": {
             "description": "The request carries an Origin header; the door serves servers only.",
             "content": {
@@ -1137,20 +1790,167 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "oneOf": [
+                    {
+                      "description": "The request's method is one this path does not serve.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/Refusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "door/method"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    },
+                    {
+                      "description": "The method is `CONNECT` or `TRACE`, which the runtime serves on no path.",
+                      "allOf": [
+                        {
+                          "$ref": "#/components/schemas/RuntimeRefusal"
+                        },
+                        {
+                          "properties": {
+                            "code": {
+                              "enum": [
+                                "method-not-allowed"
+                              ]
+                            }
+                          }
+                        }
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "408": {
+            "description": "The request did not arrive in full in time.",
+            "content": {
+              "application/json": {
+                "schema": {
                   "allOf": [
                     {
-                      "$ref": "#/components/schemas/Refusal"
+                      "$ref": "#/components/schemas/RuntimeRefusal"
                     },
                     {
                       "properties": {
                         "code": {
                           "enum": [
-                            "door/method"
+                            "request-timeout"
                           ]
                         }
                       }
                     }
                   ]
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "The body is larger than the runtime accepts for any request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/RuntimeRefusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "body-too-large"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "431": {
+            "description": "The request's header block is larger than the runtime reads.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/RuntimeRefusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "bad-request"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The request could not be served; quote the `correlationId` to the door's operator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/RuntimeRefusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "fault"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The runtime is at capacity; retry after one second.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/RuntimeRefusal"
+                    },
+                    {
+                      "properties": {
+                        "code": {
+                          "enum": [
+                            "at-capacity"
+                          ]
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before a retry.",
+                "required": true,
+                "schema": {
+                  "type": "string",
+                  "const": "1"
                 }
               }
             }
@@ -1923,6 +2723,53 @@
               "claim/store-unavailable",
               "claim/read-unavailable",
               "settle/store-unavailable"
+            ]
+          },
+          "sentence": {
+            "type": "string"
+          },
+          "correlationId": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "RuntimeRefusal": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "code",
+          "sentence",
+          "correlationId"
+        ],
+        "description": "A refusal the HTTP runtime in front of the door answers itself, in the same shape as the door's: before the door reads the request, or where the door gives no answer. Its codes are the runtime's own and are not in the door's closed refusal table.",
+        "properties": {
+          "code": {
+            "oneOf": [
+              {
+                "const": "bad-request",
+                "description": "The request could not be read: its target or its `Host` header is not one the runtime serves (400), or its header block is larger than the runtime reads (431)."
+              },
+              {
+                "const": "method-not-allowed",
+                "description": "The method is `CONNECT` or `TRACE`, which the runtime serves on no path."
+              },
+              {
+                "const": "request-timeout",
+                "description": "The request did not arrive in full in time."
+              },
+              {
+                "const": "body-too-large",
+                "description": "The body is larger than the runtime accepts for any request; the door never read it."
+              },
+              {
+                "const": "fault",
+                "description": "The request could not be served. Quote the `correlationId` to the door's operator."
+              },
+              {
+                "const": "at-capacity",
+                "description": "The runtime is at capacity; retry after one second."
+              }
             ]
           },
           "sentence": {

@@ -56,5 +56,6 @@ answer, and if they cannot answer, the transaction does not proceed. It never re
 
 ## Refusals
 
-A refusal is `{code, sentence, correlationId}` with an HTTP status from a closed table of 47 codes. The `code` is
-stable; the `sentence` is for people. Every `503` carries `Retry-After: 1`. See [the refusal codes](../reference/refusals.md).
+A refusal is `{code, sentence, correlationId}`. The door's refusals take an HTTP status from a closed table of 47 codes;
+the HTTP runtime in front of the door answers a few codes of its own in the same shape. The `code` is stable; the
+`sentence` is for people. Every `503` carries `Retry-After: 1`. See [the refusal codes](../reference/refusals.md).
