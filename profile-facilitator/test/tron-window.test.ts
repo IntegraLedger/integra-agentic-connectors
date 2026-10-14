@@ -6,12 +6,16 @@
 // Until then the answer stays settlement_pending with the id. An empty `transaction` says nothing was broadcast (x402),
 // so it is given for an id the store holds only as the stored answer of a broadcast the node refused or never
 // received. Expected values: those rules, and the lcp vectors' V2 (raw_data, id, payer, expiration).
+// Every wait the facilitator makes runs on a clock the test moves (support.ts's `controlledClock`): a settle's wait
+// ends when the test moves the clock to its end, never because the machine is slow.
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
 import { openStore } from "../src/store.js";
-import { fixture, freePort, freshDatabase, post, stub, tronChainReads, type Stub } from "./support.js";
+import { controlledClock, fixture, freePort, freshDatabase, post, stub, tronChainReads, type Clock, type Stub } from "./support.js";
+
+vi.mock("../src/http.js", async (original) => (await import("./support.js")).countingSleep(await original<typeof import("../src/http.js")>()));
 
 const RAW_V2 =
   "0a0289ad22087d1ddbe0b0adbe8740a0b6f4b18d34524d6c63703a7368613235363a3078626137383136626638663031636665613431343134306465356461653232323362303033363161333936313737613963623431306666363166323030313561645aae01081f12a9010a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412740a1541f39fd6e51aad88f6f4ce6ab8827279cfffb92266121541a614f803b6fd780986a42c78ec9c7f77e6ded13c2244a9059cbb000000000000000000000000209693bc6afc0c5328ba36faf03c514ef312287c000000000000000000000000000000000000000000000000000000000000271070c0e1f0b18d34900180c2d72f";
@@ -48,7 +52,7 @@ const body = () => ({
   paymentRequirements: O,
 });
 
-
+let clock: Clock & { restore(): void };
 let db: Awaited<ReturnType<typeof freshDatabase>>;
 let node: Stub;
 let base: string;
@@ -87,9 +91,11 @@ async function start(settleWaitMs: number): Promise<void> {
 const broadcasts = () => node.calls.filter((c) => c.path === "/wallet/broadcasthex").length;
 const PENDING = { success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK };
 
+/** A /settle's answer, waking its poll whenever it sleeps: a wait that ends pending ends at the end of settleWaitMs. */
+const settle = async () => (await clock.answered([post(`${base}/settle`, body())]))[0]!.json;
+
 beforeEach(async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(NOW_V2);
+  clock = controlledClock(NOW_V2);
   landed = true;
   solidTime = NOW_V2;
   broadcast = { result: true, txid: TXID_V2 };
@@ -97,10 +103,10 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
+  clock.restore();
   await closeFacilitator?.();
   await node.close();
   await db.drop();
-  vi.useRealTimers();
 }, 60_000);
 
 describe("the end of a Tron transaction's validity window", () => {
@@ -136,7 +142,7 @@ describe("the end of a Tron transaction's validity window", () => {
   it("with nothing included and the solidified block two slots past the expiration, gives invalid_transaction_state with the id", async () => {
     landed = false;
     await start(1_000);
-    expect((await post(`${base}/settle`, body())).json).toEqual(PENDING);
+    expect(await settle()).toEqual(PENDING);
     vi.setSystemTime(EXPIRATION_V2 + 10_000);
     solidTime = EXPIRATION_V2 + 6_000;
     expect((await post(`${base}/settle`, body())).json).toEqual({
@@ -151,10 +157,10 @@ describe("the end of a Tron transaction's validity window", () => {
   it("with nothing included and the solidified block not yet past the expiration, stays settlement_pending", async () => {
     landed = false;
     await start(1_000);
-    expect((await post(`${base}/settle`, body())).json).toEqual(PENDING);
+    expect(await settle()).toEqual(PENDING);
     vi.setSystemTime(EXPIRATION_V2 + 10_000);
     solidTime = EXPIRATION_V2 - 3_000;
-    expect((await post(`${base}/settle`, body())).json).toEqual(PENDING);
+    expect(await settle()).toEqual(PENDING);
     expect(broadcasts()).toBe(1);
   });
 
