@@ -22,5 +22,5 @@ run_worker_first = [
   "!/*.txt",
   "!/sitemap.xml",
   "!/icon.svg",
-  "!/opengraph-image",
+  "!/og/*",
 ]

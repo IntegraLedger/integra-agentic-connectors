@@ -49,8 +49,6 @@ export const siteConfig = {
     name: "Apache-2.0",
     url: "https://www.apache.org/licenses/LICENSE-2.0",
   },
-  ogImage: "/opengraph-image",
-  ogImageAlt: "Integra Agentic Connectors: the seller door contract and the LCP profile facilitator",
   locale: "en_US",
   publisher: {
     name: "Integra Ledger",
@@ -61,6 +59,11 @@ export const siteConfig = {
 /** An absolute URL on the canonical origin for a root-relative path. */
 export function absoluteUrl(path: string): string {
   return new URL(path, siteConfig.url).toString();
+}
+
+/** Where a page's social card is written: `/og/<slugs>/image.png`, and `/og/image.png` for the home page. */
+export function ogImagePath(slugs: string[]): string {
+  return `/og/${[...slugs, "image.png"].join("/")}`;
 }
 
 /** A file in the repository, on `main`, as a GitHub URL. `path` is relative to the repository root. */

@@ -7,7 +7,7 @@ import { JsonLd } from "@/components/JsonLd";
 import { Mermaid } from "@/components/Mermaid";
 import { TwoslashPopups } from "@/components/TwoslashPopups";
 import { markdownPath, markdownUrl } from "@/lib/llms";
-import { absoluteUrl, breadcrumbJsonLd, docSourcePath, repoFile, siteConfig } from "@/lib/site";
+import { absoluteUrl, breadcrumbJsonLd, docSourcePath, ogImagePath, repoFile, siteConfig } from "@/lib/site";
 import { isGenerated, source } from "@/lib/source";
 import { popupsPath, twoslashPopups } from "@/lib/twoslash";
 
@@ -102,7 +102,8 @@ export async function generateMetadata(props: PageProps): Promise<Metadata> {
   if (!page) notFound();
   const home = page.url === "/";
   const description = page.data.description ?? siteConfig.description;
-  const image = { url: siteConfig.ogImage, width: 1200, height: 630, alt: siteConfig.ogImageAlt };
+  const title = home ? siteConfig.title : page.data.title;
+  const image = { url: ogImagePath(page.slugs), width: 1200, height: 630, alt: title };
   return {
     title: home ? { absolute: siteConfig.title } : page.data.title,
     description,
@@ -113,7 +114,7 @@ export async function generateMetadata(props: PageProps): Promise<Metadata> {
     openGraph: {
       type: home ? "website" : "article",
       url: absoluteUrl(page.url),
-      title: home ? siteConfig.title : page.data.title,
+      title,
       description,
       siteName: siteConfig.name,
       locale: siteConfig.locale,
@@ -124,7 +125,7 @@ export async function generateMetadata(props: PageProps): Promise<Metadata> {
     },
     twitter: {
       card: "summary_large_image",
-      title: home ? siteConfig.title : page.data.title,
+      title,
       description,
       images: [image],
     },

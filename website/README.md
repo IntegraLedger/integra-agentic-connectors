@@ -46,8 +46,9 @@ pnpm dev         # serve it locally with live reload
 - Renders each ```` ```mermaid ```` block to SVG with the `mermaid` package, in a headless Google Chrome, once in a
   light and once in a dark theme. Both SVGs are in the page's HTML, and the page shows the one for the reader's
   theme; no diagram code runs in the browser.
-- Writes `/llms.txt`, `/llms-full.txt`, each page as Markdown at `/md/<path>.md`, the search index, `sitemap.xml`,
-  `robots.txt` and `/.well-known/security.txt`.
+- Writes `/llms.txt`, `/llms-full.txt`, each page as Markdown at `/md/<path>.md`, each page's social card (1200×630)
+  at `/og/<path>/image.png` (`/og/image.png` for the home page), the search index, `sitemap.xml`, `robots.txt` and
+  `/.well-known/security.txt`.
 
 ## How it is served
 
