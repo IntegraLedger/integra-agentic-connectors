@@ -36,7 +36,6 @@ const O_P = {
 };
 const BEST = 21_054_320;
 const BEST_HASH = `0x${"bb".repeat(32)}`;
-const BLOCK_HASH = `0x${"aa".repeat(32)}`;
 const VALID = `0x00${"00".repeat(8)}0000${"40"}${"00".repeat(7)}01`;
 const EVENTS_KEY = "0x26aa394eea5630e07c48ae0c9558cef780d41e5e16056765bc8461851072c9d7";
 const init = (fixture("polkadot-asset-hub-2005000.json.gz") as { calls: { method: string; params: unknown[]; result: unknown }[] }).calls;
