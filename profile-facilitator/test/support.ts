@@ -66,6 +66,50 @@ export function countingSleep<T extends { sleep(ms: number): Promise<void> }>(ht
   };
 }
 
+/** The node calls the facilitator has made whose answers have not arrived, as `lateResume` counts them. */
+let unanswered = 0;
+/** The node call whose answer the facilitator goes on with only when the test opens `resume` (`resumeLate`). */
+let late: { matches: (url: string, body: unknown) => boolean; arrived: boolean; resume: Gate } | undefined;
+
+/**
+ * The facilitator's `http.js` with its `postJson` able to go on late, for `vi.mock`: the answer to the call `resumeLate`
+ * names arrives whole and within its bound, and the facilitator goes on with it only when the test opens it, as it
+ * would after time spent elsewhere between that answer and its next step. Every call is the module's own.
+ */
+export function lateResume<
+  T extends { postJson(url: string, body: unknown, timeoutMs?: number, maxBytes?: number): Promise<unknown> },
+>(http: T): T {
+  return {
+    ...http,
+    async postJson(url: string, body: unknown, timeoutMs?: number, maxBytes?: number) {
+      unanswered += 1;
+      let answer: unknown;
+      try {
+        answer = await http.postJson(url, body, timeoutMs, maxBytes);
+      } finally {
+        unanswered -= 1;
+      }
+      const held = late !== undefined && late.matches(url, body) ? late : undefined;
+      if (held !== undefined) {
+        late = undefined;
+        held.arrived = true;
+        await held.resume.opened;
+      }
+      return answer;
+    },
+  };
+}
+
+/**
+ * Holds the facilitator at the answer to the next node call `matches` names, through `lateResume`: `arrived()` once that
+ * answer is in and no other node call is waiting for its answer, and `resume()` lets the facilitator go on with it.
+ */
+export function resumeLate(matches: (url: string, body: unknown) => boolean): { arrived(): boolean; resume(): void } {
+  const held = { matches, arrived: false, resume: gate() };
+  late = held;
+  return { arrived: () => held.arrived && unanswered === 0, resume: () => held.resume.open() };
+}
+
 export interface Clock {
   /** Milliseconds the clock has moved since `controlledClock` installed it. */
   readonly elapsed: number;
@@ -108,6 +152,7 @@ export function controlledClock(date?: number): Clock & { restore(): void } {
     return controller.signal;
   });
   sleepers.clear();
+  late = undefined;
   const origin = performance.now();
   let settleWaitMs: number | undefined;
   const clock = {

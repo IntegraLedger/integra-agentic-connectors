@@ -26,6 +26,7 @@ import {
   post,
   RawBody,
   reaches,
+  resumeLate,
   stub,
   tronChainReads,
   until,
@@ -36,7 +37,10 @@ import {
   type Stub,
 } from "./support.js";
 
-vi.mock("../src/http.js", async (original) => (await import("./support.js")).countingSleep(await original<typeof import("../src/http.js")>()));
+vi.mock("../src/http.js", async (original) => {
+  const support = await import("./support.js");
+  return support.lateResume(support.countingSleep(await original<typeof import("../src/http.js")>()));
+});
 
 // The lcp vectors' V2.
 const RAW_V2 =
@@ -1072,5 +1076,50 @@ describe("the operator log", () => {
     // Postgres's admin_shutdown: the server ended the connection.
     expect((logged("store-connection-error")[0]!.cause as { code?: string }).code).toBe("57P01");
     expect(await settle()).toEqual(SUCCESS);
+  });
+
+  // An unexpected answer that no error caused has its entry too: a node answer the facilitator cannot read, a settle
+  // whose deadline passed, and a broadcast the node did not accept.
+
+  it("a node answer it cannot read reaches the log as the call that failed, its cause naming the part, and the answer is unchanged", async () => {
+    // java-tron prints a permission's threshold as an int64 JSON number; this account's is a word.
+    await start({ account: { address: V2_PAYER_HEX, owner_permission: { threshold: "one", keys: [] } } });
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({
+      isValid: false,
+      invalidReason: "unexpected_verify_error",
+      payer: PAYER,
+    });
+    expect(entries.map((e) => e.entry)).toEqual([{ event: "node-call-failed", ...ABOUT, call: "/wallet/getaccount" }]);
+    const cause = entries[0]!.cause;
+    expect(cause).toBeInstanceOf(NodeError);
+    expect((cause as NodeError).code).toBe("malformed");
+    expect((cause as NodeError).message).toBe("malformed: /wallet/getaccount: owner_permission.threshold");
+  });
+
+  it("a settle whose deadline passes once its node reads have answered reaches the log as settle-deadline-passed with the bound, and claims and broadcasts nothing", async () => {
+    // The simulation's answer arrives within its bound, and the facilitator goes on with it once the clock is at
+    // settleWaitMs (1,000 ms), as after time spent elsewhere: the deadline has passed before the claim.
+    await start({}, 1_000);
+    const simulation = resumeLate((url) => url.endsWith("/wallet/triggerconstantcontract"));
+    const answer = post(`${base}/settle`, body(TX_V2));
+    await reaches(answer, simulation.arrived);
+    await clock.advanceTo(1_000);
+    simulation.resume();
+    expect((await answer).json).toEqual({ success: false, errorReason: "unexpected_settle_error", transaction: "", network: NETWORK });
+    expect(entries.map((e) => e.entry)).toEqual([
+      { event: "settle-deadline-passed", ...ABOUT, before: "claim", settleWaitMs: 1_000 },
+    ]);
+    expect(entries[0]!.cause).toBeUndefined();
+    expect((await db.pool.query("SELECT id FROM settlement")).rowCount).toBe(0);
+    expect(calls("/wallet/broadcasthex")).toHaveLength(0);
+  });
+
+  it("a broadcast the node does not accept reaches the log as the call that failed, its cause the node's code and message, and the answer is unchanged", async () => {
+    // Tron mainnet's live answer to a broadcast of V2 past its expiration (fixtures/tron-mainnet-answers.json).
+    await start({ broadcast: live["broadcastExpired"] });
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(REFUSED);
+    expect(entries.map((e) => e.entry)).toEqual([{ event: "node-call-failed", ...ABOUT, call: "/wallet/broadcasthex" }]);
+    expect((entries[0]!.cause as Error).message).toBe("TRANSACTION_EXPIRATION_ERROR: Transaction expired");
+    expect(calls("/wallet/broadcasthex")).toHaveLength(1);
   });
 });

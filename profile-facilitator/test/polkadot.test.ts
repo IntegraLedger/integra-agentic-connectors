@@ -12,6 +12,7 @@ import { dirname, join } from "node:path";
 import { ApiPromise } from "@polkadot/api";
 import { exactPolkadotRemark } from "@integraledger/lcp/polkadot";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { NodeError } from "../src/http.js";
 import { serveProfileFacilitator } from "../src/index.js";
 import {
   controlledClock,
@@ -21,6 +22,7 @@ import {
   gate,
   post,
   reaches,
+  resumeLate,
   stub,
   until,
   type Call,
@@ -28,7 +30,10 @@ import {
   type Stub,
 } from "./support.js";
 
-vi.mock("../src/http.js", async (original) => (await import("./support.js")).countingSleep(await original<typeof import("../src/http.js")>()));
+vi.mock("../src/http.js", async (original) => {
+  const support = await import("./support.js");
+  return support.lateResume(support.countingSleep(await original<typeof import("../src/http.js")>()));
+});
 
 const NETWORK = "polkadot:68d56f15f85d3136970ec16946040bc1";
 /** SHA-256("abc"), FIPS 180-2's first example: the H of the lcp vectors. */
@@ -86,6 +91,8 @@ function events(...records: string[]): string {
 }
 
 interface Chain {
+  /** The best block's hash, as `chain_getBlockHash` gives it; BEST_HASH when not given. */
+  best?: string;
   /** Whether block BEST + 1 holds V3; it does unless this says otherwise. */
   included?: () => boolean;
   validity?: string;
@@ -120,7 +127,7 @@ async function start(chain: Chain = {}, network: string = NETWORK, settleWaitMs 
     const known = init.find((c) => c.method === method && JSON.stringify(c.params) === JSON.stringify(params));
     if (known !== undefined) return answer(known.result);
     const p = JSON.stringify(params);
-    if (method === "chain_getBlockHash" && p === "[]") return answer(BEST_HASH);
+    if (method === "chain_getBlockHash" && p === "[]") return answer(chain.best ?? BEST_HASH);
     if (method === "chain_getFinalizedHead" && chain.finalized) return answer(FINALIZED_HASH);
     if (method === "chain_getHeader" && p === JSON.stringify([FINALIZED_HASH]) && chain.finalized) {
       return answer({ number: `0x${chain.finalized().toString(16)}` });
@@ -761,5 +768,44 @@ describe("the operator log", () => {
     expect(unreadable.length).toBeGreaterThan(0);
     expect(unreadable[0]!.entry).toEqual({ event: "block-unreadable", ...ABOUT, block: BEST + 1, final: true, reason: INTERNAL.message });
     expect((unreadable[0]!.cause as Error).message).toBe(INTERNAL.message);
+  });
+
+  // An unexpected answer that no error caused has its entry too: a node answer the facilitator cannot read, and a
+  // settle whose deadline passed.
+
+  it("a node answer it cannot read reaches the log as the call that failed, its cause naming the part, and the answer is unchanged", async () => {
+    // A block hash is 32 bytes (Substrate's H256); the best block hash this node gives is 31.
+    await start({ best: `0x${"bb".repeat(31)}` });
+    expect((await post(`${base}/verify`, body())).json).toEqual({
+      isValid: false,
+      invalidReason: "unexpected_verify_error",
+      payer: PAYER,
+    });
+    expect(entries.map((e) => e.entry)).toEqual([{ event: "node-call-failed", ...ABOUT, call: "chain_getBlockHash" }]);
+    const cause = entries[0]!.cause;
+    expect(cause).toBeInstanceOf(NodeError);
+    expect((cause as NodeError).code).toBe("malformed");
+    expect((cause as NodeError).message).toBe("malformed: chain_getBlockHash: the block hash");
+  });
+
+  it("a settle whose deadline passes once the node's validation has answered reaches the log as settle-deadline-passed with the bound, and claims and submits nothing", async () => {
+    // The validation's answer arrives within its bound, and the facilitator goes on with it once the clock is at
+    // settleWaitMs (1,000 ms), as after time spent elsewhere: the deadline has passed before the claim.
+    await start({ finalized: () => BEST - 2 }, NETWORK, 1_000);
+    const validation = resumeLate((_url, sent) => {
+      const { method, params } = sent as { method: string; params: unknown[] };
+      return isValidation(method, params);
+    });
+    const answer = post(`${base}/settle`, body());
+    await reaches(answer, validation.arrived);
+    await clock.advanceTo(1_000);
+    validation.resume();
+    expect((await answer).json).toEqual({ success: false, errorReason: "unexpected_settle_error", transaction: "", network: NETWORK });
+    expect(entries.map((e) => e.entry)).toEqual([
+      { event: "settle-deadline-passed", ...ABOUT, before: "claim", settleWaitMs: 1_000 },
+    ]);
+    expect(entries[0]!.cause).toBeUndefined();
+    expect((await db.pool.query("SELECT id FROM settlement")).rowCount).toBe(0);
+    expect(calls("author_submitExtrinsic")).toHaveLength(0);
   });
 });
