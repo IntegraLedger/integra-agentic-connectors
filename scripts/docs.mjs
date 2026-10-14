@@ -204,7 +204,7 @@ function refusalsPage() {
     "",
     `A refusal is a JSON object ${code('{"code", "sentence", "correlationId"}')}. The ${code("code")} is one of the ${all.length} below and is stable. The ${code("sentence")} is for people and may be reworded. The ${code("correlationId")} names the call in the door's log.`,
     "",
-    `Every ${code("503")} answer carries ${code("Retry-After: 1")}: retry the same request after a second. Every other refusal is final for the request as sent.`,
+    `Every ${code("503")} answer carries ${code("Retry-After: 1")}: retry the same request after a second. Every other refusal is final for the request as sent, except ${code("claim/agreement-first")}, where the same claim can be sent again once ${code("status")} shows the agreement ${code("recorded")}, and ${code("settle/not-settling")} answering a ${code("declined")} report sent before the payment is claimed, where the same report can be sent again once it is claimed.`,
     "",
     `The same codes are exported as ${code("REFUSALS")} from ${code("@integraledger/agentic-connectors")}, each with its status.`,
     "",

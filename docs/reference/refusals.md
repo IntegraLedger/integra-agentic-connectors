@@ -9,7 +9,7 @@ description: "Every code the seller door refuses with, its HTTP status and what 
 
 A refusal is a JSON object `{"code", "sentence", "correlationId"}`. The `code` is one of the 47 below and is stable. The `sentence` is for people and may be reworded. The `correlationId` names the call in the door's log.
 
-Every `503` answer carries `Retry-After: 1`: retry the same request after a second. Every other refusal is final for the request as sent.
+Every `503` answer carries `Retry-After: 1`: retry the same request after a second. Every other refusal is final for the request as sent, except `claim/agreement-first`, where the same claim can be sent again once `status` shows the agreement `recorded`, and `settle/not-settling` answering a `declined` report sent before the payment is claimed, where the same report can be sent again once it is claimed.
 
 The same codes are exported as `REFUSALS` from `@integraledger/agentic-connectors`, each with its status.
 
