@@ -14,7 +14,7 @@ Only the connector's backend calls the door, over HTTPS. A browser piece (a chec
 calls the connector's own backend. The door refuses any request that carries an `Origin` header
 (`403 door/browser-origin`).
 
-*Why:* the door's credential must never reach a browser, and browsers send `Origin` on every cross-origin request.
+*Why:* the door's credential must never reach a browser.
 
 ## 2. One credential per tenant, kept as a secret
 
@@ -104,14 +104,14 @@ or, on a pairing with nothing to read, the seller's report.
 
 ## 12. Place the agreement URL beside the carriers, and wait for the agreement
 
-Where `issue` answers with `agreement`, the record needs the agreement step: before the full payment, the buyer's
-agent pays a nominal amount at `agreement.url`, on `agreement.network`, in a payment whose signed payload carries the
-ATR hash. Place `agreement.url` where the buyer's agent can see it, beside the carriers: on MPP as
-`opaque.legalContextAgreementUrl`; elsewhere as `legalContextAgreementUrl` beside `legalContextUrl`, or the
-protocol's own place beside the link. Never start or accept the full payment before the agreement is recorded:
-`status` shows `agreement.state` `recorded`, and until then `claim` answers `claim/agreement-first`. A payment reported
-before the agreement is recorded is recorded, and its record states that no agreement was recorded before it and that
-nothing public carries this ATR's hash.
+Where `issue` answers with `agreement`, the record needs the agreement step: before the full payment, the buyer's agent
+pays a nominal amount at `agreement.url`, on `agreement.network`, through `agreement.pairing`: a pairing whose
+`publicProof` is true, so its settlement leaves a public record that commits to the ATR hash. Place `agreement.url`
+where the buyer's agent can see it, beside the carriers: on MPP as `opaque.legalContextAgreementUrl`; elsewhere as
+`legalContextAgreementUrl` beside `legalContextUrl`, or the protocol's own place beside the link. Never start or accept
+the full payment before the agreement is recorded: `status` shows `agreement.state` `recorded`, and until then `claim`
+answers `claim/agreement-first`. A payment reported before the agreement is recorded is recorded, and its record states
+that no agreement was recorded before it and that nothing public carries this ATR's hash.
 
 *Why:* where the payment itself carries no public proof of the hash, the agreement payment is that proof, and it must
 be on record before the payment it covers.

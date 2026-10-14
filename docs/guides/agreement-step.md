@@ -35,7 +35,7 @@ sequenceDiagram
    - on MPP, as `opaque.legalContextAgreementUrl`;
    - elsewhere, as `legalContextAgreementUrl` beside `legalContextUrl`, or the protocol's own place beside the link.
 3. The buyer's agent pays the nominal amount at `agreement.url`, on `agreement.network`, with the agreement's
-   `pairing`, in a payment whose signed payload carries H.
+   `pairing`: a pairing whose `publicProof` is true, so its settlement leaves a public record that commits to H.
 4. Read `status` until `agreement.state` is `recorded`. Until then, `claim` answers `409 claim/agreement-first`.
    `stale` is terminal: the agreement payment was claimed, and 604 800 seconds after its `settleBy` no read has shown
    it settled or unable to settle, so that agreement is never recorded.
