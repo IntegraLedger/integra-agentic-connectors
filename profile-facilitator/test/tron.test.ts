@@ -434,17 +434,19 @@ describe("deduplication", () => {
     // consumed primitive produces a settlement failure, never a success. The node holds each simulation until both
     // settles have asked for it, so both have read no stored answer before either claims; and it holds each settle's
     // first read of the transaction's status until both have made it, so both have claimed, and both find the success
-    // on chain before either stores it.
+    // on chain before either stores it. Each status read asks the Solidity node's latest block twice: for the solidified
+    // block, then before its receipt lookup.
     await start({
       hold: async (path) => {
         if (path === "/wallet/triggerconstantcontract") await until(() => calls(path).length === 2);
-        if (path === "/walletsolidity/getnowblock") await until(() => calls(path).length === 2);
+        if (path === "/walletsolidity/getnowblock") await until(() => calls(path).length >= 2);
       },
     });
     const claims = await claimAttempts(db.pool);
     const answers = await Promise.all([post(`${base}/settle`, body(TX_V2)), post(`${base}/settle`, body(TX_V2))]);
     expect(await claims()).toBe(2);
-    expect(calls("/walletsolidity/getnowblock")).toHaveLength(2);
+    expect(calls("/walletsolidity/getnowblock")).toHaveLength(4);
+    expect(calls("/walletsolidity/gettransactioninfobyid")).toHaveLength(2);
     expect(calls("/wallet/broadcasthex")).toHaveLength(1);
     expect(answers.map((a) => a.json)).toEqual(expect.arrayContaining([SUCCESS, STATE_FAILED]));
   });
