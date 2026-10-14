@@ -336,9 +336,9 @@ The facilitator keeps the payment's row until that final answer is written, howe
 after the validity window has ended still reads the chain. On Tron a payment is answered success once: every later
 `/settle` of it answers `invalid_transaction_state` with the transaction id, because x402's `exact` family requires that
 a consumed payment produce a settlement failure, never a success. Once the payment's row is gone, the FullNode's blocks
-give that answer. A broadcast or submission the node refused is stored too, and every repeat gets its answer. When the
-store cannot be read, the facilitator cannot know whether the payment was submitted, so it answers `settlement_pending`
-with the id.
+give that answer. A broadcast or submission the node refused, or never received, is stored too, and every repeat gets
+its answer. When the store cannot be read, the facilitator cannot know whether the payment was submitted, so it answers
+`settlement_pending` with the id.
 
 An answer with an empty `transaction` means nothing was submitted: on Tron always, and on Polkadot while the
 facilitator keeps the payment's row (until 24 hours after its validity window). After that, a repeated `/settle` of a
@@ -426,10 +426,10 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   repeated `/settle` reads the chain and writes a final answer, or the answer to a refused or unsent broadcast or
   submission makes it final. A repeat therefore always finds the id of a payment that was submitted, and never answers
   with an empty `transaction` for it.
-- A claim is never removed. A broadcast or submission the node refuses stores its answer, final, in the claimed row:
-  `invalid_transaction_state` with the id when the node says it already holds the transaction, and
-  `unexpected_settle_error` with an empty `transaction` for any other refusal. Every repeat gets that stored answer, so
-  a payment is submitted at most once.
+- A claim is never removed. A broadcast or submission the node refuses, or that cannot have reached it, stores its
+  answer, final, in the claimed row: `invalid_transaction_state` with the id when the node says it already holds the
+  transaction, and `unexpected_settle_error` with an empty `transaction` for any other refusal or a request that cannot
+  have reached the node. Every repeat gets that stored answer, so a payment is submitted at most once.
 - A sweep every minute drops the rows whose answer is final and whose `until` is more than 24 hours past. It reads
   them through `settlement_final_until`, an index that holds only rows with a final answer, so the rows it keeps add
   nothing to its work.

@@ -83,10 +83,10 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   repeated `/settle` reads the chain and writes a final answer, or the answer to a refused or unsent broadcast or
   submission makes it final. A repeat therefore always finds the id of a payment that was submitted, and never answers
   with an empty `transaction` for it.
-- A claim is never removed. A broadcast or submission the node refuses stores its answer, final, in the claimed row:
-  `invalid_transaction_state` with the id when the node says it already holds the transaction, and
-  `unexpected_settle_error` with an empty `transaction` for any other refusal. Every repeat gets that stored answer, so
-  a payment is submitted at most once.
+- A claim is never removed. A broadcast or submission the node refuses, or that cannot have reached it, stores its
+  answer, final, in the claimed row: `invalid_transaction_state` with the id when the node says it already holds the
+  transaction, and `unexpected_settle_error` with an empty `transaction` for any other refusal or a request that cannot
+  have reached the node. Every repeat gets that stored answer, so a payment is submitted at most once.
 - A sweep every minute drops the rows whose answer is final and whose `until` is more than 24 hours past. It reads
   them through `settlement_final_until`, an index that holds only rows with a final answer, so the rows it keeps add
   nothing to its work.
