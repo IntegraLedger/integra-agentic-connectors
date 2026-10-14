@@ -200,6 +200,15 @@ afterEach(async () => {
 
 /** The calls the node has received at `path`. */
 const calls = (path: string) => node.calls.filter((c) => c.path === path);
+/** The reads /settle makes before the broadcast. */
+const BEFORE_BROADCAST = [
+  "/wallet/getaccount",
+  "/wallet/getnowblock",
+  "/wallet/getblock",
+  "/wallet/gettransactionbyid",
+  "/wallet/gettransactionfrompending",
+  "/wallet/triggerconstantcontract",
+];
 
 /** A /settle's answer, waking its poll whenever it sleeps; a wait that ends pending ends within settleWaitMs. */
 async function settle(): Promise<unknown> {
@@ -826,15 +835,7 @@ describe("repeated settles and node errors", () => {
     // connect carries no byte of the broadcast to it. The node stops listening once it has received the reads /settle
     // makes before the broadcast. Every answer to a repeated /settle for the same id is the stored one, so the claim
     // keeps that answer, and a repeat gets it even once the node listens again.
-    const reads = [
-      "/wallet/getaccount",
-      "/wallet/getnowblock",
-      "/wallet/getblock",
-      "/wallet/gettransactionbyid",
-      "/wallet/gettransactionfrompending",
-      "/wallet/triggerconstantcontract",
-    ];
-    await start({ leaves: (calls) => reads.every((path) => calls.some((c) => c.path === path)) });
+    await start({ leaves: (calls) => BEFORE_BROADCAST.every((path) => calls.some((c) => c.path === path)) });
     expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(REFUSED);
     expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(0);
     const stored = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, TXID_V2]);
@@ -971,6 +972,29 @@ describe("the operator log", () => {
     expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(PENDING);
     expect(logged("store-call-failed").map((e) => e.entry)).toEqual([{ event: "store-call-failed", ...ABOUT, call: "read" }]);
     expect(String((logged("store-call-failed")[0]!.cause as Error).message)).toContain("settlement");
+  });
+
+  it("a store read that fails on /verify reaches the log with the payment's fields and the call, and the answer is unchanged", async () => {
+    await start();
+    await db.pool.query("ALTER TABLE settlement RENAME TO settlement_elsewhere");
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({
+      isValid: false,
+      invalidReason: "unexpected_verify_error",
+      payer: PAYER,
+    });
+    expect(entries.map((e) => e.entry)).toEqual([{ event: "store-call-failed", ...ABOUT, call: "read" }]);
+    expect(String((entries[0]!.cause as Error).message)).toContain("settlement");
+  });
+
+  it("a broadcast refused at connect reaches the log as the call that failed, its cause the request that never reached the node, and the answer is unchanged", async () => {
+    // The node stops listening once it has received the reads /settle makes before the broadcast.
+    await start({ leaves: (sent) => BEFORE_BROADCAST.every((path) => sent.some((c) => c.path === path)) });
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(REFUSED);
+    expect(entries.map((e) => e.entry)).toEqual([{ event: "node-call-failed", ...ABOUT, call: "/wallet/broadcasthex" }]);
+    const cause = entries[0]!.cause;
+    expect(cause).toBeInstanceOf(NodeError);
+    expect((cause as NodeError).code).toBe("transport");
+    expect((cause as NodeError).sent).toBe(false);
   });
 
   it("a receipt the Solidity node shows reading REVERT reaches the log as settlement-failed", async () => {

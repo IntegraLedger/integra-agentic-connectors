@@ -711,6 +711,7 @@ describe("the operator log", () => {
   // network, payer once the extrinsic is decoded, and the extrinsic's hash.
   const ABOUT = { network: NETWORK, payer: PAYER, transaction: HASH_V3 };
   const PENDING_V3 = { success: false, errorReason: "settlement_pending", transaction: HASH_V3, network: NETWORK };
+  const REFUSED = { success: false, errorReason: "unexpected_settle_error", transaction: "", network: NETWORK };
   /** JSON-RPC 2.0's internal error (§5.1), as the node refuses a call with it. */
   const INTERNAL = { code: -32603, message: "Internal error" };
   const logged = (event: string) => entries.filter((e) => e.entry["event"] === event);
@@ -808,6 +809,30 @@ describe("the operator log", () => {
       { event: "store-call-failed", network: NETWORK, transaction: HASH_V3, call: "read" },
     ]);
     expect((logged("store-call-failed")[0]!.cause as Error).message).toContain("settlement");
+  });
+
+  it("a submission the node refuses reaches the log as the call that failed, its cause the node's error, and the answer is unchanged", async () => {
+    await start({
+      finalized: () => BEST - 2,
+      submitError: { code: 1010, message: "Invalid Transaction", data: "Inability to pay some fees (e.g. account balance too low)" },
+    });
+    expect((await post(`${base}/settle`, body())).json).toEqual(REFUSED);
+    expect(entries.map((e) => e.entry)).toEqual([{ event: "node-call-failed", ...ABOUT, call: "author_submitExtrinsic" }]);
+    expect((entries[0]!.cause as Error).message).toBe("Invalid Transaction");
+  });
+
+  it("a submission refused at connect reaches the log as the call that failed, its cause the request that never reached the node, and the answer is unchanged", async () => {
+    // The node stops listening once it has received the validation, the last call /settle makes before the submission.
+    await start({
+      finalized: () => BEST - 2,
+      leaves: (sent) => sent.some((c) => (c.body as { params: unknown[] }).params[0] === "TaggedTransactionQueue_validate_transaction"),
+    });
+    expect((await post(`${base}/settle`, body())).json).toEqual(REFUSED);
+    expect(entries.map((e) => e.entry)).toEqual([{ event: "node-call-failed", ...ABOUT, call: "author_submitExtrinsic" }]);
+    const cause = entries[0]!.cause;
+    expect(cause).toBeInstanceOf(NodeError);
+    expect((cause as NodeError).code).toBe("transport");
+    expect((cause as NodeError).sent).toBe(false);
   });
 
   it("a block the node does not give, read at finality, reaches the log as block-unreadable with the block and the reason, and the answer is pending with the hash", async () => {
