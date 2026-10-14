@@ -1,5 +1,6 @@
-# The documentation site as a Cloudflare Worker with static assets, deployed by Workers Builds from the
-# repository root with `npx wrangler deploy -c website/wrangler.toml` after the build writes website/out.
+# The documentation site as a Cloudflare Worker with static assets. No workflow deploys it: a maintainer deploys it by
+# hand from the released commit, with `npx wrangler deploy -c website/wrangler.toml` at the repository root after the
+# build writes website/out and website/csp.json.
 name = "integra-agentic-connectors-docs"
 main = "worker.js"
 compatibility_date = "2026-09-26"

@@ -79,3 +79,13 @@ Twoslash popup and a search in Chrome; a policy violation, a script error or a c
 
 Each page names `/llms.txt` with `<link rel="describedby">` and its Markdown with `<link rel="alternate"
 type="text/markdown">`. `pnpm dev` does not run `worker.js`.
+
+No workflow deploys the site. A maintainer deploys it by hand from the released commit, after a build, at the
+repository root:
+
+```sh
+npx wrangler deploy -c website/wrangler.toml
+```
+
+Each build writes a `security.txt` whose `Expires` is 180 days after the build, so the deploy from each release renews
+it.
