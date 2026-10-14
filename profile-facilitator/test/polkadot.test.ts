@@ -319,6 +319,17 @@ describe("/verify, further", () => {
     });
   });
 
+  it("refuses requirements naming another transfer method, or none, as invalid_payment_requirements", async () => {
+    // The profile's scope: extra.assetTransferMethod "lcp-assets-remark" (required).
+    await start();
+    for (const change of [{ extra: { assetTransferMethod: "lcp-assets" } }, { extra: {} }]) {
+      expect((await post(`${base}/verify`, body(XT_V3, CALL_V2, { ...O_P, ...change }))).json).toEqual({
+        isValid: false,
+        invalidReason: "invalid_payment_requirements",
+      });
+    }
+  });
+
   it("refuses requirements whose asset, payTo or amount differ from the call", async () => {
     await start();
     for (const change of [{ asset: "1984" }, { payTo: "16SYiSu5tWgdV4sWiaxir7GYEiFfTc9GYnRd34PDGCUMgkmP" }, { amount: "10001" }]) {

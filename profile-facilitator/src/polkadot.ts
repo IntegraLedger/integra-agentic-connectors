@@ -6,12 +6,11 @@
 import { ApiPromise } from "@polkadot/api";
 import type { ApiOptions } from "@polkadot/api/types";
 import { blake2b } from "@noble/hashes/blake2.js";
-import { isRefusal } from "@integraledger/lcp";
+import { isRefusal, pairingOf } from "@integraledger/lcp";
 import {
   decodeProfileCall,
   exactPolkadotRemark,
   extrinsicHash,
-  polkadotPairingOf,
   ss58Decode,
   type PolkadotNetwork,
 } from "@integraledger/lcp/polkadot";
@@ -242,7 +241,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     const req = r.paymentRequirements;
     const node = byNetwork.get(req.network);
     if (node === undefined) return "invalid_network";
-    if (polkadotPairingOf(req as never) === undefined) return "invalid_payment_requirements";
+    if (pairingOf(req as never) !== "x402/exact/polkadot/lcp-assets-remark") return "invalid_payment_requirements";
     const { extrinsic, call } = r.paymentPayload.payload;
     if (!isLowerHex(extrinsic) || !isLowerHex(call)) return "invalid_payload";
     const bound = await exactPolkadotRemark.bound({ x402Version: 2, accepted: req as never, payload: { extrinsic, call } } as never);
