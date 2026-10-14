@@ -552,6 +552,11 @@ describe("/settle", () => {
     return (await answer).json;
   }
 
+  it("a settle whose head read the node answers 1 ms before its wait for the chain ends reads the block, and gives the success", async () => {
+    expect(await headAnsweredAt(1_124, false)).toEqual({ success: true, transaction: `${BLOCK_HASH}-2`, network: NETWORK, payer: PAYER });
+    expect(calls("author_submitExtrinsic")).toHaveLength(1);
+  });
+
   it("a claimed id whose head read the node answers 1 ms before the wait for the chain ends gives the success, submitting nothing", async () => {
     expect(await headAnsweredAt(1_124, true)).toEqual({ success: true, transaction: `${BLOCK_HASH}-2`, network: NETWORK, payer: PAYER });
     expect(calls("author_submitExtrinsic")).toHaveLength(0);

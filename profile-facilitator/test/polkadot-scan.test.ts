@@ -479,4 +479,24 @@ describe("the process-wide limit on block reads", () => {
     expect(await settle()).toEqual(successAt(BEST + 1));
     expect(methodCalls("author_submitExtrinsic")).toHaveLength(1);
   });
+
+  it("a block read whose slot comes free 1 ms before the deadline reads the block, and the scan goes on to the success", async () => {
+    chain.holding = BEST + 1;
+    chain.finalized = () => (submitted() ? BEST + 2 : BEST - 2);
+    chain.head = () => BEST + 2;
+    await start();
+    const lines = await logged(() =>
+      holding(BLOCK_READS, async (free) => {
+        // The first block of the scan waits for a slot; the slots come free with the clock at 1,124 ms, 1 ms before the
+        // wait for the chain ends, and that block is read.
+        const answer = post(`${base}/settle`, body());
+        await reaches(answer, () => waitingForSlot > 0);
+        await clock.advanceTo(1_124);
+        free();
+        expect((await answer).json).toEqual(successAt(BEST + 1));
+      }),
+    );
+    expect(lines.filter((l) => l["event"] === "block-unreadable")).toEqual([]);
+    expect(methodCalls("author_submitExtrinsic")).toHaveLength(1);
+  });
 });
