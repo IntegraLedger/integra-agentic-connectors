@@ -62,6 +62,14 @@ describe("the unexpected answers", () => {
   it("are given as values only in src/unexpected.ts, which writes each one's operator entry first", () => {
     const values = source.spellings.filter((s) => !s.type);
     expect(values.filter((s) => s.file !== HELPER)).toEqual([]);
+    // In the helper, each answer is spelled where it is given and in settleReason's mapping, and nowhere else: a
+    // spelling it exported, or gave without its entry, would be a fifth.
+    expect(values.filter((s) => s.file === HELPER).map((s) => s.text).sort()).toEqual([
+      "unexpected_settle_error",
+      "unexpected_settle_error",
+      "unexpected_verify_error",
+      "unexpected_verify_error",
+    ]);
     // The read reached the code: every rail's file, both answers given in the helper, and the union's literal type.
     expect(source.files).toEqual(expect.arrayContaining(["src/index.ts", "src/tron.ts", "src/polkadot.ts", HELPER]));
     expect([...new Set(values.map((s) => s.text))].sort()).toEqual(ANSWERS);
