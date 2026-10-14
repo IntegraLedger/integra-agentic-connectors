@@ -453,12 +453,13 @@ This package carries no business or legal logic. It holds no key and moves no fu
 Each file in `vectors/` is `{name, fixed, steps, source}`:
 
 - `fixed` names the tenant, its credential and that credential's SHA-256, the resources, the storage base, the clock
-  (Unix seconds), the ATR identifiers the steps mint, in order, and `linkTokens`, one random token per identifier:
-  the ATR is served at the storage base followed by its token, the answer's `link`, never at a path built from the
-  hash. Where a step needs the agreement step, it also names the tenant's hosts, its agreement, whose `host` names
-  the host its URL is on when the tenant has more than one, and `agreementTokens`, one random token per agreement
-  URL, in issue order: the URL is `https://<host>/agreement/<token>`. Where a step reads the rail, `reader` states what the network's reader answers: its `finalized` and
-  `safe` block marks and each receipt it holds. A vector with no `reader` has none, and nothing is read.
+  (Unix seconds), the ATR identifiers the steps mint, in order, and `linkTokens`, one random token per identifier: the
+  ATR is served at the storage base followed by its token, the answer's `link`, never at a path built from the hash.
+  Where a step needs the agreement step, it also names the tenant's hosts, its agreement, whose `host` names the host
+  its URL is on when the tenant has more than one, and `agreementTokens`, one random token per agreement URL, in issue
+  order: the URL is `https://<host>/agreement/<token>`. Where a step reads the rail, `reader` states what the network's
+  reader answers: its `finalized` and `safe` block marks and each receipt it holds. A vector with no `reader` has none,
+  and nothing is read.
 - Each step is `{agreed?, request, expect, stored?, storedFiles?}`. `agreed` states that the buyer's agreement
   payment for that record was recorded before the request. `stored` is the file the step writes to the seller's
   storage (`{bytes, sha256}`), and `storedFiles` the number of files the storage holds after it.
