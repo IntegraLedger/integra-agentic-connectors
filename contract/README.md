@@ -298,7 +298,7 @@ Every connector follows these rules. Each carries its reason.
 
 1. **Server to server.** Only the connector's backend calls the door, over HTTPS. A browser piece calls the
    connector's own backend. The door refuses any request that carries an `Origin` header (`403 door/browser-origin`).
-   *Why:* the door's credential must never reach a browser, and browsers send `Origin` on every cross-origin request.
+   *Why:* the door's credential must never reach a browser.
 2. **One credential per tenant, kept as a secret.** A backend serving many sellers holds one seller credential
    (`isk_` and 43 base64url characters) per tenant, issued through the door's admin interface, and stores it where
    the platform keeps secrets. *Why:* the credential decides which seller's records a call touches.

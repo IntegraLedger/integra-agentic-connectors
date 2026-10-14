@@ -58,7 +58,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV5
 
-**refusals before work.** Source: RFC 6750 §2.1 and §3; the Fetch standard sends Origin on every cross-origin request, and the door serves servers only.
+**refusals before work.** Source: RFC 6750 §2.1 and §3 for the 401 and its WWW-Authenticate challenge. The door serves servers only, so a request that carries an Origin header is refused 403.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|

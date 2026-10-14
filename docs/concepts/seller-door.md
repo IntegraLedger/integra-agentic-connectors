@@ -34,9 +34,8 @@ seller's own checkout backend.
 
 ## Server to server
 
-The door refuses any request that carries an `Origin` header (`403 door/browser-origin`). Browsers send `Origin` on
-every cross-origin request, so a browser can never call the door, and the credential never reaches one. A checkout
-extension or site plugin calls the connector's own backend, which calls the door.
+The door refuses any request that carries an `Origin` header (`403 door/browser-origin`). A checkout extension or
+site plugin calls the connector's own backend, which calls the door.
 
 ## One mint request id per checkout state
 
