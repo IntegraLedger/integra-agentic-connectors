@@ -2,7 +2,7 @@
   "name": "integra-agentic-connectors-website",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.27.1",
+  "packageManager": "pnpm@12.11.2",
   "engines": {
     "node": ">=26.10.0 <27"
   },

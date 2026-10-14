@@ -54,6 +54,6 @@
   },
   "devDependencies": {
     "@integraledger/lcp": "0.4.0",
-    "vitest": "5.0.1"
+    "vitest": "5.0.4"
   }
 }
