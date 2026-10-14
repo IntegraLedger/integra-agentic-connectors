@@ -1,4 +1,4 @@
-// The part of the pg 8.23.0 API this package calls.
+// The part of the pg 8.23.1 API this package calls.
 declare module "pg" {
   namespace pg {
     interface QueryResult<R> {
