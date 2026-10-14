@@ -3,7 +3,9 @@
 // (TransactionCapsule.validateSignature, Manager.validateTapos and updateRecentBlock), TRC-20's Transfer event, and the
 // lcp vectors' V2 (raw_data, id, payer, signature ends and reference block). The nodes are local stubs whose answers
 // are Tron mainnet's live answers (fixtures/tron-mainnet-answers.json), with V2's id and the receipt result the test
-// names, and java-tron's HTTP shapes for the account, block and transaction reads (support.ts).
+// names, and java-tron's HTTP shapes for the account, block and transaction reads (support.ts). Every wait the
+// facilitator makes runs on a clock the test moves (support.ts's `controlledClock`): a settle's wait ends when the test
+// moves the clock to its end, never because the machine is slow.
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,18 +13,26 @@ import { isRefusal } from "@integraledger/lcp";
 import { decodeTronTx, encodeTronRaw } from "@integraledger/lcp/tron";
 import { serveProfileFacilitator } from "../src/index.js";
 import {
+  claimAttempts,
+  controlledClock,
   fixture,
+  gate,
   freePort,
   freshDatabase,
   HANG,
   post,
+  reaches,
   stub,
   tronChainReads,
+  until,
   V2_PAYER_HEX,
   V2_REF_BLOCK,
   type Call,
+  type Clock,
   type Stub,
 } from "./support.js";
+
+vi.mock("../src/http.js", async (original) => (await import("./support.js")).countingSleep(await original<typeof import("../src/http.js")>()));
 
 // The lcp vectors' V2.
 const RAW_V2 =
@@ -101,8 +111,6 @@ const REFUSED = { success: false, errorReason: "unexpected_settle_error", transa
 
 interface Node {
   trigger?: unknown;
-  /** How long the simulation takes to answer. */
-  triggerMs?: number;
   broadcast?: unknown;
   /** Called before the broadcast answers. */
   onBroadcast?: () => Promise<void>;
@@ -121,8 +129,11 @@ interface Node {
   pendingPool?: () => unknown;
   /** When the node stops listening, given the calls it has received (support.ts's `stub`). */
   leaves?: (calls: readonly Call[]) => boolean;
+  /** Awaited before the node answers a call: the test holds the answer until what it waits for has happened. */
+  hold?: (path: string) => Promise<void> | void;
 }
 
+let clock: Clock & { restore(): void };
 let db: Awaited<ReturnType<typeof freshDatabase>>;
 let node: Stub;
 let base: string;
@@ -130,10 +141,8 @@ let closeFacilitator: () => Promise<void>;
 
 async function start(n: Node = {}, settleWaitMs = 3_000): Promise<void> {
   node = await stub(async (path, sent) => {
-    if (path === "/wallet/triggerconstantcontract") {
-      if (n.triggerMs !== undefined) await new Promise((resolve) => setTimeout(resolve, n.triggerMs));
-      return n.trigger ?? live["triggerSuccess"];
-    }
+    await n.hold?.(path);
+    if (path === "/wallet/triggerconstantcontract") return n.trigger ?? live["triggerSuccess"];
     if (path === "/wallet/broadcasthex") {
       await n.onBroadcast?.();
       return n.broadcast ?? { result: true, txid: TXID_V2 };
@@ -162,17 +171,25 @@ async function start(n: Node = {}, settleWaitMs = 3_000): Promise<void> {
 }
 
 beforeEach(async () => {
-  vi.useFakeTimers({ toFake: ["Date"] });
-  vi.setSystemTime(NOW_V2);
+  clock = controlledClock(NOW_V2);
   db = await freshDatabase();
 });
 
 afterEach(async () => {
+  clock.restore();
   await closeFacilitator?.();
   await node?.close();
   await db.drop();
-  vi.useRealTimers();
 }, 60_000);
+
+/** The calls the node has received at `path`. */
+const calls = (path: string) => node.calls.filter((c) => c.path === path);
+
+/** A /settle's answer, waking its poll whenever it sleeps: a wait that ends pending ends at the end of settleWaitMs. */
+async function settle(): Promise<unknown> {
+  const [res] = await clock.answered([post(`${base}/settle`, body(TX_V2))]);
+  return res!.json;
+}
 
 const signatureV2 = sign(RAW_V2);
 const TX_V2 = transaction(RAW_V2, [signatureV2]);
@@ -414,11 +431,21 @@ describe("/verify, TaPoS", () => {
 describe("deduplication", () => {
   it("two concurrent /settle calls for V2 broadcast once, and only one of them answers success", async () => {
     // x402's exact family: settlements are deduplicated atomically across every process serving /settle, and a
-    // consumed primitive produces a settlement failure, never a success. The simulation answers slowly, so both settles
-    // have read no stored answer before either claims.
-    await start({ triggerMs: 300 }, 5_000);
+    // consumed primitive produces a settlement failure, never a success. The node holds each simulation until both
+    // settles have asked for it, so both have read no stored answer before either claims; and it holds each settle's
+    // first read of the transaction's status until both have made it, so both have claimed, and both find the success
+    // on chain before either stores it.
+    await start({
+      hold: async (path) => {
+        if (path === "/wallet/triggerconstantcontract") await until(() => calls(path).length === 2);
+        if (path === "/walletsolidity/getnowblock") await until(() => calls(path).length === 2);
+      },
+    });
+    const claims = await claimAttempts(db.pool);
     const answers = await Promise.all([post(`${base}/settle`, body(TX_V2)), post(`${base}/settle`, body(TX_V2))]);
-    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
+    expect(await claims()).toBe(2);
+    expect(calls("/walletsolidity/getnowblock")).toHaveLength(2);
+    expect(calls("/wallet/broadcasthex")).toHaveLength(1);
     expect(answers.map((a) => a.json)).toEqual(expect.arrayContaining([SUCCESS, STATE_FAILED]));
   });
 
@@ -523,15 +550,14 @@ describe("settlement outcomes", () => {
 
   it("a receipt reading SUCCESS with no Transfer log at the FullNode, not yet at the Solidity node, stays settlement_pending", async () => {
     await start({ info: () => infoWithLogs([]), solidInfo: () => live["infoNotFound"] }, 1_000);
-    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(PENDING);
+    expect(await settle()).toEqual(PENDING);
   });
 
   it("a receipt reading REVERT at the FullNode, not yet at the Solidity node, stays settlement_pending", async () => {
     // A failure is final only once read from a solidified block: the Solidity API serves only blocks that have crossed
     // the irreversibility threshold.
     await start({ info: () => info("REVERT"), solidInfo: () => live["infoNotFound"] }, 1_000);
-    const res = await post(`${base}/settle`, body(TX_V2));
-    expect(res.json).toEqual({ success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK });
+    expect(await settle()).toEqual({ success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK });
   });
 
   it("a broadcast the node refuses as a duplicate is a consumed payment: invalid_transaction_state with the id, stored final", async () => {
@@ -573,12 +599,26 @@ describe("settlement outcomes", () => {
   });
 
   it("two concurrent /settle calls whose broadcast the node refuses broadcast once, and both give the stored refusal", async () => {
-    // The simulation answers slowly, so both settles have read no stored answer before either claims; the one that
-    // loses the claim reads the row until the other's answer is stored.
-    await start({ triggerMs: 300, broadcast: live["broadcastExpired"], info: () => live["infoNotFound"] }, 5_000);
-    const answers = await Promise.all([post(`${base}/settle`, body(TX_V2)), post(`${base}/settle`, body(TX_V2))]);
+    // The node holds each simulation until both settles have asked for it, so both have read no stored answer before
+    // either claims. It holds the broadcast until the settle that lost the claim has begun reading the transaction's
+    // status, so that settle reads the row before the refusal is stored, and again, on its poll, until it is; a second
+    // broadcast is let through, and counted.
+    await start(
+      {
+        broadcast: live["broadcastExpired"],
+        info: () => live["infoNotFound"],
+        hold: async (path) => {
+          if (path === "/wallet/triggerconstantcontract") await until(() => calls(path).length === 2);
+          if (path === "/wallet/broadcasthex") {
+            await until(() => calls("/walletsolidity/getnowblock").length > 0 || calls(path).length > 1);
+          }
+        },
+      },
+      5_000,
+    );
+    const answers = await clock.answered([post(`${base}/settle`, body(TX_V2)), post(`${base}/settle`, body(TX_V2))]);
     expect(answers.map((a) => a.json)).toEqual([REFUSED, REFUSED]);
-    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
+    expect(calls("/wallet/broadcasthex")).toHaveLength(1);
   });
 
   it("a refused broadcast whose answer cannot be stored gives settlement_pending with the id, and keeps the claim", async () => {
@@ -594,15 +634,18 @@ describe("settlement outcomes", () => {
 
   it("a node that never shows the transaction in a block gives settlement_pending with the id", async () => {
     await start({ info: () => live["infoNotFound"] }, 2_500);
-    const res = await post(`${base}/settle`, body(TX_V2));
-    expect(res.json).toEqual({ success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK });
+    expect(await settle()).toEqual({ success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK });
   });
 
   it("a node that times out gives settlement_pending with the id", async () => {
+    // The node never answers the receipt read; the clock moves to the end of the wait for the chain, which keeps a
+    // quarter of a 1,000 ms wait for storing the answer: 750 ms.
     await start({ info: () => HANG }, 1_000);
-    const res = await post(`${base}/settle`, body(TX_V2));
-    expect(res.json).toEqual({ success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK });
-  }, 15_000);
+    const answer = post(`${base}/settle`, body(TX_V2));
+    await reaches(answer, () => calls("/walletsolidity/gettransactioninfobyid").length > 0);
+    await clock.advanceTo(750);
+    expect((await answer).json).toEqual({ success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK });
+  });
 
   it("a wait that ends on an unanswered receipt read stores the pending answer before it answers", async () => {
     const logged: string[] = [];
@@ -613,23 +656,39 @@ describe("settlement outcomes", () => {
     });
     const pendingAnswer = { success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK };
     try {
-      await start({ info: () => HANG }, 1_500);
-      expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(pendingAnswer);
+      // The node holds the Solidity node's receipt read, the first read of the transaction's status after the
+      // broadcast. Its bound is the end of the wait for the chain, which keeps a quarter of a 1,500 ms wait for storing
+      // the answer: 1,125 ms. Once the clock is there the node answers with a landed receipt: too late, so the answer is
+      // settlement_pending, stored and given with the clock at 1,125 ms.
+      const receipt = gate();
+      await start(
+        {
+          hold: async (path) => {
+            if (path === "/walletsolidity/gettransactioninfobyid") await receipt.opened;
+          },
+        },
+        1_500,
+      );
+      const answer = post(`${base}/settle`, body(TX_V2));
+      await reaches(answer, () => calls("/walletsolidity/gettransactioninfobyid").length > 0);
+      await clock.advanceTo(1_125);
+      receipt.open();
+      expect((await answer).json).toEqual(pendingAnswer);
+      expect(clock.elapsed).toBe(1_125);
       const stored = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, TXID_V2]);
       expect(stored.rows[0]?.answer).toEqual(pendingAnswer);
     } finally {
       spy.mockRestore();
     }
     expect(logged.filter((l) => l.includes("answer-not-stored"))).toEqual([]);
-  }, 15_000);
+  });
 });
 
 describe("repeated settles and node errors", () => {
   it("a repeated /settle whose stored answer is settlement_pending re-reads the chain, broadcasts nothing more, and stores the final answer, which is success once", async () => {
     let landed = false;
     await start({ info: () => (landed ? info("SUCCESS") : live["infoNotFound"]) }, 1_500);
-    const first = await post(`${base}/settle`, body(TX_V2));
-    expect(first.json).toEqual({ success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK });
+    expect(await settle()).toEqual({ success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK });
     landed = true;
     expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(SUCCESS);
     const reads = node.calls.filter((c) => c.path.endsWith("/gettransactioninfobyid")).length;
@@ -684,16 +743,20 @@ describe("repeated settles and node errors", () => {
   });
 
   it("a /settle of an expired transaction whose id the node does not answer gives unexpected_settle_error, with no transaction", async () => {
+    // The node never answers the read of its blocks; the clock moves to the end of settleWaitMs.
     await start({ held: () => HANG }, 1_000);
     vi.setSystemTime(EXPIRATION_V2 + 1);
-    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual({
+    const answer = post(`${base}/settle`, body(TX_V2));
+    await reaches(answer, () => calls("/wallet/gettransactionbyid").length > 0);
+    await clock.advanceTo(1_000);
+    expect((await answer).json).toEqual({
       success: false,
       errorReason: "unexpected_settle_error",
       transaction: "",
       network: NETWORK,
     });
-    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(0);
-  }, 15_000);
+    expect(calls("/wallet/broadcasthex")).toHaveLength(0);
+  });
 
   it("a /settle that the owner's permission refuses, of an id in the node's pending pool, answers invalid_transaction_state with the id", async () => {
     const account = {
@@ -711,11 +774,14 @@ describe("repeated settles and node errors", () => {
   });
 
   it("a node error before anything is submitted gives unexpected_settle_error and no broadcast", async () => {
+    // The node never answers the simulation; the clock moves to the end of settleWaitMs (3,000 ms).
     await start({ trigger: HANG });
-    const res = await post(`${base}/settle`, body(TX_V2));
-    expect(res.json).toEqual({ success: false, errorReason: "unexpected_settle_error", transaction: "", network: NETWORK });
-    expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(0);
-  }, 15_000);
+    const answer = post(`${base}/settle`, body(TX_V2));
+    await reaches(answer, () => calls("/wallet/triggerconstantcontract").length > 0);
+    await clock.advanceTo(3_000);
+    expect((await answer).json).toEqual({ success: false, errorReason: "unexpected_settle_error", transaction: "", network: NETWORK });
+    expect(calls("/wallet/broadcasthex")).toHaveLength(0);
+  });
 
   it("a broadcast the node refuses gives unexpected_settle_error with no transaction, stored final: a repeat gets it and broadcasts nothing", async () => {
     // A refused broadcast keeps its row with the stored answer, so the payment is broadcast at most once: every answer
@@ -765,22 +831,52 @@ describe("a store that cannot answer", () => {
     expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(1);
   });
 
+  /** Whether a query is waiting for a lock in the test's database: the facilitator's read, behind the test's lock. */
+  const waitingForLock = async () =>
+    (await db.pool.query("SELECT 1 FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'"))
+      .rowCount !== 0;
+
+  it("a store that stalls is waited for until settleWaitMs: a read that answers before then gives the stored answer", async () => {
+    // The store holds the read of a consumed payment's row; the clock moves to 1 ms before settleWaitMs (1,000 ms), and
+    // the store then answers: the settle is waiting for that read, and answers as a repeat of a consumed payment does.
+    await start({}, 1_000);
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(SUCCESS);
+    const holder = await db.pool.connect();
+    try {
+      await holder.query("BEGIN");
+      await holder.query("LOCK TABLE settlement IN ACCESS EXCLUSIVE MODE");
+      const answer = post(`${base}/settle`, body(TX_V2));
+      await reaches(answer, waitingForLock);
+      await clock.advanceTo(999);
+      await holder.query("ROLLBACK");
+      expect((await answer).json).toEqual(STATE_FAILED);
+      expect(calls("/wallet/broadcasthex")).toHaveLength(1);
+    } finally {
+      await holder.query("ROLLBACK");
+      holder.release();
+    }
+  });
+
   it("a store that stalls is bounded: /settle answers settlement_pending with the id, and broadcasts nothing", async () => {
+    // The store holds the read; the clock moves to settleWaitMs (1,000 ms), and the store's answer then comes too late
+    // to be used.
     await start({}, 1_000);
     const holder = await db.pool.connect();
     try {
       await holder.query("BEGIN");
       await holder.query("LOCK TABLE settlement IN ACCESS EXCLUSIVE MODE");
-      const started = performance.now();
-      const res = await post(`${base}/settle`, body(TX_V2));
-      expect(performance.now() - started).toBeLessThan(1_000 + 1_000);
-      expect(res.json).toEqual({ success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK });
-      expect(node.calls.filter((c) => c.path === "/wallet/broadcasthex")).toHaveLength(0);
+      const answer = post(`${base}/settle`, body(TX_V2));
+      await reaches(answer, waitingForLock);
+      await clock.advanceTo(1_000);
+      await holder.query("ROLLBACK");
+      expect((await answer).json).toEqual({ success: false, errorReason: "settlement_pending", transaction: TXID_V2, network: NETWORK });
+      expect(clock.elapsed).toBe(1_000);
+      expect(calls("/wallet/broadcasthex")).toHaveLength(0);
     } finally {
       await holder.query("ROLLBACK");
       holder.release();
     }
-  }, 30_000);
+  });
 });
 
 describe("the facilitator's own bounds", () => {
