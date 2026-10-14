@@ -19,10 +19,10 @@ import {
   invalid,
   isObject,
   isPending,
-  operatorLog,
   pending,
   type FacilitatorRequest,
   type InvalidReason,
+  type OperatorLog,
   type SettleAnswer,
   type VerifyAnswer,
 } from "./answers.js";
@@ -197,9 +197,21 @@ interface Local {
   remarkHash: string;
 }
 
-export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStore, settleWaitMs: number) {
+export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStore, settleWaitMs: number, log: OperatorLog) {
   const byNetwork = new Map(nodes.map((n) => [n.network as string, n]));
   const apis = new Map<string, Promise<ApiPromise>>();
+  /** The fields that name a payment in an operator entry: the payer once the extrinsic is decoded. */
+  const about = (c: { network: string; id: string; payer?: string }) => ({
+    network: c.network,
+    ...(c.payer === undefined ? {} : { payer: c.payer }),
+    transaction: c.id,
+  });
+  /** The stored row, or undefined when the store does not answer by `deadline`; the failure goes to the operator log. */
+  const readStored = (c: { network: string; id: string; payer?: string }, deadline: number) =>
+    inTime(s.read(c.network, c.id), deadline).catch((e: unknown) => {
+      log({ event: "store-call-failed", ...about(c), call: "read" }, e);
+      return undefined;
+    });
 
   /** The network's metadata, loaded once and loaded again when the node's runtime version changes. */
   async function apiFor(node: PolkadotNode, timeoutMs = NODE_TIMEOUT_MS): Promise<ApiPromise> {
@@ -208,6 +220,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     if (typeof spec !== "number") throw new NodeError("malformed", true, "state_getRuntimeVersion: no specVersion");
     let loading = apis.get(node.network);
     if (loading !== undefined) {
+      // A load that failed has gone to the operator log from its handler below; a new one is made.
       const api = await loading.catch(() => undefined);
       if (api !== undefined && api.runtimeVersion.specVersion.toNumber() === spec) return api;
       apis.delete(node.network);
@@ -215,7 +228,8 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     }
     const fresh = load(node);
     apis.set(node.network, fresh);
-    fresh.catch(() => {
+    fresh.catch((e: unknown) => {
+      log({ event: "node-call-failed", network: node.network, call: "metadata" }, e);
       if (apis.get(node.network) === fresh) apis.delete(node.network);
     });
     return fresh;
@@ -266,13 +280,15 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     let api: ApiPromise;
     try {
       api = await within(apiFor(l.node, timeoutMs), timeoutMs);
-    } catch {
+    } catch (e) {
+      log({ event: "node-call-failed", ...about({ network: l.node.network, id: l.id }), call: "metadata" }, e);
       return "unexpected_verify_error";
     }
     let xt;
     try {
       xt = api.createType("Extrinsic", l.extrinsic);
     } catch {
+      // The payer's own extrinsic bytes do not decode: refused `invalid_payload` to the client that sent them.
       return "invalid_payload";
     }
     if (!xt.isSigned || xt.type !== 4 || xt.toHex() !== l.extrinsic || xt.method.toHex() !== l.call) return "invalid_payload";
@@ -329,17 +345,21 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     let best: unknown;
     let header: unknown;
     let validity: unknown;
+    let call = "chain_getBlockHash";
     try {
-      best = await rpc(url, "chain_getBlockHash", [], left());
+      best = await rpc(url, call, [], left());
       if (!isLowerHex(best) || best.length !== 66) return "unexpected_verify_error";
-      header = await rpc(url, "chain_getHeader", [best], left());
+      call = "chain_getHeader";
+      header = await rpc(url, call, [best], left());
+      call = "state_call";
       validity = await rpc(
         url,
-        "state_call",
+        call,
         ["TaggedTransactionQueue_validate_transaction", `0x${EXTERNAL}${c.hex.slice(2)}${best.slice(2)}`, best],
         left(),
       );
-    } catch {
+    } catch (e) {
+      log({ event: "node-call-failed", ...about(c), call }, e);
       return "unexpected_verify_error";
     }
     const height = blockNumber(header);
@@ -382,7 +402,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       has("assets", "Transferred", (d) => d[0]?.toString() === String(c.assetId));
     if (ok) return { success: true, transaction: timepoint, network: c.network, payer: c.payer };
     const seen = mine.map((r) => `${r.event.section}.${r.event.method}`);
-    if (final) operatorLog({ event: "settlement-failed", network: c.network, transaction: timepoint, events: seen });
+    if (final) log({ event: "settlement-failed", ...about(c), transaction: timepoint, events: seen });
     return failed("invalid_transaction_state", timepoint, c.network);
   }
 
@@ -398,21 +418,28 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     resolved: number[];
   }
 
-  /** The finalized head's height, read before `deadline`; undefined when the node does not give it. */
-  async function finalizedHeight(url: string, deadline: number): Promise<number | undefined> {
+  /**
+   * The finalized head's height, read before `deadline`; undefined when the node does not give it, and the failure goes
+   * to the operator log.
+   */
+  async function finalizedHeight(c: Checked, url: string, deadline: number): Promise<number | undefined> {
+    let call = "chain_getFinalizedHead";
     try {
-      const hash = await rpc(url, "chain_getFinalizedHead", [], deadline - performance.now());
-      return blockNumber(await rpc(url, "chain_getHeader", [hash], deadline - performance.now()));
-    } catch {
+      const hash = await rpc(url, call, [], deadline - performance.now());
+      call = "chain_getHeader";
+      return blockNumber(await rpc(url, call, [hash], deadline - performance.now()));
+    } catch (e) {
+      log({ event: "node-call-failed", ...about(c), call }, e);
       return undefined;
     }
   }
 
-  /** The head's height; undefined when the node does not give it. */
-  async function headHeight(url: string, left: () => number): Promise<number | undefined> {
+  /** The head's height; undefined when the node does not give it, and the failure goes to the operator log. */
+  async function headHeight(c: Checked, url: string, left: () => number): Promise<number | undefined> {
     try {
       return blockNumber(await rpc(url, "chain_getHeader", [], left()));
-    } catch {
+    } catch (e) {
+      log({ event: "node-call-failed", ...about(c), call: "chain_getHeader" }, e);
       return undefined;
     }
   }
@@ -440,7 +467,8 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
   /**
    * Block `n` read for the extrinsic: the answer when the block holds it, `absent` when it does not, `unreadable` (with
    * the reason) when the node gives neither the block nor, for the block that holds it, its events, or when no block
-   * read slot comes free before the deadline, and `stopped` when the deadline ends a read that started.
+   * read slot comes free before the deadline, and `stopped` when the deadline ends a read that started. Each read that
+   * gives no block goes to the operator log, with what stopped it.
    */
   async function readBlock(
     c: Checked,
@@ -454,8 +482,13 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       if (found.index < 0) return "absent";
       return await included(c, url, found.hash, found.index, left(), final);
     } catch (e) {
-      if (!(e instanceof NoBlockReadSlot) && left() <= 0) return "stopped";
-      return { unreadable: e instanceof Error ? e.message : String(e) };
+      if (!(e instanceof NoBlockReadSlot) && left() <= 0) {
+        log({ event: "block-read-stopped", ...about(c), block: n }, e);
+        return "stopped";
+      }
+      const reason = e instanceof Error ? e.message : String(e);
+      log({ event: "block-unreadable", ...about(c), block: n, final, reason }, e);
+      return { unreadable: reason };
     }
   }
 
@@ -477,20 +510,19 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     const unread = new Set(at.unread);
     const resolved = new Set(at.resolved);
     const position = (): Scan => ({ proven, next, unread: [...unread].sort((a, b) => a - b), resolved: [...resolved] });
-    const finalized = await finalizedHeight(url, deadline);
+    const finalized = await finalizedHeight(c, url, deadline);
     while (finalized !== undefined && proven <= Math.min(finalized, last) && left() > 0) {
       const read = await readBlock(c, url, proven, left, true);
       if (read === "stopped") return position();
       if (typeof read === "object" && "unreadable" in read) {
         unread.add(proven);
-        operatorLog({ event: "block-unreadable", network: c.network, transaction: c.id, block: proven, reason: read.unreadable });
       } else if (read !== "absent") {
         return { answer: read };
       }
       proven += 1;
     }
     next = Math.max(next, proven);
-    const head = await headHeight(url, left);
+    const head = await headHeight(c, url, left);
     while (head !== undefined && next <= Math.min(head, last) && left() > 0) {
       const read = await readBlock(c, url, next, left, false);
       if (read === "stopped") return position();
@@ -510,7 +542,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       if (read !== "absent") return { answer: read };
     }
     if (proven > last && unread.size === 0) {
-      operatorLog({ event: "settlement-expired", network: c.network, transaction: c.id });
+      log({ event: "settlement-expired", ...about(c) });
       return { answer: failed("invalid_transaction_state", c.id, c.network) };
     }
     return position();
@@ -525,7 +557,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     let at: Scan = { proven: since, next: since, unread, resolved: [] };
     for (;;) {
       if (stored) {
-        const row = await inTime(s.read(c.network, c.id), deadline).catch(() => undefined);
+        const row = await readStored(c, deadline);
         if (row?.state === "answered" && !isPending(row.answer)) return row.answer;
       }
       const step = await scanOnce(c, since, at, deadline);
@@ -534,7 +566,9 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       if (performance.now() + POLL_MS > deadline) {
         if (at.proven > since || at.unread.length > 0 || at.resolved.length > 0) {
           const to = Math.min(at.proven, lastBlock(c, since));
-          void s.advance(c.network, c.id, { from: since, to, unread: at.unread, resolved: at.resolved }).catch(() => {});
+          void s
+            .advance(c.network, c.id, { from: since, to, unread: at.unread, resolved: at.resolved })
+            .catch((e: unknown) => log({ event: "store-call-failed", ...about(c), call: "advance" }, e));
         }
         return pending(c.id, c.network);
       }
@@ -553,6 +587,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     try {
       await rpc(url, "author_submitExtrinsic", [c.hex], deadline - performance.now());
     } catch (e) {
+      log({ event: "node-call-failed", ...about(c), call: "author_submitExtrinsic" }, e);
       if (e instanceof RpcError) {
         return seenBefore(e)
           ? failed("invalid_transaction_state", c.id, c.network)
@@ -571,7 +606,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
    */
   function repeatOf(stored: SettleAnswer): SettleAnswer {
     if (!stored.success) return stored;
-    operatorLog({ event: "settlement-consumed", network: stored.network, transaction: stored.transaction });
+    log({ event: "settlement-consumed", network: stored.network, payer: stored.payer, transaction: stored.transaction });
     return failed("invalid_transaction_state", stored.transaction, stored.network);
   }
 
@@ -582,16 +617,16 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
    * that cannot have reached the node, is given the same way: only once it is the stored answer. Any other answer is
    * given whether or not it is stored; a failed write leaves the row for a later read of the chain.
    */
-  async function keep(c: { network: string; id: string }, answer: SettleAnswer, deadline: number): Promise<SettleAnswer> {
+  async function keep(c: Checked, answer: SettleAnswer, deadline: number): Promise<SettleAnswer> {
     let wrote: boolean;
     try {
       wrote = await inTime(s.answer(c.network, c.id, answer), deadline);
-    } catch {
-      operatorLog({ event: "answer-not-stored", network: c.network, transaction: c.id });
+    } catch (e) {
+      log({ event: "answer-not-stored", ...about(c) }, e);
       return answer.success || answer.transaction === "" ? pending(c.id, c.network) : answer;
     }
     if (wrote || (!answer.success && answer.transaction !== "")) return answer;
-    const row = await inTime(s.read(c.network, c.id), deadline).catch(() => undefined);
+    const row = await readStored(c, deadline);
     return row?.state === "answered" && !isPending(row.answer) ? repeatOf(row.answer) : pending(c.id, c.network);
   }
 
@@ -602,7 +637,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
   async function follow(l: Local, since: number | null, unread: number[], deadline: number): Promise<SettleAnswer> {
     const c = await decode(l, deadline - performance.now());
     if (typeof c === "string" || since === null) {
-      const row = await inTime(s.read(l.node.network, l.id), deadline).catch(() => undefined);
+      const row = await readStored(typeof c === "string" ? { network: l.node.network, id: l.id } : c, deadline);
       return row?.state === "answered" ? repeatOf(row.answer) : pending(l.id, l.node.network);
     }
     return keep(c, await scan(c, since, unread, deadline - answerReserve(settleWaitMs), true), deadline);
@@ -629,14 +664,15 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     let stored: Stored;
     try {
       stored = await inTime(s.read(l.node.network, l.id), deadline);
-    } catch {
+    } catch (e) {
+      log({ event: "store-call-failed", ...about({ network: l.node.network, id: l.id }), call: "read" }, e);
       return pending(l.id, l.node.network);
     }
     if (stored.state === "answered" && !isPending(stored.answer)) return repeatOf(stored.answer);
     if (stored.state !== "none") return follow(l, stored.since, stored.unread, deadline);
     const c = await decode(l, left());
     if (typeof c === "string") return failed(settleReason(c), "", network);
-    const finalized = await finalizedHeight(l.node.rpc, deadline);
+    const finalized = await finalizedHeight(c, l.node.rpc, deadline);
     const v = await validate(c, left());
     if (typeof v === "string") return failed(settleReason(v), "", network);
     if (left() <= 0) return failed("unexpected_settle_error", "", network);
@@ -645,11 +681,12 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     let won: boolean;
     try {
       won = await inTime(s.claim(c.network, c.id, v.until, since), deadline);
-    } catch {
+    } catch (e) {
+      log({ event: "store-call-failed", ...about(c), call: "claim" }, e);
       return pending(c.id, c.network);
     }
     if (!won) {
-      const row = await inTime(s.read(c.network, c.id), deadline).catch(() => undefined);
+      const row = await readStored(c, deadline);
       const claimed = row !== undefined && row.state !== "none" ? row : undefined;
       return follow(l, claimed?.since ?? null, claimed?.unread ?? [], deadline);
     }
@@ -657,9 +694,17 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
   }
 
   async function close(): Promise<void> {
-    const all = [...apis.values()];
+    const all = [...apis];
     apis.clear();
-    await Promise.all(all.map((p) => p.then((api) => api.disconnect()).catch(() => {})));
+    // A load that failed has gone to the operator log from `apiFor`; a failed disconnect goes there here.
+    await Promise.all(
+      all.map(([network, p]) =>
+        p.then(
+          (api) => api.disconnect().catch((e: unknown) => log({ event: "node-call-failed", network, call: "disconnect" }, e)),
+          () => undefined,
+        ),
+      ),
+    );
   }
 
   return { verify, settle, close, networks: nodes.map((n) => n.network as string) };

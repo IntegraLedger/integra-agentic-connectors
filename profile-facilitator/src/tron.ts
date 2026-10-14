@@ -21,10 +21,10 @@ import {
   invalid,
   isObject,
   isPending,
-  operatorLog,
   pending,
   type FacilitatorRequest,
   type InvalidReason,
+  type OperatorLog,
   type SettleAnswer,
   type VerifyAnswer,
 } from "./answers.js";
@@ -96,12 +96,27 @@ function signerOf(signature: Uint8Array, txid: Uint8Array): Uint8Array | undefin
     out.set(keccak_256(key.subarray(1)).subarray(12), 1);
     return out;
   } catch {
+    // The payer's own signature bytes do not recover a key: refused `invalid_payload` to the client that sent them.
     return undefined;
   }
 }
 
-export function createTron(nodes: readonly TronNode[], s: SettlementStore, settleWaitMs: number) {
+export function createTron(nodes: readonly TronNode[], s: SettlementStore, settleWaitMs: number, log: OperatorLog) {
   const byNetwork = new Map(nodes.map((n) => [n.network as string, n]));
+  /** The fields that name a payment in an operator entry. */
+  const about = (c: Checked) => ({ network: c.network, payer: c.payer, transaction: c.txid });
+  /** `p`, rejecting as it does, after its rejection is given to the operator log as a failed call to `call`. */
+  const reported = <T>(c: Checked, call: string, p: Promise<T>): Promise<T> =>
+    p.catch((e: unknown) => {
+      log({ event: "node-call-failed", ...about(c), call }, e);
+      throw e;
+    });
+  /** The stored row, or undefined when the store does not answer by `deadline`; the failure goes to the operator log. */
+  const readStored = (c: Checked, deadline: number) =>
+    inTime(s.read(c.network, c.txid), deadline).catch((e: unknown) => {
+      log({ event: "store-call-failed", ...about(c), call: "read" }, e);
+      return undefined;
+    });
 
   /** Every check of rule 5 that reads neither the clock nor the node. */
   async function check(r: FacilitatorRequest): Promise<Checked | InvalidReason> {
@@ -137,7 +152,8 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
   async function ask(c: Checked, path: string, body: unknown, deadline: number): Promise<unknown> {
     try {
       return await postJson(`${byNetwork.get(c.network)!.fullNode}${path}`, body, deadline - performance.now());
-    } catch {
+    } catch (e) {
+      log({ event: "node-call-failed", ...about(c), call: path }, e);
       return undefined;
     }
   }
@@ -260,7 +276,8 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     let stored: Stored;
     try {
       stored = await inTime(s.read(c.network, c.txid), Infinity);
-    } catch {
+    } catch (e) {
+      log({ event: "store-call-failed", ...about(c), call: "read" }, e);
       return invalid("unexpected_verify_error", c.payer);
     }
     if (stored.state !== "none") return invalid("invalid_transaction_state", c.payer);
@@ -271,7 +288,8 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
   /**
    * The profile's reads at the Solidity node's `/walletsolidity` API and the FullNode's `/wallet` API, each bounded by
    * `deadline`. A receipt lookup that finds nothing names the time of the latest block at its level, read from the same
-   * node before the lookup, or null when that read fails or its answer lacks the time.
+   * node before the lookup, or null when that read fails or its answer lacks the time. A read that fails is given to the
+   * operator log.
    */
   function reader(c: Checked, deadline: number): TronReader {
     const node = byNetwork.get(c.network)!;
@@ -291,8 +309,12 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     return {
       network: c.network as TronReader["network"],
       async info(txid, level) {
-        const api = level === "solid" ? `${node.solidityNode}/walletsolidity` : `${node.fullNode}/wallet`;
-        const readTo = await latest(api).then((block) => block.timestamp, () => null);
+        const path = level === "solid" ? "/walletsolidity" : "/wallet";
+        const api = `${level === "solid" ? node.solidityNode : node.fullNode}${path}`;
+        const readTo = await reported(c, `${path}/getnowblock`, latest(api)).then(
+          (block) => block.timestamp,
+          () => null,
+        );
         const o = await postJson(`${api}/gettransactioninfobyid`, { value: txid.replace(/^0x/, "") }, left());
         if (!isObject(o)) throw new NodeError("malformed", true, "gettransactioninfobyid");
         if (Object.keys(o).length === 0) return { notFound: true, timestamp: readTo };
@@ -337,26 +359,22 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
       {
         ...reads,
         async info(txid, level) {
-          const info = await reads.info(txid, level);
+          const api = level === "solid" ? "/walletsolidity" : "/wallet";
+          const info = await reported(c, `${api}/gettransactioninfobyid`, reads.info(txid, level));
           if (!("notFound" in info)) found = level;
           return info;
         },
+        solidHead: () => reported(c, "/walletsolidity/getnowblock", reads.solidHead()),
       },
     );
     if (st.state === "settled") return { success: true, transaction: c.txid, network: c.network, payer: c.payer };
     if (st.state === "pending") return undefined;
     if (st.why === "expired") {
-      operatorLog({ event: "settlement-expired", network: c.network, transaction: c.txid });
+      log({ event: "settlement-expired", ...about(c) });
       return failed("invalid_transaction_state", c.txid, c.network);
     }
     if (found !== "solid") return undefined;
-    operatorLog({
-      event: "settlement-failed",
-      network: c.network,
-      transaction: c.txid,
-      why: st.why,
-      result: st.result,
-    });
+    log({ event: "settlement-failed", ...about(c), why: st.why, result: st.result });
     return failed("invalid_transaction_state", c.txid, c.network);
   }
 
@@ -373,7 +391,7 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
   async function watch(c: Checked, deadline: number, stored: boolean): Promise<SettleAnswer> {
     for (;;) {
       if (stored) {
-        const row = await inTime(s.read(c.network, c.txid), deadline).catch(() => undefined);
+        const row = await readStored(c, deadline);
         if (row?.state === "answered" && !isPending(row.answer)) return row.answer.success ? consumed(c) : row.answer;
       }
       const final = await outcome(c, deadline);
@@ -394,6 +412,7 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     try {
       sent = await postJson(`${node.fullNode}/wallet/broadcasthex`, { transaction: c.hex }, deadline - performance.now());
     } catch (e) {
+      log({ event: "node-call-failed", ...about(c), call: "/wallet/broadcasthex" }, e);
       return e instanceof NodeError && !e.sent
         ? failed("unexpected_settle_error", "", c.network)
         : pending(c.txid, c.network);
@@ -415,14 +434,14 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     let wrote: boolean;
     try {
       wrote = await inTime(s.answer(c.network, c.txid, answer), deadline);
-    } catch {
-      operatorLog({ event: "answer-not-stored", network: c.network, transaction: c.txid });
+    } catch (e) {
+      log({ event: "answer-not-stored", ...about(c) }, e);
       return answer.success || answer.transaction === "" ? pending(c.txid, c.network) : answer;
     }
     if (wrote) return answer;
     if (answer.success) return consumed(c);
     if (answer.transaction !== "") return answer;
-    const row = await inTime(s.read(c.network, c.txid), deadline).catch(() => undefined);
+    const row = await readStored(c, deadline);
     if (row?.state !== "answered" || isPending(row.answer)) return pending(c.txid, c.network);
     return row.answer.success ? consumed(c) : row.answer;
   }
@@ -448,7 +467,8 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     let stored: Stored;
     try {
       stored = await inTime(s.read(c.network, c.txid), deadline);
-    } catch {
+    } catch (e) {
+      log({ event: "store-call-failed", ...about(c), call: "read" }, e);
       return pending(c.txid, c.network);
     }
     if (stored.state === "answered" && !isPending(stored.answer)) {
@@ -465,7 +485,8 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     let won: boolean;
     try {
       won = await inTime(s.claim(c.network, c.txid, new Date(Number(c.raw.expiration))), deadline);
-    } catch {
+    } catch (e) {
+      log({ event: "store-call-failed", ...about(c), call: "claim" }, e);
       return pending(c.txid, c.network);
     }
     if (!won) return keep(c, await watch(c, waitUntil, true), deadline);

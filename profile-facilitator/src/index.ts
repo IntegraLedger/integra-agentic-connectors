@@ -7,7 +7,16 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { LCP_ASSETS_REMARK, type PolkadotNetwork } from "@integraledger/lcp/polkadot";
 import { LCP_TRC20_MEMO } from "@integraledger/lcp/tron";
-import { failed, isObject, readRequest, type FacilitatorRequest, type SettleAnswer, type VerifyAnswer } from "./answers.js";
+import {
+  failed,
+  guarded,
+  isObject,
+  operatorLine,
+  readRequest,
+  type FacilitatorRequest,
+  type SettleAnswer,
+  type VerifyAnswer,
+} from "./answers.js";
 import { readRequestJson, sendJson } from "./http.js";
 import { createPolkadot } from "./polkadot.js";
 import { openStore, type SettlementStore } from "./store.js";
@@ -23,6 +32,18 @@ export interface ProfileFacilitatorConfig {
   store: { url: string };
   /** How long `/settle` waits for inclusion before answering `settlement_pending`; default 30 000. */
   settleWaitMs: number;
+  /**
+   * Receives every entry for the operator: what the facilitator saw that its answer does not carry, with `network`,
+   * `payer` and `transaction` naming the payment where they are known. `cause` is the error that caused the entry,
+   * when there is one; the answer to the client is the same either way, and carries nothing from it. Called once per
+   * entry; what it throws, or a promise it returns that rejects, goes to the default with an `operator-log-failed`
+   * entry. Default: one JSON line per entry on standard error, the cause as its `cause` (name, message, stack and its
+   * own `cause` chain).
+   */
+  operatorLog?: (
+    entry: { event: string; network?: string; payer?: string; transaction?: string; [field: string]: unknown },
+    cause?: unknown,
+  ) => void;
 }
 
 const DEFAULT_SETTLE_WAIT_MS = 30_000;
@@ -49,16 +70,19 @@ export async function serveProfileFacilitator(c: ProfileFacilitatorConfig): Prom
   const { host, port } = hostPort(c.listen);
   const settleWaitMs =
     Number.isFinite(c.settleWaitMs) && c.settleWaitMs > 0 ? c.settleWaitMs : DEFAULT_SETTLE_WAIT_MS;
-  const store: SettlementStore = await openStore(c.store.url);
+  const log = guarded(c.operatorLog ?? operatorLine);
+  const store: SettlementStore = await openStore(c.store.url, log);
   const tron = createTron(
     (c.tron ?? []).map((n) => ({ ...n, fullNode: trimmed(n.fullNode), solidityNode: trimmed(n.solidityNode) })),
     store,
     settleWaitMs,
+    log,
   );
   const polkadot = createPolkadot(
     (c.polkadot ?? []).map((n) => ({ ...n, rpc: trimmed(n.rpc) })),
     store,
     settleWaitMs,
+    log,
   );
 
   const supported = {
@@ -94,7 +118,8 @@ export async function serveProfileFacilitator(c: ProfileFacilitatorConfig): Prom
     if (rail === undefined) return { isValid: false, invalidReason: "invalid_network" };
     try {
       return await rail.verify(r);
-    } catch {
+    } catch (e) {
+      log({ event: "verify-error", network: r.paymentRequirements.network }, e);
       return { isValid: false, invalidReason: "unexpected_verify_error" };
     }
   }
@@ -107,7 +132,8 @@ export async function serveProfileFacilitator(c: ProfileFacilitatorConfig): Prom
     if (rail === undefined) return failed("invalid_network", "", network);
     try {
       return await rail.settle(r);
-    } catch {
+    } catch (e) {
+      log({ event: "settle-error", network }, e);
       return failed("unexpected_settle_error", "", network);
     }
   }
@@ -136,7 +162,8 @@ export async function serveProfileFacilitator(c: ProfileFacilitatorConfig): Prom
   }
 
   const server = createServer((req, res) => {
-    handle(req, res).catch(() => {
+    handle(req, res).catch((e: unknown) => {
+      log({ event: "request-error", path: (req.url ?? "").split("?")[0] }, e);
       if (!res.headersSent) sendJson(res, 500, { error: "internal error" });
       else res.destroy();
     });

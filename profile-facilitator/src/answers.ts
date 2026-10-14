@@ -60,9 +60,60 @@ export function isPending(a: SettleAnswer): boolean {
   return !a.success && a.errorReason === "settlement_pending";
 }
 
-/** One JSON line on standard error, for the operator: what the node reported that the answer does not carry. */
-export function operatorLog(entry: Record<string, unknown>): void {
-  process.stderr.write(`${JSON.stringify(entry)}\n`);
+/**
+ * An entry for the operator: what the facilitator saw that the answer does not carry. `network`, `payer` and
+ * `transaction` name the payment it concerns, each where it is known.
+ */
+export interface OperatorEntry {
+  event: string;
+  network?: string;
+  payer?: string;
+  transaction?: string;
+  [field: string]: unknown;
+}
+
+/** Receives each operator entry, with the error that caused it when there is one. */
+export type OperatorLog = (entry: OperatorEntry, cause?: unknown) => void;
+
+/** An error as a JSON value: its name, message and stack, and its `cause` the same way, at most 8 deep. */
+function described(e: unknown, depth = 0): unknown {
+  if (!(e instanceof Error)) return { message: String(e) };
+  const out: Record<string, unknown> = { name: e.name, message: e.message, stack: e.stack };
+  if (e.cause !== undefined && depth < 8) out["cause"] = described(e.cause, depth + 1);
+  return out;
+}
+
+/**
+ * The default operator log: one JSON line per entry on standard error. An entry with a cause carries it as `cause`:
+ * the error's name, message and stack, and its own `cause` chain.
+ */
+export function operatorLine(entry: OperatorEntry, cause?: unknown): void {
+  const line = cause === undefined ? entry : { ...entry, cause: described(cause) };
+  process.stderr.write(`${JSON.stringify(line)}\n`);
+}
+
+/**
+ * `log` as the facilitator calls it: what it throws, or a promise it returns that rejects, never reaches an answer.
+ * The entry is then written by `operatorLine`, with an `operator-log-failed` entry whose cause is what `log` threw.
+ */
+export function guarded(log: OperatorLog): OperatorLog {
+  if (log === operatorLine) return log;
+  return (entry, cause) => {
+    const fallBack = (e: unknown) => {
+      operatorLine(entry, cause);
+      const failure: OperatorEntry = { event: "operator-log-failed" };
+      for (const field of ["network", "payer", "transaction"] as const) {
+        if (entry[field] !== undefined) failure[field] = entry[field];
+      }
+      operatorLine(failure, e);
+    };
+    try {
+      const returned: unknown = log(entry, cause);
+      if (returned instanceof Promise) returned.catch(fallBack);
+    } catch (e) {
+      fallBack(e);
+    }
+  };
 }
 
 export function isObject(v: unknown): v is Record<string, unknown> {

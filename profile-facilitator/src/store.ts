@@ -11,7 +11,7 @@
  * bounded by `STORE_TIMEOUT_MS`.
  */
 import pg from "pg";
-import { isPending, type SettleAnswer } from "./answers.js";
+import { isPending, operatorLine, type OperatorLog, type SettleAnswer } from "./answers.js";
 import { within } from "./http.js";
 
 /** A row's answer is final when it is written and is not `settlement_pending`. */
@@ -64,7 +64,11 @@ export interface SettlementStore {
   close(): Promise<void>;
 }
 
-export async function openStore(url: string): Promise<SettlementStore> {
+/**
+ * Opens the pool and creates the table. `log` receives an error the pool reports for an idle connection, and a sweep
+ * that fails; the sweep runs again a minute later.
+ */
+export async function openStore(url: string, log: OperatorLog = operatorLine): Promise<SettlementStore> {
   const pool = new pg.Pool({
     connectionString: url,
     max: 10,
@@ -72,7 +76,7 @@ export async function openStore(url: string): Promise<SettlementStore> {
     query_timeout: STORE_TIMEOUT_MS,
     statement_timeout: STORE_TIMEOUT_MS,
   });
-  pool.on("error", () => {});
+  pool.on("error", (e) => log({ event: "store-connection-error" }, e));
   await pool.query(SCHEMA);
 
   const store: SettlementStore = {
@@ -126,7 +130,7 @@ export async function openStore(url: string): Promise<SettlementStore> {
     },
   };
   const timer = setInterval(() => {
-    store.drop().catch(() => {});
+    store.drop().catch((e: unknown) => log({ event: "store-call-failed", call: "sweep" }, e));
   }, DROP_EVERY_MS);
   timer.unref();
   return store;

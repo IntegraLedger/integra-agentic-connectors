@@ -18,8 +18,9 @@ export class NodeError extends Error {
     readonly code: "timeout" | "transport" | "http-status" | "too-large" | "malformed",
     readonly sent: boolean,
     detail: string,
+    options?: ErrorOptions,
   ) {
-    super(`${code}: ${detail}`);
+    super(`${code}: ${detail}`, options);
   }
 }
 
@@ -41,17 +42,17 @@ export async function postJson(
       signal,
     });
   } catch (e) {
-    if (signal.aborted) throw new NodeError("timeout", true, url);
-    const cause = e instanceof Error && isObject(e.cause) ? e.cause["code"] : undefined;
-    const unsent = typeof cause === "string" && UNSENT.has(cause);
-    throw new NodeError("transport", !unsent, e instanceof Error ? e.message : String(e));
+    if (signal.aborted) throw new NodeError("timeout", true, url, { cause: e });
+    const code = e instanceof Error && isObject(e.cause) ? e.cause["code"] : undefined;
+    const unsent = typeof code === "string" && UNSENT.has(code);
+    throw new NodeError("transport", !unsent, e instanceof Error ? e.message : String(e), { cause: e });
   }
   const bytes = await readBounded(res, signal, maxBytes);
   if (res.status < 200 || res.status > 299) throw new NodeError("http-status", true, `status ${res.status}`);
   try {
     return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
-  } catch {
-    throw new NodeError("malformed", true, "the answer is not JSON");
+  } catch (e) {
+    throw new NodeError("malformed", true, "the answer is not JSON", { cause: e });
   }
 }
 
@@ -78,8 +79,8 @@ async function readBounded(res: Response, signal: AbortSignal, maxBytes: number)
     }
   } catch (e) {
     if (e instanceof NodeError) throw e;
-    if (signal.aborted) throw new NodeError("timeout", true, "reading the answer");
-    throw new NodeError("transport", true, e instanceof Error ? e.message : String(e));
+    if (signal.aborted) throw new NodeError("timeout", true, "reading the answer", { cause: e });
+    throw new NodeError("transport", true, e instanceof Error ? e.message : String(e), { cause: e });
   }
   const out = new Uint8Array(total);
   let at = 0;
@@ -105,6 +106,7 @@ export async function readRequestJson(req: IncomingMessage): Promise<{ json: unk
   try {
     return { json: JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Buffer.concat(parts))) };
   } catch {
+    // The client's own body is not JSON: refused `invalid_payload` to that client.
     return undefined;
   }
 }
