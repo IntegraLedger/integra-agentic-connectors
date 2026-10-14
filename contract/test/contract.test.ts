@@ -15,7 +15,7 @@ import addFormatsModule from "ajv-formats";
 import { describe, expect, it } from "vitest";
 import { BINDINGS, isRefusal, type AtrHash, type Json, type LcpPattern } from "@integraledger/lcp";
 import { evmHash } from "@integraledger/lcp/mpp";
-import { exactEip3009, exactErc7710, requestCommitment } from "@integraledger/lcp/x402";
+import { LEGAL_CONTEXT_SCHEMA, authCaptureEip3009, exactEip3009, exactErc7710, requestCommitment } from "@integraledger/lcp/x402";
 import {
   OPENAPI_BYTES,
   REFUSALS,
@@ -436,7 +436,7 @@ describe("the vectors", () => {
     expect(carrying).toEqual(["CV1", "CV2", "CV3", "CV6", "CV7", "CV9", "CV10", "CV11", "CV12"]);
   });
 
-  it("a report with no claim: CV7 has no reader, CV11's reader holds the hash in its receipt, CV12's pairing has no recover and its record proves nothing", async () => {
+  it("a report with no claim: CV7 has no reader, CV11's reader holds the hash in its receipt, CV12's holds the record's own payment on a pairing with no recover, and its record proves nothing", async () => {
     const report = (v: Vector) => v.steps.find((s) => s.request.path === "/report")!.request.body as Record<string, string>;
     const cv7 = VECTORS["CV7"]!;
     const cv11 = VECTORS["CV11"]!;
@@ -456,17 +456,55 @@ describe("the vectors", () => {
     const binding = BINDINGS.find((b) => b.id === report(cv12)["pairing"]) as unknown as Record<string, unknown>;
     expect(typeof binding["status"]).toBe("function");
     expect(binding["recover"]).toBeUndefined();
-    // Its reader is lcp's EV6 for this pairing (vectors/x402-auth-capture-eip155-eip3009.json), holding the reported
-    // transaction's receipt as lcp's own test reads it, in a block at the reader's finalized mark.
+    // Its reader is lcp's EV6 for this pairing (vectors/x402-auth-capture-eip155-eip3009.json): EV6's marks, and one
+    // receipt, for the reported transaction, at EV6's block, which is the reader's finalized mark. It holds EV6's two
+    // logs, the escrow's PaymentAuthorized and the token's Transfer, in their shape.
     const lcpDir = dirname(dirname(createRequire(import.meta.url).resolve("@integraledger/lcp")));
-    const ev6 = JSON.parse(readFileSync(join(lcpDir, "vectors", "x402-auth-capture-eip155-eip3009.json"), "utf8"))["EV6"];
+    const a3 = JSON.parse(readFileSync(join(lcpDir, "vectors", "x402-auth-capture-eip155-eip3009.json"), "utf8"));
+    const ev6 = a3["EV6"];
     const r12 = cv12.fixed.reader!;
     const tx12 = report(cv12)["reference"]!;
     expect({ network: r12.network, finalized: r12.finalized, safe: r12.safe }).toEqual(ev6.reader);
-    expect(r12.receipts).toEqual({
-      [tx12]: { status: 1, blockNumber: ev6.authorizedAndTransfer.expect.blockNumber, logs: ev6.authorizedAndTransfer.logs },
+    expect(Object.keys(r12.receipts)).toEqual([tx12]);
+    const receipt = r12.receipts[tx12]!;
+    expect({ status: receipt.status, blockNumber: receipt.blockNumber }).toEqual({
+      status: 1,
+      blockNumber: ev6.authorizedAndTransfer.expect.blockNumber,
     });
-    expect(BigInt(r12.receipts[tx12]!.blockNumber) <= BigInt(r12.finalized)).toBe(true);
+    expect(BigInt(receipt.blockNumber) <= BigInt(r12.finalized)).toBe(true);
+    const [authorized, transfer] = ev6.authorizedAndTransfer.logs as { address: string; topics: string[]; data: string }[];
+    expect(receipt.logs).toHaveLength(2);
+    expect(receipt.logs[1]).toEqual(transfer);
+    const held = receipt.logs[0]!;
+    expect({ address: held.address, topic0: held.topics[0], topics: held.topics.length, data: held.data }).toEqual({
+      address: authorized!.address,
+      topic0: authorized!.topics[0],
+      topics: 2,
+      data: authorized!.data,
+    });
+    // The PaymentAuthorized log's second topic is this record's own payment hash: lcp's reference() on the payment
+    // built for CV12's H and option, from the file's fixed payer, as lcp's EV6 test builds its payment. The payment is
+    // completed with a signature-shaped value: the reference reads the payer, the salt and the option, and no
+    // signature byte enters the payment hash.
+    const f = a3["fixed"];
+    const h12 = report(cv12)["atrHash"]! as AtrHash;
+    const option = (cv12.steps[0]!.request.body as { offers: { option: Record<string, Json> }[] }).offers[0]!.option;
+    expect(option).toEqual(f.option);
+    expect(cv12.fixed.clock).toBe(f.now);
+    const required = {
+      x402Version: 2,
+      resource: f.resource,
+      accepts: [option],
+      extensions: { legalContext: { info: { type: "sha256", value: h12, legalContextUrl: f.link }, schema: LEGAL_CONTEXT_SCHEMA } },
+    };
+    const unsigned = await authCaptureEip3009.build({ required, accepted: option, from: f.payer, now: cv12.fixed.clock } as never, h12);
+    if (isRefusal(unsigned)) throw new Error(unsigned.code);
+    const payment = (unsigned.complete as (signature: string) => unknown)(`0x${"11".repeat(65)}`);
+    if (isRefusal(payment)) throw new Error(payment.code);
+    const ref = await authCaptureEip3009.reference(payment as never);
+    if (isRefusal(ref)) throw new Error(ref.code);
+    expect(ref.bindingLog).toEqual({ address: authorized!.address, topic0: authorized!.topics[0], index: 1, value: expect.any(String) });
+    expect(held.topics[1]).toBe(ref.bindingLog!.value);
     // A read that cannot check the hash settles nothing: the record stays issued, with no settlement, claim, pattern
     // or evidence.
     const record = cv12.steps.find((s) => s.request.path === "/report")!.expect.body as unknown as RecordView;

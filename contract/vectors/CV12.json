@@ -30,7 +30,7 @@
               "address": "0xf96815976523E00e65Be8f34cA5e64b4f41EB19c",
               "topics": [
                 "0x1c81fb2e3bab27f6bb09bee9a0dddf61600b7cbaf2c12683e4864e0cbdb9d284",
-                "0x21a0acc1bbeb5c7e1c4259865dc5bcdb7867f4c07c99440e731d48141d8da556"
+                "0x2b1e334073c6e8c6334b6832d7fbf7040601a8e707119a15e420a5c7defa910a"
               ],
               "data": "0x"
             },
@@ -201,5 +201,5 @@
       }
     }
   ],
-  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. The option is lcp 0.4.0's vectors/x402-auth-capture-eip155-eip3009.json fixed.option. In lcp 0.4.0's registry this pairing has status and no recover: with no claim, no read of the transaction can check the hash. fixed.reader is that file's EV6 reader (network, finalized and safe marks) with one receipt, keyed by the reported transaction: the one lcp 0.4.0's test/x402-evm-breadth.test.ts reads for EV6, status 1 at EV6's expected block 100, holding EV6's authorizedAndTransfer logs (the escrow's PaymentAuthorized, then the token's Transfer). The receipt is at the reader's finalized mark, and the read checks no hash: nothing is recorded, and the report is answered 202 with the record issued, settlement null and proves (claimed false, no pattern, nothing settled it), so the record is unpaid."
+  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. The option is lcp 0.4.0's vectors/x402-auth-capture-eip155-eip3009.json fixed.option. In lcp 0.4.0's registry this pairing has status and no recover: with no claim, no read of the transaction can check the hash. fixed.reader is that file's EV6 reader (network, finalized and safe marks) with one receipt, keyed by the reported transaction: status 1 at EV6's expected block 100, holding EV6's authorizedAndTransfer logs (the escrow's PaymentAuthorized, then the token's Transfer), with the PaymentAuthorized log's second topic this ATR's payment hash, authCaptureEip3009.reference(payment).bindingLog.value for the payment authCaptureEip3009.build gives for this ATR's hash from that file's fixed payer, now and option, as lcp 0.4.0's test/x402-evm-breadth.test.ts builds EV6's. The receipt holds this ATR's payment at the reader's finalized mark, and with no claim the read checks no hash: nothing is recorded, and the report is answered 202 with the record issued, settlement null and proves (claimed false, no pattern, nothing settled it), so the record is unpaid."
 }
