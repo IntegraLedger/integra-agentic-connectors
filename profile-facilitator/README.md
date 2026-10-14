@@ -268,8 +268,9 @@ The answer is `{isValid: true, payer}`, with `payer` the owner in base58check.
 5. Broadcasts the signed bytes with `/wallet/broadcasthex`. A `DUP_TRANSACTION_ERROR` says the node already holds the
    transaction: the payment is consumed, answered `invalid_transaction_state` with the id. Any other refusal, or a
    request that cannot have reached the node, is answered `unexpected_settle_error` with an empty `transaction`:
-   nothing was broadcast. Either answer is stored final and every repeat gets it. The claim is never removed, so the
-   payment is broadcast at most once.
+   nothing was broadcast. So is a broadcast the wait leaves no time for, as after a claim that answers late: it is not
+   sent. Either answer is stored final and every repeat gets it. The claim is never removed, so the payment is
+   broadcast at most once.
 6. Reads the transaction's status every second with `@integraledger/lcp`'s `tronStatus`, by transaction id: through the
    Solidity node's `/walletsolidity` API for solidified data first, then the FullNode's `/wallet` API at the head.
    Success requires receipt result `SUCCESS` **and** a `Transfer` log emitted by `asset`. A success read at the head,
@@ -322,8 +323,9 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
    (1013 already imported, 1012 temporarily banned, or 1010 with an outdated nonce) is a consumed payment, answered
    `invalid_transaction_state` with the extrinsic's hash, and no block is scanned for it. Any other refusal, or a
    request that cannot have reached the node, is answered `unexpected_settle_error` with an empty `transaction`:
-   nothing was submitted. Either answer is stored final and every repeat gets it. The claim is never removed, so the
-   extrinsic is submitted at most once.
+   nothing was submitted. So is a submission the wait leaves no time for, as after a claim that answers late: it is not
+   sent. Either answer is stored final and every repeat gets it. The claim is never removed, so the extrinsic is
+   submitted at most once.
 5. Scans every second, up to the last block that can include the extrinsic: the era's last block, and no later than
    `System.BlockHashCount` + 1 blocks after the era's birth. Each block's execution keeps only the hashes of the
    `BlockHashCount` + 1 blocks before it, and the chain refuses an extrinsic whose birth block's hash is gone. The scan
@@ -404,7 +406,7 @@ controls, to the resource servers that use it.
 | `unsupported_permission` | yes | yes | Tron: the transaction carries more than one signature, or the owner's permission does not accept its one signature (the key's weight is below the threshold). |
 | `invalid_transaction` | yes | yes | The node refuses the transaction in simulation or validation. On Tron this includes a reference block (TaPoS) that does not match the node's. |
 | `unexpected_verify_error` | yes | no | The node or the store could not be read. |
-| `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission, or the settle's `settleWaitMs` passed before a node read or its claim. |
+| `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission, or the settle's `settleWaitMs` passed before a node read or its claim, or its wait for the chain ended before its submission. |
 | `settlement_pending` | no | yes | Submitted, or possibly submitted (the store could not be read), and not yet final or not yet stored when the wait ended. |
 | `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. On Polkadot, also a repeat of a payment whose success has been answered, or a submission the node refuses as one it has already seen (already imported, temporarily banned, or an outdated nonce). |
 
@@ -491,10 +493,11 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   `node-call-failed` for a node answer the facilitator cannot read, its cause a `malformed` error naming the part, and
   for a Tron broadcast the node does not accept, its cause the node's `code` and `message`; and
   `settle-deadline-passed` for a settle whose deadline passed before its node reads, one of their node calls, or its
-  claim, with `before`, the step it did not start (`node reads` or `claim`, and on Polkadot, once the extrinsic is
-  decoded, `finalized head` or `validation`) or the call it did not send, named as `node-call-failed` names it, and
-  `settleWaitMs`. A read made while following the chain (a Tron status read, a Polkadot head or block read) that the
-  wait for the chain leaves no time for is not sent and writes no entry: the answer is the one the wait's end gives.
+  claim, or whose wait for the chain ended before its submission, with `before`, the step it did not start
+  (`node reads` or `claim`, and on Polkadot, once the extrinsic is decoded, `finalized head` or `validation`) or the
+  call it did not send, named as `node-call-failed` names it, and `settleWaitMs`. A read made while following the
+  chain (a Tron status read, a Polkadot head or block read) that the wait for the chain leaves no time for is not
+  sent and writes no entry: the answer is the one the wait's end gives.
   A request refused for its own bytes (a body that is not JSON, a signature
   that recovers no key, an extrinsic that does not decode) is answered to its client and not logged, and a client that
   leaves before its request body is complete writes no entry: the connection is destroyed.

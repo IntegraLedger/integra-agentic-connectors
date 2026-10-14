@@ -64,8 +64,9 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
    (1013 already imported, 1012 temporarily banned, or 1010 with an outdated nonce) is a consumed payment, answered
    `invalid_transaction_state` with the extrinsic's hash, and no block is scanned for it. Any other refusal, or a
    request that cannot have reached the node, is answered `unexpected_settle_error` with an empty `transaction`:
-   nothing was submitted. Either answer is stored final and every repeat gets it. The claim is never removed, so the
-   extrinsic is submitted at most once.
+   nothing was submitted. So is a submission the wait leaves no time for, as after a claim that answers late: it is not
+   sent. Either answer is stored final and every repeat gets it. The claim is never removed, so the extrinsic is
+   submitted at most once.
 5. Scans every second, up to the last block that can include the extrinsic: the era's last block, and no later than
    `System.BlockHashCount` + 1 blocks after the era's birth. Each block's execution keeps only the hashes of the
    `BlockHashCount` + 1 blocks before it, and the chain refuses an extrinsic whose birth block's hash is gone. The scan

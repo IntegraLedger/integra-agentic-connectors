@@ -79,8 +79,9 @@ The answer is `{isValid: true, payer}`, with `payer` the owner in base58check.
 5. Broadcasts the signed bytes with `/wallet/broadcasthex`. A `DUP_TRANSACTION_ERROR` says the node already holds the
    transaction: the payment is consumed, answered `invalid_transaction_state` with the id. Any other refusal, or a
    request that cannot have reached the node, is answered `unexpected_settle_error` with an empty `transaction`:
-   nothing was broadcast. Either answer is stored final and every repeat gets it. The claim is never removed, so the
-   payment is broadcast at most once.
+   nothing was broadcast. So is a broadcast the wait leaves no time for, as after a claim that answers late: it is not
+   sent. Either answer is stored final and every repeat gets it. The claim is never removed, so the payment is
+   broadcast at most once.
 6. Reads the transaction's status every second with `@integraledger/lcp`'s `tronStatus`, by transaction id: through the
    Solidity node's `/walletsolidity` API for solidified data first, then the FullNode's `/wallet` API at the head.
    Success requires receipt result `SUCCESS` **and** a `Transfer` log emitted by `asset`. A success read at the head,

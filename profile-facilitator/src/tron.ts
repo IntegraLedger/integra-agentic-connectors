@@ -472,7 +472,8 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
   /**
    * Broadcasts, then reads the transaction's status until `deadline`. A `DUP_TRANSACTION_ERROR` says the node already
    * holds the transaction id, so the payment is consumed. Any other refusal, or a request that cannot have reached the
-   * node, gives `unexpected_settle_error` with no transaction: nothing was broadcast.
+   * node, gives `unexpected_settle_error` with no transaction: nothing was broadcast. So does a broadcast `deadline`
+   * leaves no time for, as after a claim that answers late: it is not sent, and its entry is `settle-deadline-passed`.
    */
   async function submit(c: Checked, deadline: number): Promise<SettleAnswer> {
     const node = byNetwork.get(c.network)!;
@@ -480,6 +481,7 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     try {
       sent = await postJson(`${node.fullNode}/wallet/broadcasthex`, { transaction: c.hex }, deadline - performance.now());
     } catch (e) {
+      if (isSpent(e)) return unexpectedSettle(log, deadlinePassed(c, "/wallet/broadcasthex"));
       const entry = { event: "node-call-failed", ...about(c), call: "/wallet/broadcasthex" };
       if (e instanceof NodeError && !e.sent) return unexpectedSettle(log, entry, e);
       log(entry, e);

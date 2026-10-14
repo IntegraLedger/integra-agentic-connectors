@@ -652,13 +652,15 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
    * Submits, then scans for the extrinsic until `deadline`. A refusal that says the node has already seen the extrinsic
    * or its nonce is a consumed payment: `invalid_transaction_state` with the extrinsic's hash, and no scan. Any other
    * refusal, or a request that cannot have reached the node, gives `unexpected_settle_error` with no transaction:
-   * nothing was submitted.
+   * nothing was submitted. So does a submission `deadline` leaves no time for, as after a claim that answers late: it
+   * is not sent, and its entry is `settle-deadline-passed`.
    */
   async function submit(c: Checked, since: number, deadline: number): Promise<SettleAnswer> {
     const url = byNetwork.get(c.network)!.rpc;
     try {
       await rpc(url, "author_submitExtrinsic", [c.hex], deadline - performance.now());
     } catch (e) {
+      if (isSpent(e)) return unexpectedSettle(log, deadlinePassed(c, "author_submitExtrinsic"));
       const entry = { event: "node-call-failed", ...about(c), call: "author_submitExtrinsic" };
       const notSubmitted = e instanceof RpcError ? !seenBefore(e) : e instanceof NodeError && !e.sent;
       if (notSubmitted) return unexpectedSettle(log, entry, e);

@@ -1385,6 +1385,34 @@ describe("the operator log", () => {
     expect((await db.pool.query("SELECT answer FROM settlement")).rows).toEqual([{ answer: PENDING }]);
   });
 
+  it("a settle whose claim answers once the wait for the chain has ended broadcasts nothing, reaches the log once, as settle-deadline-passed naming the broadcast, and stores unexpected_settle_error, which a repeat gets", async () => {
+    // The claim's answer arrives within its bound, and the facilitator goes on with it once the clock is at the wait's
+    // end, 750 ms of settleWaitMs 1,000: the broadcast is asked for and not sent. The id is left as a broadcast that
+    // cannot have reached the node leaves it: claimed, with unexpected_settle_error and no transaction stored final.
+    await start({}, 1_000);
+    const claim = resumeLate((call) => call === "store.claim");
+    const answer = post(`${base}/settle`, body(TX_V2));
+    await reaches(answer, claim.arrived);
+    const wanted = asked.length;
+    await clock.advanceTo(750);
+    claim.resume();
+    expect((await answer).json).toEqual(REFUSED);
+    expect(entries.map((e) => e.entry)).toEqual([
+      { event: "settle-deadline-passed", ...ABOUT, before: "/wallet/broadcasthex", settleWaitMs: 1_000 },
+    ]);
+    expect(entries[0]!.cause).toBeUndefined();
+    expect(pathsOf(wanted)).toEqual(["/wallet/broadcasthex"]);
+    expect(calls("/wallet/broadcasthex")).toHaveLength(0);
+    expect((await db.pool.query("SELECT answer FROM settlement")).rows).toEqual([{ answer: REFUSED }]);
+    // A repeat of the payment takes the path of any stored unexpected_settle_error: it gets the stored answer, and
+    // asks the node nothing and writes no entry.
+    const repeat = asked.length;
+    expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(REFUSED);
+    expect(asked.slice(repeat)).toEqual([]);
+    expect(entries).toHaveLength(1);
+    expect(calls("/wallet/broadcasthex")).toHaveLength(0);
+  });
+
   it("a broadcast the node does not accept reaches the log as the call that failed, its cause the node's code and message, and the answer is unchanged", async () => {
     // Tron mainnet's live answer to a broadcast of V2 past its expiration (fixtures/tron-mainnet-answers.json).
     await start({ broadcast: live["broadcastExpired"] });

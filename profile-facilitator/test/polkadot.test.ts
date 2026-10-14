@@ -1177,6 +1177,35 @@ describe("the operator log", () => {
     expect((await db.pool.query("SELECT answer FROM settlement")).rows).toEqual([{ answer: PENDING_V3 }]);
   });
 
+  it("a settle whose claim answers once the wait for the chain has ended submits nothing, reaches the log once, as settle-deadline-passed naming the submission, and stores unexpected_settle_error, which a repeat gets", async () => {
+    // The claim's answer arrives within its bound, and the facilitator goes on with it once the clock is at the wait's
+    // end, 750 ms of settleWaitMs 1,000: the submission is asked for and not sent. The hash is left as a submission
+    // that cannot have reached the node leaves it: claimed, with unexpected_settle_error and no transaction stored
+    // final.
+    await start({ finalized: () => BEST - 2 }, NETWORK, 1_000);
+    const claim = resumeLate((call) => call === "store.claim");
+    const answer = post(`${base}/settle`, body());
+    await reaches(answer, claim.arrived);
+    const wanted = asked.length;
+    await clock.advanceTo(750);
+    claim.resume();
+    expect((await answer).json).toEqual(REFUSED);
+    expect(entries.map((e) => e.entry)).toEqual([
+      { event: "settle-deadline-passed", ...ABOUT, before: "author_submitExtrinsic", settleWaitMs: 1_000 },
+    ]);
+    expect(entries[0]!.cause).toBeUndefined();
+    expect(methodsOf(wanted)).toEqual(["author_submitExtrinsic"]);
+    expect(calls("author_submitExtrinsic")).toHaveLength(0);
+    expect((await db.pool.query("SELECT answer FROM settlement")).rows).toEqual([{ answer: REFUSED }]);
+    // A repeat of the payment takes the path of any stored unexpected_settle_error: it gets the stored answer, and
+    // asks the node nothing and writes no entry.
+    const repeat = asked.length;
+    expect((await post(`${base}/settle`, body())).json).toEqual(REFUSED);
+    expect(asked.slice(repeat)).toEqual([]);
+    expect(entries).toHaveLength(1);
+    expect(calls("author_submitExtrinsic")).toHaveLength(0);
+  });
+
   // A /verify's steps each have a bound of their own: 30 s for the decode, 15 s for the validation. A call one of them
   // leaves no time for is not sent, and the answer is the step's failed call: node-call-failed, its cause a spent
   // NodeError.

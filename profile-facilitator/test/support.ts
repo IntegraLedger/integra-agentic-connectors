@@ -115,18 +115,21 @@ export function lateResume<
   };
 }
 
-/** The store reads the facilitator has asked for, by their promise, with the body `resumeLate` matches. */
-const storeReads = new WeakMap<Promise<unknown>, { network: string; id: string }>();
+/** The store reads and claims the facilitator has asked for, by their promise, with what `resumeLate` matches. */
+const storeCalls = new WeakMap<Promise<unknown>, { call: string; body: { network: string; id: string } }>();
 
 /**
- * The facilitator's `store.js` with its store's reads able to go on late, for `vi.mock`, as `lateResume` holds a node
- * call: a read's answer arrives within the bound the facilitator sets on it (`inTime`), and the facilitator goes on
- * with it only when the test opens it. `resumeLate` names a read as the call `store.read`, with `{ network, id }` as
- * its body. Every call is the store's own.
+ * The facilitator's `store.js` with its store's reads and claims able to go on late, for `vi.mock`, as `lateResume`
+ * holds a node call: the answer arrives within the bound the facilitator sets on it (`inTime`), and the facilitator
+ * goes on with it only when the test opens it. `resumeLate` names a read as the call `store.read`, and a claim as
+ * `store.claim`, each with `{ network, id }` as its body. Every call is the store's own.
  */
 export function lateStore<
   T extends {
-    openStore(...args: never[]): Promise<{ read(network: string, id: string): Promise<unknown> }>;
+    openStore(...args: never[]): Promise<{
+      read(network: string, id: string): Promise<unknown>;
+      claim(network: string, id: string, until: Date, since?: number): Promise<boolean>;
+    }>;
     inTime<A>(p: Promise<A>, deadline: number): Promise<A>;
   },
 >(store: T): T {
@@ -138,15 +141,20 @@ export function lateStore<
         ...opened,
         read(network: string, id: string) {
           const read = opened.read(network, id);
-          storeReads.set(read, { network, id });
+          storeCalls.set(read, { call: "store.read", body: { network, id } });
           return read;
+        },
+        claim(network: string, id: string, until: Date, since?: number) {
+          const claim = opened.claim(network, id, until, since);
+          storeCalls.set(claim, { call: "store.claim", body: { network, id } });
+          return claim;
         },
       };
     },
     inTime<A>(p: Promise<A>, deadline: number) {
-      const read = storeReads.get(p);
+      const made = storeCalls.get(p);
       const bounded = store.inTime(p, deadline);
-      return read === undefined ? bounded : goOn("store.read", read, () => bounded);
+      return made === undefined ? bounded : goOn(made.call, made.body, () => bounded);
     },
   };
 }
