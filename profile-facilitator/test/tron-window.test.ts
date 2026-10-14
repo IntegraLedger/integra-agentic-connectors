@@ -77,6 +77,12 @@ let landed = true;
 let solidTime = NOW_V2;
 /** The FullNode's latest block's time, in milliseconds, or null for a `/wallet/getnowblock` answer that names none. */
 let headTime: number | null = V2_HEAD_TIME;
+/**
+ * The Solidity node's latest block's time for the read made before its receipt lookup, when it differs from the
+ * solidified block a status read reads first; the two reads alternate, the solidified block's first.
+ */
+let solidLookupTime: number | undefined;
+let solidReads = 0;
 let broadcast: unknown = { result: true, txid: TXID_V2 };
 
 async function start(settleWaitMs: number): Promise<void> {
@@ -89,7 +95,8 @@ async function start(settleWaitMs: number): Promise<void> {
       return { ...v1, id: TXID_V2, blockNumber: 86542790, receipt: { ...(v1["receipt"] as object), result: "SUCCESS" } };
     }
     if (path === "/walletsolidity/getnowblock") {
-      return { blockID: "00", block_header: { raw_data: { number: 86542800, timestamp: solidTime } } };
+      const time = solidReads++ % 2 === 1 && solidLookupTime !== undefined ? solidLookupTime : solidTime;
+      return { blockID: "00", block_header: { raw_data: { number: 86542800, timestamp: time } } };
     }
     if (path === "/wallet/getnowblock") {
       const time = headTime === null ? {} : { timestamp: headTime };
@@ -119,6 +126,8 @@ beforeEach(async () => {
   landed = true;
   solidTime = NOW_V2;
   headTime = V2_HEAD_TIME;
+  solidLookupTime = undefined;
+  solidReads = 0;
   broadcast = { result: true, txid: TXID_V2 };
   db = await freshDatabase();
 });
@@ -227,6 +236,23 @@ describe("the end of a Tron transaction's validity window", () => {
     solidTime = EXPIRATION_V2 + 6_000;
     headTime = solidTime - 3_000;
     expect(await settle()).toEqual(PENDING);
+    expect(broadcasts()).toBe(1);
+  });
+
+  it("with nothing included and the solidified block two slots past the expiration, stays settlement_pending while the Solidity node's latest block, read before its receipt lookup, is older than it", async () => {
+    // The status rule: a lookup whose node lags the solidified block read first is pending not-found, the Solidity
+    // node's own lookup included.
+    landed = false;
+    await start(1_000);
+    expect(await settle()).toEqual(PENDING);
+    vi.setSystemTime(EXPIRATION_V2 + 10_000);
+    solidTime = EXPIRATION_V2 + 6_000;
+    solidLookupTime = solidTime - 3_000;
+    solidReads = 0;
+    const from = node.calls.length;
+    expect(await settle()).toEqual(PENDING);
+    const lookups = node.calls.slice(from).map((c) => c.path).filter((p) => p.endsWith("/gettransactioninfobyid"));
+    expect(lookups.slice(0, 2)).toEqual(["/walletsolidity/gettransactioninfobyid", "/wallet/gettransactioninfobyid"]);
     expect(broadcasts()).toBe(1);
   });
 
