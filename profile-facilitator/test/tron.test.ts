@@ -8,10 +8,12 @@
 // moves the clock to its end, never because the machine is slow.
 import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { createHash } from "node:crypto";
+import { connect } from "node:net";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { isRefusal } from "@integraledger/lcp";
 import { decodeTronTx, encodeTronRaw } from "@integraledger/lcp/tron";
 import { guarded, operatorLine } from "../src/answers.js";
+import { NodeError } from "../src/http.js";
 import { serveProfileFacilitator } from "../src/index.js";
 import {
   claimAttempts,
@@ -22,6 +24,7 @@ import {
   freshDatabase,
   HANG,
   post,
+  RawBody,
   reaches,
   stub,
   tronChainReads,
@@ -1007,5 +1010,67 @@ describe("the operator log", () => {
       { event: "answer-not-stored", ...ABOUT, cause: { message: "store down" } },
       { event: "operator-log-failed", ...ABOUT, cause: { message: "sink down" } },
     ]);
+  });
+
+  it("a node answer that is not JSON reaches the log as the node error, whose cause is the parse error, and the answer is unchanged", async () => {
+    // A proxy in front of the FullNode answers the account read with a page of text.
+    await start({ account: new RawBody("<html><body>502 Bad Gateway</body></html>") });
+    expect((await post(`${base}/verify`, body(TX_V2))).json).toEqual({
+      isValid: false,
+      invalidReason: "unexpected_verify_error",
+      payer: PAYER,
+    });
+    expect(logged("node-call-failed").map((e) => e.entry)).toEqual([
+      { event: "node-call-failed", ...ABOUT, call: "/wallet/getaccount" },
+    ]);
+    const cause = logged("node-call-failed")[0]!.cause;
+    expect(cause).toBeInstanceOf(NodeError);
+    expect((cause as NodeError).code).toBe("malformed");
+    expect((cause as NodeError).cause).toBeInstanceOf(SyntaxError);
+  });
+
+  it("a request whose client leaves before its body ends reaches the log with its path, and the next request is answered", async () => {
+    await start();
+    const client = connect(Number(new URL(base).port), "127.0.0.1");
+    // The facilitator ends the connection once the request cannot complete; that is not this test's subject.
+    client.on("error", () => {});
+    // The request declares 100 bytes of body; the client sends 10 of them, then ends its side of the connection.
+    client.end("POST /settle HTTP/1.1\r\nhost: 127.0.0.1\r\ncontent-length: 100\r\n\r\n{\"x402Vers");
+    await until(() => logged("request-error").length > 0);
+    client.destroy();
+    expect(logged("request-error").map((e) => e.entry)).toEqual([{ event: "request-error", path: "/settle" }]);
+    expect((logged("request-error")[0]!.cause as NodeJS.ErrnoException).code).toBe("ECONNRESET");
+    expect((await fetch(`${base}/supported`)).status).toBe(200);
+  });
+
+  it("a sweep that fails reaches the log, and the sweep a minute later drops the rows it is due to drop", async () => {
+    await start();
+    await db.pool.query("ALTER TABLE settlement RENAME TO settlement_elsewhere");
+    await clock.advance(60_000);
+    await until(() => logged("store-call-failed").length > 0);
+    expect(logged("store-call-failed").map((e) => e.entry)).toEqual([{ event: "store-call-failed", call: "sweep" }]);
+    expect((logged("store-call-failed")[0]!.cause as Error).message).toContain("settlement");
+    await db.pool.query("ALTER TABLE settlement_elsewhere RENAME TO settlement");
+    await db.pool.query("INSERT INTO settlement (network, id, answer, until) VALUES ($1, $2, $3, now() - interval '25 hours')", [
+      NETWORK,
+      TXID_V2,
+      JSON.stringify(STATE_FAILED),
+    ]);
+    await clock.advance(60_000);
+    await until(async () => (await db.pool.query("SELECT id FROM settlement")).rowCount === 0);
+    expect(logged("store-call-failed")).toHaveLength(1);
+  });
+
+  it("a store connection the server ends while it is idle reaches the log, and the next settle is answered as before", async () => {
+    await start();
+    // Ends every other connection to the test's database: the facilitator's, idle since it created the table.
+    await db.pool.query(
+      "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = current_database() AND pid <> pg_backend_pid()",
+    );
+    await until(() => logged("store-connection-error").length > 0);
+    expect(logged("store-connection-error")[0]!.entry).toEqual({ event: "store-connection-error" });
+    // Postgres's admin_shutdown: the server ended the connection.
+    expect((logged("store-connection-error")[0]!.cause as { code?: string }).code).toBe("57P01");
+    expect(await settle()).toEqual(SUCCESS);
   });
 });

@@ -249,7 +249,8 @@ export interface Stub {
 }
 
 /**
- * A local node: each POST's JSON body goes to `answer`, whose value is sent back as JSON; `hang` never answers.
+ * A local node: each POST's JSON body goes to `answer`, whose value is sent back as JSON, or as its bytes for a
+ * `RawBody`; `HANG` never answers.
  *
  * With `leaves`, the node stops listening once `leaves` is true of the calls it has received, so a later request is
  * refused at connect and carries no byte to it, while each call it has received is answered. Each answer closes its
@@ -279,9 +280,10 @@ export async function stub(
       open.add(res);
       return;
     }
-    const out = JSON.stringify(value);
+    const raw = value instanceof RawBody;
+    const out = raw ? value.text : JSON.stringify(value);
     const closing = leaves === undefined ? {} : { connection: "close" };
-    res.writeHead(200, { "content-type": "application/json", ...closing });
+    res.writeHead(200, { "content-type": raw ? "text/html" : "application/json", ...closing });
     res.end(out);
   });
   const chosen = leaves === undefined ? 0 : await freePort();
@@ -302,6 +304,11 @@ export async function stub(
 }
 
 export const HANG = Symbol("hang");
+
+/** A stub answer sent as these bytes, as they are, and not as JSON: a node whose answer is a page of text. */
+export class RawBody {
+  constructor(readonly text: string) {}
+}
 
 export async function post(url: string, body: unknown): Promise<{ status: number; json: unknown }> {
   const res = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
