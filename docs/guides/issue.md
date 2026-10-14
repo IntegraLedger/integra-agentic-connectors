@@ -13,7 +13,7 @@ seller's storage, hashes them, and answers with the values to place in the payme
 | Field | Required | What to send |
 |---|---|---|
 | `mintRequestId` | yes | One state of one checkout: `<checkout id>:<version>`, matching `^[A-Za-z0-9._:-]{1,128}$`. |
-| `resource` | yes | The resource id declared for the tenant, 1 to 512 characters. |
+| `resource` | yes | The resource id declared for the tenant, 1 to 512 UTF-8 bytes. |
 | `lifetimeSeconds` | yes | The challenge's lifetime, 1 to 604 800. On x402, the largest `maxTimeoutSeconds` of the offers. |
 | `offers` | yes | 1 to 16 `{pairing, option}`, each option exactly as the challenge will carry it, all of one protocol. |
 | `content` | no | 0 to 56 `{slot, bytes}`: the parties' content, each slot one JSON value as padded base64 of its exact bytes. |

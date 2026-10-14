@@ -1207,7 +1207,8 @@
           "resource": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 512
+            "maxLength": 512,
+            "description": "The resource id declared for the tenant: 1 to 512 UTF-8 bytes."
           },
           "lifetimeSeconds": {
             "type": "integer",
@@ -1472,7 +1473,8 @@
           "resource": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 512
+            "maxLength": 512,
+            "description": "The resource id declared for the tenant: 1 to 512 UTF-8 bytes."
           },
           "pairing": {
             "$ref": "#/components/schemas/PairingId"

@@ -172,7 +172,7 @@ An object. A member not listed here is refused.
 | Field | Type | Required | Constraints | Description |
 |---|---|---|---|---|
 | `mintRequestId` | `string` | yes | pattern `^[A-Za-z0-9._:-]{1,128}$` |  |
-| `resource` | `string` | yes | 1 to 512 characters |  |
+| `resource` | `string` | yes | 1 to 512 characters | The resource id declared for the tenant: 1 to 512 UTF-8 bytes. |
 | `lifetimeSeconds` | `integer` | yes | 1 to 604800 |  |
 | `offers` | array of [Offer](#offer) | yes | 1 to 16 items |  |
 | `content` | array of [ContentSlot](#contentslot) | no | at most 56 items |  |
@@ -244,7 +244,7 @@ An object. A member not listed here is refused.
 
 | Field | Type | Required | Constraints | Description |
 |---|---|---|---|---|
-| `resource` | `string` | yes | 1 to 512 characters |  |
+| `resource` | `string` | yes | 1 to 512 characters | The resource id declared for the tenant: 1 to 512 UTF-8 bytes. |
 | `pairing` | [PairingId](#pairingid) | yes |  |  |
 | `payment` | any JSON value | yes |  | What the buyer presented, exactly as received. |
 | `chosen` | any JSON value | yes |  | The option the payment names, as issued. |
