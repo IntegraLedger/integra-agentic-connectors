@@ -11,8 +11,10 @@ every door implementation speaks: describe it in the issue first.
 
 ## Build and test
 
-You need Node.js `>=26.10.0`, pnpm (the version in `package.json`'s `packageManager`), and Postgres for the
-facilitator's tests.
+You need Node.js `26.11.1` (see `.node-version`), pnpm (the version in `package.json`'s `packageManager`), and
+Postgres for the facilitator's tests. CI and the publish workflow take Node.js as `node-v26.11.1-linux-x64.tar.xz` from
+`nodejs.org/dist`, checked against the SHA-256 the workflow holds, and pnpm as two tarballs checked against their
+SHA-512.
 
 ```sh
 pnpm install --frozen-lockfile
