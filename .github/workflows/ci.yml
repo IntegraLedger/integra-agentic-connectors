@@ -59,14 +59,16 @@ jobs:
           mkdir "$RUNNER_TEMP/node"
           tar -xJf "$RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" -C "$RUNNER_TEMP/node" --strip-components=1
           echo "$RUNNER_TEMP/node/bin" >> "$GITHUB_PATH"
-      - name: One-way imports (the @integraledger packages here depend on and import only @integraledger/lcp)
+      - name: One-way imports (the @integraledger packages here depend on and import only @integraledger/lcp), and each workspace package's scripts
         run: |
           node - <<'EOF'
           const fs = require("node:fs");
           const path = require("node:path");
           const allowed = () => ["@integraledger/lcp"];
-          const code = /\.(?:[cm]?[jt]s|tsx)$/;
-          const specifier = /(?:\bfrom|\bimport|\brequire\s*\()\s*\(?\s*["'](@integraledger\/[^"'/]+)/g;
+          const code = /\.(?:[cm]?[jt]sx?)$/;
+          const specifier = /(?:\bfrom|\bimport|\brequire\s*\()\s*\(?\s*["'`](@integraledger\/[^"'`/]+)/g;
+          // The folders pnpm-workspace.yaml leaves out of the workspace (`- "!<folder>"`): they run no workspace script.
+          const outside = new Set([...fs.readFileSync("pnpm-workspace.yaml", "utf8").matchAll(/^\s*-\s*"!([^"]+)"/gm)].map((m) => m[1]));
           let packages = 0;
           let bad = 0;
           for (const dir of fs.readdirSync(".").sort()) {
@@ -77,8 +79,18 @@ jobs:
             const ok = new Set([pkg.name, ...allowed(pkg.name)]);
             const found = [];
             for (const field of ["dependencies", "devDependencies", "peerDependencies", "optionalDependencies"]) {
-              for (const name of Object.keys(pkg[field] ?? {})) {
-                if (name.startsWith("@integraledger/")) found.push([name, `${manifest} ${field}`]);
+              for (const [name, spec] of Object.entries(pkg[field] ?? {})) {
+                // An npm alias installs its target under another name: the target is the dependency.
+                const target = /^npm:(@integraledger\/[^@]+)/.exec(String(spec))?.[1];
+                for (const n of [name, target]) if (n?.startsWith("@integraledger/")) found.push([n, `${manifest} ${field}`]);
+              }
+            }
+            if (!outside.has(dir)) {
+              for (const script of ["build", "typecheck", "test"]) {
+                if (typeof pkg.scripts?.[script] !== "string") {
+                  console.log(`${manifest}: no ${script} script, so pnpm -r --if-present run ${script} skips it`);
+                  bad++;
+                }
               }
             }
             const walk = (d) => {
@@ -104,26 +116,56 @@ jobs:
             process.exit(1);
           }
           if (bad > 0) process.exit(1);
-          console.log(`${packages} package(s): no @integraledger dependency or import outside the allowed set`);
+          console.log(`${packages} package(s): no @integraledger dependency or import outside the allowed set; each workspace package has a build, typecheck and test script`);
           EOF
-      - name: The Node.js every job fetches is the one .node-version names, against one SHA-256
+      - name: Every job that runs Node.js fetches the one .node-version names, and checks it against one SHA-256
         run: |
           set -eu
           v="$(cat .node-version)"
           test "$(node --version)" = "v$v"
-          fetched=$(grep -ho 'https://nodejs\.org/dist/v[0-9][^ ]*' .github/workflows/*.yml)
-          checked=$(grep -hoE '[0-9a-f]{64}  \$RUNNER_TEMP/node-' .github/workflows/*.yml)
-          test "$(printf '%s\n' "$fetched" | sort -u)" = "https://nodejs.org/dist/v$v/node-v$v-linux-x64.tar.xz"
-          test "$(printf '%s\n' "$checked" | sort -u | wc -l)" -eq 1
-          test "$(printf '%s\n' "$fetched" | wc -l)" -eq "$(printf '%s\n' "$checked" | wc -l)"
-          echo "node $(node --version), as .node-version names and every workflow fetches it, with npm $(npm --version)"
-      - name: The install policy
+          tarball="node-v$v-linux-x64.tar.xz"
+          url="https://nodejs.org/dist/v$v/$tarball"
+          test -z "$(grep -ho 'https://nodejs\.org/dist/v[0-9][^ ]*' .github/workflows/*.yml | grep -vxF "$url" || true)"
+          digest=$(sed -nE "s/^ +echo \"([0-9a-f]{64})  \\\$RUNNER_TEMP\/$tarball\" \| sha256sum -c -\$/\1/p" .github/workflows/*.yml | sort -u)
+          test "$(printf '%s\n' "$digest" | grep -c .)" -eq 1
+          fetch="curl -fsSL -o \"\$RUNNER_TEMP/$tarball\" $url"
+          check="echo \"$digest  \$RUNNER_TEMP/$tarball\" | sha256sum -c -"
+          for f in .github/workflows/*.yml; do
+            # Each job whose lines run node, npm, npx or pnpm holds the fetch line and the check line once each.
+            awk -v fetch="$fetch" -v check="$check" -v file="$f" '
+              function report() {
+                if (job != "" && runs > 0 && (fetched != 1 || checked != 1)) {
+                  printf "%s: job %s runs Node.js and holds the fetch line %d times and the check line %d times:\n  %s\n  %s\n", file, job, fetched, checked, fetch, check
+                  bad = 1
+                }
+              }
+              /^jobs:$/ { injobs = 1; next }
+              injobs && /^  [A-Za-z0-9_-]+:$/ { report(); job = $1; runs = 0; fetched = 0; checked = 0; next }
+              { line = $0; sub(/^ +/, "", line) }
+              line == fetch { fetched++; next }
+              line == check { checked++; next }
+              /(^|[ ;&|(])(node|npm|npx|pnpm)( |$)/ { runs++ }
+              END { report(); exit bad }
+            ' "$f"
+          done
+          echo "node $(node --version), npm $(npm --version): every job that runs Node.js fetches $url and checks it against $digest"
+      - name: The install policy, in the workspace and the site
         run: |
           set -eu
-          grep -qx 'minimumReleaseAge: 1440' pnpm-workspace.yaml
-          grep -qx 'trustPolicy: no-downgrade' pnpm-workspace.yaml
-          grep -qx 'strictDepBuilds: true' pnpm-workspace.yaml
-          echo "pnpm-workspace.yaml sets minimumReleaseAge 1440, trustPolicy no-downgrade and strictDepBuilds"
+          for f in pnpm-workspace.yaml website/pnpm-workspace.yaml; do
+            grep -qx 'minimumReleaseAge: 1440' "$f"
+            grep -qx 'trustPolicy: no-downgrade' "$f"
+            grep -qx 'strictDepBuilds: true' "$f"
+            # Every line that starts a setting is one of these seven, so no other setting is read, in any spelling.
+            top=$(grep -vE '^( |#|$)' "$f" | grep -vxE 'packages:|minimumReleaseAge: 1440|trustPolicy: no-downgrade|strictDepBuilds: true|allowBuilds:|minimumReleaseAgeExclude:|overrides:' || true)
+            # Under allowBuilds every entry is a denial; under minimumReleaseAgeExclude the one entry is @integraledger/*.
+            entries=$(awk '/^[^ #]/ { key = $0; next } /^ *(#|$)/ { next } (key == "allowBuilds:" && !/^  [^ ]+: false$/) || (key == "minimumReleaseAgeExclude:" && $0 != "  - \"@integraledger/*\"")' "$f")
+            if [ -n "$top$entries" ]; then
+              printf '%s weakens the install policy:\n%s\n' "$f" "$(printf '%s\n' "$top" "$entries" | grep .)"
+              exit 1
+            fi
+          done
+          echo "pnpm-workspace.yaml and website/pnpm-workspace.yaml set minimumReleaseAge 1440 (excluding only @integraledger/*), trustPolicy no-downgrade and strictDepBuilds, and allow no dependency build"
       - name: Fetch pnpm
         run: |
           set -eu
