@@ -439,7 +439,8 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
   /**
    * Reads the transaction's status every second until `deadline`, and the stored answer too when `stored` is set,
    * answering with the first final answer either gives. A stored success is another settle's, so it gives the consumed
-   * answer. Broadcasts nothing.
+   * answer. Once `deadline` has passed, no status is read: the answer is the one the wait's end gives. Broadcasts
+   * nothing.
    */
   async function watch(c: Checked, deadline: number, stored: boolean): Promise<SettleAnswer> {
     for (;;) {
@@ -447,6 +448,7 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
         const row = await readStored(c, deadline);
         if (row?.state === "answered" && !isPending(row.answer)) return row.answer.success ? consumed(c) : row.answer;
       }
+      if (deadline - performance.now() <= 0) return pending(c.txid, c.network);
       const final = await outcome(c, deadline);
       if (final !== undefined) return final;
       if (performance.now() + POLL_MS > deadline) return pending(c.txid, c.network);

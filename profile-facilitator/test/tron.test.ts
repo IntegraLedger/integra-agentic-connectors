@@ -1279,6 +1279,36 @@ describe("the operator log", () => {
     expect(node.calls).toEqual([]);
   });
 
+  // A stored settlement_pending, or a claimed id, is read again from the chain until the wait for the chain ends, a
+  // quarter of settleWaitMs (1,000 ms) before the deadline: at 750 ms. Each row holds the settle's store read until the
+  // clock is there, so the wait has ended before the first status read.
+  const FOLLOWED: { what: string; stored: string | null }[] = [
+    { what: "a stored settlement_pending", stored: JSON.stringify(PENDING) },
+    { what: "a claimed id", stored: null },
+  ];
+
+  it.each(FOLLOWED)(
+    "$what whose wait for the chain has ended once its store read has answered reads no status, writes no entry, and stores and gives settlement_pending",
+    async ({ stored }) => {
+      await start({}, 1_000);
+      await db.pool.query("INSERT INTO settlement (network, id, answer, until) VALUES ($1, $2, $3, $4)", [
+        NETWORK,
+        TXID_V2,
+        stored,
+        new Date(EXPIRATION_V2).toISOString(),
+      ]);
+      const read = resumeLate((call) => call === "store.read");
+      const answer = post(`${base}/settle`, body(TX_V2));
+      await reaches(answer, read.arrived);
+      await clock.advanceTo(750);
+      read.resume();
+      expect((await answer).json).toEqual(PENDING);
+      expect(entries).toEqual([]);
+      expect(node.calls).toEqual([]);
+      expect((await db.pool.query("SELECT answer FROM settlement")).rows).toEqual([{ answer: PENDING }]);
+    },
+  );
+
   it("a broadcast the node does not accept reaches the log as the call that failed, its cause the node's code and message, and the answer is unchanged", async () => {
     // Tron mainnet's live answer to a broadcast of V2 past its expiration (fixtures/tron-mainnet-answers.json).
     await start({ broadcast: live["broadcastExpired"] });
