@@ -1195,6 +1195,29 @@ describe("the operator log", () => {
     },
   );
 
+  // The receipt reads after the broadcast: an answer the facilitator cannot read is a failed read, and the status stays
+  // pending (lcp's tronStatus). java-tron answers an id it holds with an object naming its blockNumber and receipt.
+  const RECEIPT_CANNOT_READ: { what: string; part: string; answers: () => unknown }[] = [
+    { what: "an array", part: "gettransactioninfobyid", answers: () => [] },
+    { what: "a receipt with no result", part: "gettransactioninfobyid fields", answers: () => ({ blockNumber: 1, receipt: {} }) },
+  ];
+
+  it.each(RECEIPT_CANNOT_READ)(
+    "/walletsolidity/gettransactioninfobyid answering $what reaches the log as the call that failed, its cause naming $part, and the answer is pending with the id",
+    async ({ part, answers }) => {
+      await start({ info: answers });
+      expect(await settle()).toEqual(PENDING);
+      const call = "/walletsolidity/gettransactioninfobyid";
+      const failedReads = logged("node-call-failed").filter((e) => e.entry["call"] === call);
+      expect(failedReads.length).toBeGreaterThan(0);
+      expect(failedReads[0]!.entry).toEqual({ event: "node-call-failed", ...ABOUT, call });
+      const cause = failedReads[0]!.cause;
+      expect(cause).toBeInstanceOf(NodeError);
+      expect((cause as NodeError).code).toBe("malformed");
+      expect((cause as NodeError).message).toBe(`malformed: ${part}`);
+    },
+  );
+
   it("a settle whose deadline passes once its node reads have answered reaches the log as settle-deadline-passed with the bound, and claims and broadcasts nothing", async () => {
     // The simulation's answer arrives within its bound, and the facilitator goes on with it once the clock is at
     // settleWaitMs (1,000 ms), as after time spent elsewhere: the deadline has passed before the claim.

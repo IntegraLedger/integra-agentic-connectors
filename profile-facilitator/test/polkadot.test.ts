@@ -111,6 +111,8 @@ interface Chain {
   hold?: (method: string, params: unknown[]) => Promise<void> | void;
   /** The node's JSON-RPC error for a call it refuses; every other call is answered as above. */
   refuse?: (method: string, params: unknown[]) => { code: number; message: string } | undefined;
+  /** The node's whole answer to a call, as it is, when given for that call; every other call is answered as above. */
+  body?: (method: string, params: unknown[]) => unknown;
 }
 
 let clock: Clock & { restore(): void };
@@ -129,6 +131,8 @@ async function start(chain: Chain = {}, network: string = NETWORK, settleWaitMs 
     await chain.hold?.(method, params);
     const refused = chain.refuse?.(method, params);
     if (refused !== undefined) return { jsonrpc: "2.0", id, error: refused };
+    const whole = chain.body?.(method, params);
+    if (whole !== undefined) return whole;
     const known = init.find((c) => c.method === method && JSON.stringify(c.params) === JSON.stringify(params));
     if (known !== undefined && chain.metadata && method === "state_call" && params[0] === "Metadata_metadata_at_version") {
       return answer(chain.metadata(known.result as string));
@@ -892,6 +896,13 @@ describe("the operator log", () => {
     { call: "chain_getBlockHash", what: "a hash of 31 bytes", part: "the block hash", chain: { best: `0x${"bb".repeat(31)}` }, checked: true },
     { call: "chain_getHeader", what: "a header with no number", part: "number", chain: { header: {} }, checked: true },
     { call: "state_call", what: "a number", part: "the validity", chain: { validity: 0 }, checked: true },
+    {
+      call: "chain_getBlockHash",
+      what: "a body that is not a JSON-RPC answer",
+      part: "not a JSON-RPC answer",
+      chain: { body: (method, params) => (method === "chain_getBlockHash" && params.length === 0 ? [] : undefined) },
+      checked: true,
+    },
   ];
 
   it.each(CANNOT_READ)(
@@ -910,6 +921,33 @@ describe("the operator log", () => {
       expect((cause as NodeError).message).toBe(`malformed: ${call}: ${part}`);
     },
   );
+
+  it("state_getRuntimeVersion answering a version with no specVersion reaches the log as the metadata call that failed, its cause naming the version read, and the answer is unchanged", async () => {
+    // A runtime version names its specVersion (Substrate's RuntimeVersion); the metadata is loaded for it. The extrinsic
+    // is not yet decoded, so neither the entry nor the answer names the payer.
+    await start({ body: (method) => (method === "state_getRuntimeVersion" ? { jsonrpc: "2.0", id: 1, result: {} } : undefined) });
+    expect((await post(`${base}/verify`, body())).json).toEqual({ isValid: false, invalidReason: "unexpected_verify_error" });
+    expect(entries.map((e) => e.entry)).toEqual([{ event: "node-call-failed", network: NETWORK, transaction: HASH_V3, call: "metadata" }]);
+    const cause = entries[0]!.cause;
+    expect(cause).toBeInstanceOf(NodeError);
+    expect((cause as NodeError).code).toBe("malformed");
+    expect((cause as NodeError).message).toBe("malformed: state_getRuntimeVersion: no specVersion");
+  });
+
+  it("a block the node gives with no extrinsics, read at finality, reaches the log as block-unreadable naming the block, and the answer is pending with the hash", async () => {
+    // A block's answer holds the block and its extrinsics (Substrate's SignedBlock); this one holds a header only.
+    await start({
+      finalized: finalizedAfterSubmit,
+      body: (method, params) =>
+        method === "chain_getBlock" && params[0] === BLOCK_HASH ? { jsonrpc: "2.0", id: 1, result: { block: { header: {} } } } : undefined,
+    });
+    expect(await settle()).toEqual(PENDING_V3);
+    const unreadable = logged("block-unreadable");
+    expect(unreadable.length).toBeGreaterThan(0);
+    const reason = `malformed: block ${BEST + 1}`;
+    expect(unreadable[0]!.entry).toEqual({ event: "block-unreadable", ...ABOUT, block: BEST + 1, final: true, reason });
+    expect((unreadable[0]!.cause as NodeError).code).toBe("malformed");
+  });
 
   it("a settle whose deadline passes once the node's validation has answered reaches the log as settle-deadline-passed with the bound, and claims and submits nothing", async () => {
     // The validation's answer arrives within its bound, and the facilitator goes on with it once the clock is at
