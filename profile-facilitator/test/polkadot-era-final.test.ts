@@ -59,6 +59,8 @@ let base: string;
 let closeFacilitator: (() => Promise<void>) | undefined;
 let head = BEST + 1;
 let finalized = BEST;
+/** What the facilitator gave its operator log: each entry, with its cause. */
+let entries: { entry: Record<string, unknown>; cause: unknown }[] = [];
 
 async function start(): Promise<void> {
   node = await stub(async (_path, body) => {
@@ -92,6 +94,7 @@ async function start(): Promise<void> {
     polkadot: [{ network: NETWORK, rpc: node.url }],
     store: { url: db.url },
     settleWaitMs: clock.settleWait(3_000),
+    operatorLog: (entry, cause) => entries.push({ entry, cause }),
   });
   closeFacilitator = f.close;
   base = `http://127.0.0.1:${port}`;
@@ -111,6 +114,7 @@ beforeEach(async () => {
   head = BEST + 1;
   finalized = BEST - 2;
   forked = false;
+  entries = [];
   clock = controlledClock();
   db = await freshDatabase();
 });
@@ -135,6 +139,22 @@ describe("the end of a Polkadot extrinsic's era", () => {
       network: NETWORK,
     });
     expect(submits()).toBe(1);
+  });
+
+  it("with no block of the era holding it, read at finality to the era's last block, gives the operator log settlement-expired, naming the payment", async () => {
+    await start();
+    expect(await settle()).toEqual(PENDING);
+    head = ERA_LAST + 44;
+    finalized = ERA_LAST + 2;
+    expect(await settle()).toEqual({
+      success: false,
+      errorReason: "invalid_transaction_state",
+      transaction: HASH_V3,
+      network: NETWORK,
+    });
+    expect(entries.filter((e) => e.entry["event"] === "settlement-expired")).toEqual([
+      { entry: { event: "settlement-expired", network: NETWORK, payer: PAYER, transaction: HASH_V3 }, cause: undefined },
+    ]);
   });
 
   it("a block finalized at the validated height, not the best block validation read, holds it: the answer is success", async () => {

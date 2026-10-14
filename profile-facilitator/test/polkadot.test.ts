@@ -97,6 +97,8 @@ interface Chain {
   leaves?: (calls: readonly Call[]) => boolean;
   /** Awaited before the node answers a call: the test holds the answer until what it waits for has happened. */
   hold?: (method: string, params: unknown[]) => Promise<void> | void;
+  /** The node's JSON-RPC error for a call it refuses; every other call is answered as above. */
+  refuse?: (method: string, params: unknown[]) => { code: number; message: string } | undefined;
 }
 
 let clock: Clock & { restore(): void };
@@ -105,12 +107,16 @@ let node: Stub;
 let base: string;
 /** Closes the facilitator the current test started; unset once called, so a test that starts none closes nothing. */
 let closeFacilitator: (() => Promise<void>) | undefined;
+/** What the facilitator gave its operator log: each entry, with its cause. */
+let entries: { entry: Record<string, unknown>; cause: unknown }[] = [];
 
 async function start(chain: Chain = {}, network: string = NETWORK, settleWaitMs = 3_000): Promise<void> {
   node = await stub(async (_path, body) => {
     const { id, method, params } = body as { id: number; method: string; params: unknown[] };
     const answer = (result: unknown) => ({ jsonrpc: "2.0", id, result });
     await chain.hold?.(method, params);
+    const refused = chain.refuse?.(method, params);
+    if (refused !== undefined) return { jsonrpc: "2.0", id, error: refused };
     const known = init.find((c) => c.method === method && JSON.stringify(c.params) === JSON.stringify(params));
     if (known !== undefined) return answer(known.result);
     const p = JSON.stringify(params);
@@ -145,6 +151,7 @@ async function start(chain: Chain = {}, network: string = NETWORK, settleWaitMs 
     polkadot: [{ network: network as typeof NETWORK, rpc: node.url }],
     store: { url: db.url },
     settleWaitMs: clock.settleWait(settleWaitMs),
+    operatorLog: (entry, cause) => entries.push({ entry, cause }),
   });
   closeFacilitator = f.close;
   base = `http://127.0.0.1:${port}`;
@@ -172,6 +179,7 @@ function body(extrinsic = XT_V3, call = CALL_V2, requirements: Record<string, un
 
 beforeEach(async () => {
   clock = controlledClock();
+  entries = [];
   db = await freshDatabase();
 });
 
@@ -464,43 +472,33 @@ describe("/settle", () => {
   });
 
   it("a settle whose wait ends pending, with the node's head read unanswered, stores its pending answer before it answers", async () => {
-    const logged: string[] = [];
-    const write = process.stderr.write.bind(process.stderr);
-    const spy = vi.spyOn(process.stderr, "write").mockImplementation((chunk: string | Uint8Array, ...rest: unknown[]) => {
-      logged.push(String(chunk));
-      return (write as (c: string | Uint8Array, ...r: unknown[]) => boolean)(chunk, ...rest);
-    });
-    try {
-      // The node holds the head read (`chain_getHeader` with no block), the scan's first read after the submission. Its
-      // bound is the end of the wait for the chain, which keeps a quarter of a 1,500 ms wait for storing the answer:
-      // 1,125 ms. Once the clock is there the node answers, with the extrinsic in the block after the best block: too
-      // late, so the answer is settlement_pending, stored and given with the clock at 1,125 ms.
-      let landed = false;
-      const head = gate();
-      await start(
-        {
-          included: () => landed,
-          hold: async (method, params) => {
-            if (method === "chain_getHeader" && params.length === 0) await head.opened;
-          },
+    // The node holds the head read (`chain_getHeader` with no block), the scan's first read after the submission. Its
+    // bound is the end of the wait for the chain, which keeps a quarter of a 1,500 ms wait for storing the answer:
+    // 1,125 ms. Once the clock is there the node answers, with the extrinsic in the block after the best block: too
+    // late, so the answer is settlement_pending, stored and given with the clock at 1,125 ms.
+    let landed = false;
+    const head = gate();
+    await start(
+      {
+        included: () => landed,
+        hold: async (method, params) => {
+          if (method === "chain_getHeader" && params.length === 0) await head.opened;
         },
-        NETWORK,
-        1_500,
-      );
-      const pendingAnswer = { success: false, errorReason: "settlement_pending", transaction: HASH_V3, network: NETWORK };
-      const answer = post(`${base}/settle`, body());
-      await reaches(answer, () => calls("chain_getHeader").some((b) => b.params.length === 0));
-      await clock.advanceTo(1_125);
-      landed = true;
-      head.open();
-      expect((await answer).json).toEqual(pendingAnswer);
-      expect(clock.elapsed).toBe(1_125);
-      const stored = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, HASH_V3]);
-      expect(stored.rows[0]?.answer).toEqual(pendingAnswer);
-    } finally {
-      spy.mockRestore();
-    }
-    expect(logged.filter((l) => l.includes("answer-not-stored"))).toEqual([]);
+      },
+      NETWORK,
+      1_500,
+    );
+    const pendingAnswer = { success: false, errorReason: "settlement_pending", transaction: HASH_V3, network: NETWORK };
+    const answer = post(`${base}/settle`, body());
+    await reaches(answer, () => calls("chain_getHeader").some((b) => b.params.length === 0));
+    await clock.advanceTo(1_125);
+    landed = true;
+    head.open();
+    expect((await answer).json).toEqual(pendingAnswer);
+    expect(clock.elapsed).toBe(1_125);
+    const stored = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, HASH_V3]);
+    expect(stored.rows[0]?.answer).toEqual(pendingAnswer);
+    expect(entries.filter((e) => e.entry["event"] === "answer-not-stored")).toEqual([]);
   });
 
   it("events of another extrinsic in the block are not this one's", async () => {
@@ -697,5 +695,71 @@ describe("/settle", () => {
     });
     const rows = await db.pool.query("SELECT answer FROM settlement WHERE network = $1 AND id = $2", [NETWORK, HASH_V3]);
     expect(rows.rows).toEqual([{ answer: null }]);
+  });
+});
+
+describe("the operator log", () => {
+  // The operator gets the cause of every error the facilitator answers for, and each final answer the chain gives
+  // that is not a success; the client's answer is x402's and carries nothing from it. The fields name the payment:
+  // network, payer once the extrinsic is decoded, and the extrinsic's hash.
+  const ABOUT = { network: NETWORK, payer: PAYER, transaction: HASH_V3 };
+  const PENDING_V3 = { success: false, errorReason: "settlement_pending", transaction: HASH_V3, network: NETWORK };
+  /** JSON-RPC 2.0's internal error (§5.1), as the node refuses a call with it. */
+  const INTERNAL = { code: -32603, message: "Internal error" };
+  const logged = (event: string) => entries.filter((e) => e.entry["event"] === event);
+  /** The finalized head: below the best block when the extrinsic is validated, at its block once it is submitted. */
+  const finalizedAfterSubmit = () => (calls("author_submitExtrinsic").length > 0 ? BEST + 1 : BEST - 2);
+
+  it("a block read at finality whose events show another asset's transfer reaches the log as settlement-failed, with the events", async () => {
+    // The events are the test's own bytes, as "the test's event bytes" decodes them with the live metadata.
+    await start({ events: events(TRANSFERRED(1984), REMARKED, SUCCESS), finalized: finalizedAfterSubmit });
+    expect((await post(`${base}/settle`, body())).json).toEqual({
+      success: false,
+      errorReason: "invalid_transaction_state",
+      transaction: `${BLOCK_HASH}-2`,
+      network: NETWORK,
+    });
+    expect(logged("settlement-failed").map((e) => e.entry)).toEqual([
+      {
+        event: "settlement-failed",
+        ...ABOUT,
+        transaction: `${BLOCK_HASH}-2`,
+        events: ["assets.Transferred", "system.Remarked", "system.ExtrinsicSuccess"],
+      },
+    ]);
+  });
+
+  it("a node call that fails reaches the log with the payment's fields and the call, and the answer is unchanged", async () => {
+    await start({ refuse: (method, params) => (isValidation(method, params) ? INTERNAL : undefined) });
+    expect((await post(`${base}/verify`, body())).json).toEqual({
+      isValid: false,
+      invalidReason: "unexpected_verify_error",
+      payer: PAYER,
+    });
+    expect(logged("node-call-failed").map((e) => e.entry)).toEqual([{ event: "node-call-failed", ...ABOUT, call: "state_call" }]);
+    expect((logged("node-call-failed")[0]!.cause as Error).message).toBe(INTERNAL.message);
+  });
+
+  it("a store call that fails reaches the log with the network, the hash and the call, and the answer is pending with the hash", async () => {
+    // The store is read before the extrinsic is decoded, so the entry names no payer.
+    await start();
+    await db.pool.query("ALTER TABLE settlement RENAME TO settlement_elsewhere");
+    expect((await post(`${base}/settle`, body())).json).toEqual(PENDING_V3);
+    expect(logged("store-call-failed").map((e) => e.entry)).toEqual([
+      { event: "store-call-failed", network: NETWORK, transaction: HASH_V3, call: "read" },
+    ]);
+    expect((logged("store-call-failed")[0]!.cause as Error).message).toContain("settlement");
+  });
+
+  it("a block the node does not give, read at finality, reaches the log as block-unreadable with the block and the reason, and the answer is pending with the hash", async () => {
+    await start({
+      finalized: finalizedAfterSubmit,
+      refuse: (method, params) => (method === "chain_getBlock" && params[0] === BLOCK_HASH ? INTERNAL : undefined),
+    });
+    expect(await settle()).toEqual(PENDING_V3);
+    const unreadable = logged("block-unreadable");
+    expect(unreadable.length).toBeGreaterThan(0);
+    expect(unreadable[0]!.entry).toEqual({ event: "block-unreadable", ...ABOUT, block: BEST + 1, final: true, reason: INTERNAL.message });
+    expect((unreadable[0]!.cause as Error).message).toBe(INTERNAL.message);
   });
 });
