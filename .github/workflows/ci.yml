@@ -18,25 +18,17 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
-      - name: A DCO sign-off and no agent trailer on every commit pushed
-        env:
-          BEFORE: ${{ github.event.before }}
+      - name: A DCO sign-off and no agent trailer on every commit in the checked commit's history
         run: |
-          set -eu
-          # The pushed range; the whole history when there is no earlier commit to start from.
-          if [ -n "$BEFORE" ] && git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
-            range="$BEFORE..$GITHUB_SHA"
-          else
-            range="$GITHUB_SHA"
-          fi
-          unsigned=$(git log --format='%h %(trailers:key=Signed-off-by,valueonly,separator=%x2C)' "$range" | awk 'NF<2')
-          agent=$(git rev-list "$range" | while read -r c; do
+          set -euo pipefail
+          unsigned=$(git log --format='%H %(trailers:key=Signed-off-by,valueonly,separator=%x2C)' "$GITHUB_SHA" | awk 'NF<2')
+          agent=$(git rev-list "$GITHUB_SHA" | while read -r c; do
             git show -s --format=%B "$c" | grep -Ei 'co-authored-by|generated with|claude|anthropic' | sed "s/^/${c:0:12} /" || true
           done)
           [ -z "$unsigned" ] || printf 'commits without a Signed-off-by: trailer:\n%s\n' "$unsigned"
           [ -z "$agent" ] || printf 'commit messages naming an agent:\n%s\n' "$agent"
           if [ -n "$unsigned" ] || [ -n "$agent" ]; then exit 1; fi
-          echo "every commit in $range is signed off and names no agent"
+          echo "$(git rev-list --count "$GITHUB_SHA") commits reachable from $GITHUB_SHA: each is signed off and names no agent"
 
   check:
     runs-on: ubuntu-24.04

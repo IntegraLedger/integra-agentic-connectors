@@ -65,8 +65,11 @@ you certify that you wrote the change or have the right to submit it under the p
 git commit -s -m "contract: describe the change"
 ```
 
-`-s` adds the trailer `Signed-off-by: Your Name <you@example.com>`, matching your Git identity. CI checks every pushed
-commit for it and refuses a commit without one. To sign off commits you already made on your branch:
+`-s` adds the trailer `Signed-off-by: Your Name <you@example.com>`, matching your Git identity. On every push to
+`main`, CI reads every commit in `main`'s history and fails if a commit has no `Signed-off-by:` trailer or its message
+matches the agent pattern in `.github/workflows/ci.yml` (`Co-authored-by`, `generated with` and the names it lists, in
+upper or lower case). It runs after the push and cannot hold a commit back, so sign off every commit before you open a
+pull request. To sign off commits you already made on your branch:
 
 ```sh
 git rebase --signoff origin/main
@@ -74,9 +77,10 @@ git rebase --signoff origin/main
 
 ## Pull requests
 
-Keep a pull request to one change. CI builds, type-checks and tests every package, checks the one-way imports (the
-packages here import only `@integraledger/lcp` from the `@integraledger` scope), checks every sample, and checks
-every commit's sign-off.
+Keep a pull request to one change. On every push to `main`, and when dispatched by hand, CI builds, type-checks and
+tests every package, checks the one-way imports (the packages here import only `@integraledger/lcp` from the
+`@integraledger` scope), checks every sample, and checks every commit's sign-off. No workflow runs on `pull_request`,
+and no check is required before a merge, so CI reads a change once it is on `main`.
 
 ## License
 

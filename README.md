@@ -106,7 +106,9 @@ The documentation site is built from `docs/` by the app in `website/`, which has
 
 Contributions are welcome. Read [CONTRIBUTING.md](./CONTRIBUTING.md) first. Every commit carries a
 [Developer Certificate of Origin](https://developercertificate.org) sign-off: commit with `git commit -s`, which adds
-`Signed-off-by: Your Name <you@example.com>`. CI checks every pushed commit for it.
+`Signed-off-by: Your Name <you@example.com>`. On every push to `main`, CI reads every commit in `main`'s history and
+fails if a commit has no `Signed-off-by:` trailer or its message matches the agent pattern in
+`.github/workflows/ci.yml`. It runs after the push and cannot hold a commit back.
 
 By participating you agree to the [Code of Conduct](./CODE_OF_CONDUCT.md).
 
