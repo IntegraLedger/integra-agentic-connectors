@@ -328,6 +328,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          # Every page's last-updated date is its file's last commit, which only the full history gives.
+          fetch-depth: 0
       - name: Fetch Node.js
         run: |
           set -eu
@@ -371,3 +373,17 @@ jobs:
             test -s "$f" || { echo "missing or empty: website/$f"; exit 1; }
           done
           echo "out/index.html, out/llms.txt and out/llms-full.txt exist"
+      - name: The Markdown copies hold no relative links
+        working-directory: website
+        run: |
+          set -eu
+          copies=$(find out/md -name '*.md' | wc -l)
+          test "$copies" -gt 0 || { echo "website/out/md holds no Markdown copies"; exit 1; }
+          # A link to ./x, ../x or x.md resolves against /<page>.md, where nothing is served.
+          status=0
+          grep -rnoE --include='*.md' '\]\((\.\.?/|[^):/#?[:space:]]+\.md[#)])' out/md || status=$?
+          case "$status" in
+            0) echo "the Markdown copies above hold relative links"; exit 1 ;;
+            1) echo "none of the $copies Markdown copies in out/md holds a relative link" ;;
+            *) exit "$status" ;;
+          esac
