@@ -7,7 +7,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { LCP_ASSETS_REMARK, type PolkadotNetwork } from "@integraledger/lcp/polkadot";
 import { LCP_TRC20_MEMO } from "@integraledger/lcp/tron";
-import { failed, readRequest, type FacilitatorRequest, type SettleAnswer, type VerifyAnswer } from "./answers.js";
+import { failed, isObject, readRequest, type FacilitatorRequest, type SettleAnswer, type VerifyAnswer } from "./answers.js";
 import { readRequestJson, sendJson } from "./http.js";
 import { createPolkadot } from "./polkadot.js";
 import { openStore, type SettlementStore } from "./store.js";
@@ -28,6 +28,13 @@ export interface ProfileFacilitatorConfig {
 }
 
 const DEFAULT_SETTLE_WAIT_MS = 30_000;
+
+/** The body's `paymentRequirements.network` when it is a string, else "". */
+function networkOf(body: unknown): string {
+  const requirements = isObject(body) ? body["paymentRequirements"] : undefined;
+  const network = isObject(requirements) ? requirements["network"] : undefined;
+  return typeof network === "string" ? network : "";
+}
 
 function hostPort(listen: string): { host: string; port: number } {
   const m = /^\[?([^\]]*)\]?:(\d{1,5})$/.exec(listen);
@@ -96,8 +103,8 @@ export async function serveProfileFacilitator(c: ProfileFacilitatorConfig): Prom
 
   async function settle(body: unknown): Promise<SettleAnswer> {
     const r = readRequest(body);
-    const network = typeof r === "string" ? "" : r.paymentRequirements.network;
-    if (typeof r === "string") return failed(r, "", network);
+    if (typeof r === "string") return failed(r, "", networkOf(body));
+    const network = r.paymentRequirements.network;
     const rail = railOf(r);
     if (rail === undefined) return failed("invalid_network", "", network);
     try {

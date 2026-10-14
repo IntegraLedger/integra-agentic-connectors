@@ -902,4 +902,16 @@ describe("the facilitator's own bounds", () => {
     const res = await post(`${base}/verify`, body(TX_V2, { ...O, network: "tron:3448148188" }));
     expect(res.json).toEqual({ isValid: false, invalidReason: "invalid_network" });
   });
+
+  it("answers a /settle refused on the request's shape with the requirements' network when they name one as a string", async () => {
+    // x402's settlement response carries the `network`, and an empty `transaction` when nothing was broadcast.
+    await start();
+    const refused = (errorReason: string, network: string) => ({ success: false, errorReason, transaction: "", network });
+    const settle = async (b: unknown) => (await post(`${base}/settle`, b)).json;
+    expect(await settle({ ...body(TX_V2), x402Version: 1 })).toEqual(refused("invalid_x402_version", NETWORK));
+    expect(await settle({ ...body(TX_V2), paymentPayload: [] })).toEqual(refused("invalid_payload", NETWORK));
+    expect(await settle(body(TX_V2, { ...O, scheme: "upto" }))).toEqual(refused("unsupported_scheme", NETWORK));
+    expect(await settle(body(TX_V2, { ...O, network: 728126428 }))).toEqual(refused("invalid_network", ""));
+    expect(await settle([body(TX_V2)])).toEqual(refused("invalid_payload", ""));
+  });
 });
