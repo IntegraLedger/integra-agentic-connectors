@@ -152,6 +152,47 @@ describe("the OpenAPI document", () => {
     }
   });
 
+  it("each operation lists exactly the door refusal codes the door answers on it", () => {
+    // The seller door's request handling: the checks every routed path shares (an Origin header, the method), then on
+    // the operations that need them the credential, the media type, the body's size and its JSON, then the
+    // operation's own refusals.
+    const routed = ["door/browser-origin", "door/method"];
+    const posted = [...routed, "door/unauthenticated", "door/media-type", "door/too-large", "door/malformed"];
+    const expected: Record<string, string[]> = {
+      "post /issue": [
+        ...posted,
+        ...["door/resource-unknown", "door/request-required", "issue/input-bounds", "issue/pairing-not-served"],
+        ...["issue/offer-refused", "issue/mixed-protocols", "issue/mint-request-reused", "issue/mint-request-lapsed"],
+        ...["core/slot-name", "core/slot-reserved", "core/slot-duplicate", "core/content-not-json", "core/binding-not-json"],
+        ...["core/too-large", "issue/deadline", "issue/contributor-unavailable", "issue/storage-unavailable"],
+        ...["issue/store-unavailable", "issue/capacity"],
+      ],
+      "post /claim": [
+        ...posted,
+        ...["door/resource-unknown", "door/request-required", "claim/unknown", "claim/in-progress", "claim/paid"],
+        ...["claim/not-this-request", "claim/channel-open", "claim/channel-not-open", "claim/agreement-first"],
+        ...["claim/instrument-claimed", "claim/lapsed", "claim/pairing-unknown", "claim/not-bound", "claim/nothing-to-check"],
+        ...["claim/store-unavailable", "claim/read-unavailable"],
+      ],
+      "post /report": [
+        ...posted,
+        ...["door/not-found", "report/pairing-mismatch", "settle/other-reference", "settle/not-settling"],
+        ...["door/chosen-required", "door/reference-required", "door/receipt-required", "claim/pairing-unknown"],
+        "settle/store-unavailable",
+      ],
+      "get /status/{atrHash}": [...routed, "door/unauthenticated", "door/not-found", "settle/store-unavailable"],
+      "get /openapi.json": routed,
+    };
+    const operations = Object.entries(doc.paths as Record<string, Record<string, unknown>>).flatMap(([path, item]) =>
+      Object.keys(item).map((method) => `${method} ${path}`),
+    );
+    expect(operations.sort()).toEqual(Object.keys(expected).sort());
+    for (const operation of operations) {
+      const listed = listedCodes().filter((l) => `${l.method} ${l.path}` === operation).map((l) => l.code);
+      expect(listed.sort(), operation).toEqual([...expected[operation]!].sort());
+    }
+  });
+
   it("every code of the closed table is listed on some operation", () => {
     expect([...new Set(listedCodes().map((l) => l.code))].sort()).toEqual(Object.keys(REFUSALS).sort());
   });
