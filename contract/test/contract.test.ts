@@ -514,8 +514,12 @@ describe("the vectors", () => {
   });
 
   it("every link and agreement URL an answer carries is a random token's path, never one built from the hash", () => {
-    // A token: at least 16 random bytes, base64url without padding (RFC 4648 §5).
-    const isToken = (t: string) => /^[A-Za-z0-9_-]+$/.test(t) && Buffer.from(t, "base64url").length >= 16;
+    // A token: 16 random bytes in canonical base64url without padding (RFC 4648 §5 and §3.5): 22 characters, the last
+    // one of A, Q, g or w, so its unused low bits are zero, and a string that decodes and encodes back to itself.
+    const isToken = (t: string) => {
+      const bytes = Buffer.from(t, "base64url");
+      return /^[A-Za-z0-9_-]{21}[AQgw]$/.test(t) && bytes.length === 16 && bytes.toString("base64url") === t;
+    };
     // No 8 bytes of a token occur in the hash's 32 bytes.
     const fromHash = (t: string, h: string) => {
       const token = Buffer.from(t, "base64url");
