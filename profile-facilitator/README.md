@@ -12,7 +12,7 @@ In x402, a **facilitator** is the role that verifies a payment and settles it on
 facilitator API: `GET /supported`, `POST /verify` and `POST /settle`. x402 specifies neither Tron nor Polkadot. The
 Legal Context Protocol (LCP) defines one transfer method on each, in which the payer's own signed transaction carries
 the **ATR hash (H)**: SHA-256 over the exact bytes of the Agentic Transaction Record (ATR), the agreement's record.
-Paying is then agreeing to that exact record, and the proof is on chain.
+Approving that transaction is then the buyer's acceptance of that exact record, and the proof is on chain.
 
 | Profile | `network` | `extra.assetTransferMethod` | Where H rides |
 |---|---|---|---|
