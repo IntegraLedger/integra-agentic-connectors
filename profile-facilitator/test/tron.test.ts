@@ -1241,6 +1241,21 @@ describe("the operator log", () => {
     expect(calls("/wallet/broadcasthex")).toHaveLength(0);
   });
 
+  it("a settle of an expired transaction whose deadline passes once its store read has answered is refused as invalid_payload, writes no entry, and sends no node call", async () => {
+    // The expiration window is checked before the deadline: the client's own transaction is refused, and with no time
+    // left the id reads that could have found it consumed are not made.
+    await start({}, 1_000);
+    vi.setSystemTime(EXPIRATION_V2 + 1);
+    const read = resumeLate((call) => call === "store.read");
+    const answer = post(`${base}/settle`, body(TX_V2));
+    await reaches(answer, read.arrived);
+    await clock.advanceTo(1_000);
+    read.resume();
+    expect((await answer).json).toEqual({ success: false, errorReason: "invalid_payload", transaction: "", network: NETWORK });
+    expect(entries).toEqual([]);
+    expect(node.calls).toEqual([]);
+  });
+
   it("a broadcast the node does not accept reaches the log as the call that failed, its cause the node's code and message, and the answer is unchanged", async () => {
     // Tron mainnet's live answer to a broadcast of V2 past its expiration (fixtures/tron-mainnet-answers.json).
     await start({ broadcast: live["broadcastExpired"] });
