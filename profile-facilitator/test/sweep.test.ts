@@ -1,7 +1,8 @@
 // The sweep of the dedupe table. A row whose answer is final is dropped once its `until` is more than 24 h past. A row
 // whose answer is not final (claimed with no answer, or settlement_pending) is kept whatever its age, until a read of the
-// chain makes its answer final. x402 defines settlement_pending as not final, with a non-empty `transaction`, and an
-// empty `transaction` as nothing broadcast, so a repeat of a broadcast payment must find its row and read the chain.
+// chain, or the answer to a refused or unsent broadcast, makes its answer final. x402 defines settlement_pending as not
+// final, with a non-empty `transaction`, and an empty `transaction` as nothing broadcast, so a repeat of a broadcast
+// payment must find its row and read the chain.
 // Expected values: those rules, the profile's rule 5 (success: true with transaction = the id and payer = the owner,
 // once a node shows the transaction in a block with SUCCESS), the lcp tron entry point's status rule (final as never
 // included once no node holds it and the latest solidified block is two 3-second slots past the expiration), and the
