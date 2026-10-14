@@ -16,6 +16,24 @@ html:not(.dark) figure.shiki {
   background-color: #ffffff;
 }
 
+/* The one Twoslash popup on a page (src/components/TwoslashPopups.tsx), placed in page coordinates. Its code
+   sits on white in light mode, as the code samples do. */
+.twoslash-popover {
+  position: absolute;
+  z-index: 50;
+}
+
+html:not(.dark) .twoslash-popover {
+  background-color: #ffffff;
+}
+
+/* A keyboard user sees which Twoslash trigger has focus. */
+.twoslash .twoslash-hover:focus-visible {
+  outline: 2px solid var(--color-fd-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 /* Code keeps every character as typed. */
 code,
 pre,

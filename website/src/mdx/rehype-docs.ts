@@ -1,4 +1,5 @@
 import { resolve, sep } from "node:path";
+import { toHtml } from "hast-util-to-html";
 import { renderMermaid } from "./mermaid";
 
 /** The parts of a hast node these plugins read or write. */
@@ -6,8 +7,8 @@ interface HastNode {
   type: string;
   tagName?: string;
   value?: string;
-  properties?: { className?: unknown };
-  data?: { meta?: string };
+  properties?: { className?: unknown } & Record<string, unknown>;
+  data?: { meta?: string; estree?: unknown };
   children?: HastNode[];
 }
 
@@ -68,6 +69,82 @@ export function rehypeMermaid() {
         children: [],
       } as HastNode;
     });
+  };
+}
+
+/** An ESM `export const <name> = [<strings>]` node of an MDX tree. */
+function exportStrings(name: string, values: string[]): HastNode {
+  return {
+    type: "mdxjsEsm",
+    value: "",
+    data: {
+      estree: {
+        type: "Program",
+        sourceType: "module",
+        body: [
+          {
+            type: "ExportNamedDeclaration",
+            specifiers: [],
+            source: null,
+            declaration: {
+              type: "VariableDeclaration",
+              kind: "const",
+              declarations: [
+                {
+                  type: "VariableDeclarator",
+                  id: { type: "Identifier", name },
+                  init: { type: "ArrayExpression", elements: values.map((value) => ({ type: "Literal", value })) },
+                },
+              ],
+            },
+          },
+        ],
+      },
+    },
+  };
+}
+
+/**
+ * Replaces each Twoslash hover (a `Popup` element holding its `PopupContent` and `PopupTrigger`) with a
+ * plain trigger button that names its popup by number, and exports the page's distinct popup contents,
+ * as HTML, as `twoslashPopups`, which `src/lib/twoslash.ts` reads. The site serves them as a separate file,
+ * which the browser fetches when a reader first opens a popup (`TwoslashPopups`). Runs after code highlighting.
+ */
+export function rehypeTwoslashPopups() {
+  return (tree: HastNode) => {
+    const popups: string[] = [];
+    const numbers = new Map<string, number>();
+    const visit = (node: HastNode) => {
+      const children = node.children ?? [];
+      children.forEach((child, i) => {
+        if (child.type !== "element" || child.tagName !== "Popup") {
+          visit(child);
+          return;
+        }
+        const part = (tagName: string) => child.children?.find((c) => c.tagName === tagName)?.children ?? [];
+        const html = toHtml({ type: "root", children: part("PopupContent") } as Parameters<typeof toHtml>[0]);
+        let n = numbers.get(html);
+        if (n === undefined) {
+          n = popups.length;
+          popups.push(html);
+          numbers.set(html, n);
+        }
+        children[i] = {
+          type: "element",
+          tagName: "button",
+          properties: {
+            type: "button",
+            className: ["twoslash-hover"],
+            dataPopup: n,
+            ariaHaspopup: "dialog",
+            ariaExpanded: "false",
+          },
+          children: part("PopupTrigger"),
+        };
+      });
+    };
+    visit(tree);
+    if (popups.length > 0) tree.children?.unshift(exportStrings("twoslashPopups", popups));
   };
 }
 

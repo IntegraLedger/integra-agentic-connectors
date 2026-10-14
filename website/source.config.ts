@@ -4,7 +4,7 @@ import { rehypeCodeDefaultOptions } from "fumadocs-core/mdx-plugins";
 import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 import { transformerTwoslash } from "fumadocs-twoslash";
 import { DOCS_DIR } from "./src/lib/docs-dir";
-import { rehypeMermaid, rehypeUncheckedUnder, hasMetaFlag } from "./src/mdx/rehype-docs";
+import { hasMetaFlag, rehypeMermaid, rehypeTwoslashPopups, rehypeUncheckedUnder } from "./src/mdx/rehype-docs";
 import { remarkDocLinks, remarkHtmlAnchors, remarkStripLeadingTitle } from "./src/mdx/remark-docs";
 
 // `next build`, `next dev` and `fumadocs-mdx` run in website/.
@@ -82,7 +82,12 @@ export default defineConfig({
       ],
       ...plugins,
     ],
-    rehypePlugins: (plugins) => [[rehypeUncheckedUnder, [apiDir]], rehypeMermaid, ...plugins],
+    rehypePlugins: (plugins) => [
+      [rehypeUncheckedUnder, [apiDir]],
+      rehypeMermaid,
+      ...plugins,
+      rehypeTwoslashPopups,
+    ],
     rehypeCodeOptions: {
       // Every text colour of these two themes is at least 4.5:1 on its code background (global.css):
       // white in light mode, the card colour in dark mode.

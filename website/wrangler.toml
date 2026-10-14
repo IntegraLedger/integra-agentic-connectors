@@ -9,13 +9,14 @@ directory = "./out"
 binding = "ASSETS"
 not_found_handling = "404-page"
 # worker.js runs first for page addresses and their .md addresses, to answer a request for a page as Markdown. The
-# files excluded below are served directly: the build's scripts and styles, the Markdown copies, every .txt file (the
-# RSC payload each page fetches, at any depth, and llms.txt, llms-full.txt and robots.txt) and the other generated
-# files.
+# files excluded below are served directly: the build's scripts and styles, the Markdown copies, the Twoslash popups,
+# every .txt file (the RSC payload each page fetches, at any depth, and llms.txt, llms-full.txt and robots.txt) and the
+# other generated files.
 run_worker_first = [
   "/*",
   "!/_next/*",
   "!/md/*",
+  "!/twoslash/*",
   "!/.well-known/*",
   "!/api/search",
   "!/*.txt",

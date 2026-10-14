@@ -1,4 +1,3 @@
-import * as Twoslash from "fumadocs-twoslash/ui";
 import { MarkdownCopyButton, ViewOptionsPopover } from "fumadocs-ui/layouts/docs/page";
 import defaultMdxComponents from "fumadocs-ui/mdx";
 import { DocsBody, DocsDescription, DocsPage, DocsTitle } from "fumadocs-ui/page";
@@ -6,9 +5,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { JsonLd } from "@/components/JsonLd";
 import { Mermaid } from "@/components/Mermaid";
+import { TwoslashPopups } from "@/components/TwoslashPopups";
 import { markdownPath, markdownUrl } from "@/lib/llms";
 import { absoluteUrl, breadcrumbJsonLd, docSourcePath, repoFile, siteConfig } from "@/lib/site";
 import { isGenerated, source } from "@/lib/source";
+import { popupsPath, twoslashPopups } from "@/lib/twoslash";
 
 interface PageProps {
   params: Promise<{ slug?: string[] }>;
@@ -84,8 +85,9 @@ export default async function Page(props: PageProps) {
         />
       </div>
       <DocsBody>
-        <MDX components={{ ...defaultMdxComponents, ...Twoslash, Mermaid }} />
+        <MDX components={{ ...defaultMdxComponents, Mermaid }} />
       </DocsBody>
+      {twoslashPopups(page).length > 0 ? <TwoslashPopups src={popupsPath(page.url)} /> : null}
     </DocsPage>
   );
 }

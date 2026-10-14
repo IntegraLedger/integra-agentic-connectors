@@ -40,7 +40,9 @@ pnpm dev         # serve it locally with live reload
   and the `@integraledger/lcp` the contract package resolves; a type error fails the build. A block whose meta carries
   `no-check` is highlighted only. Blocks in the generated API pages are not checked. Twoslash runs on the
   TypeScript 7 that `fumadocs-twoslash` depends on; the TypeScript 6.0.3 in `devDependencies` is for TypeDoc
-  (`pnpm run api`), whose supported TypeScript range ends at 6.0.
+  (`pnpm run api`), whose supported TypeScript range ends at 6.0. Hovering, focusing or clicking an identifier in a
+  checked block shows its type and documentation: the build writes each page's distinct popups to
+  `/twoslash/<path>.json`, which the page fetches when a reader first opens one.
 - Renders each ```` ```mermaid ```` block to SVG with the `mermaid` package, in a headless Google Chrome, once in a
   light and once in a dark theme. Both SVGs are in the page's HTML, and the page shows the one for the reader's
   theme; no diagram code runs in the browser.
