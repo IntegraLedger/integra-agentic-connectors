@@ -10,6 +10,7 @@ import { LCP_TRC20_MEMO } from "@integraledger/lcp/tron";
 import {
   failed,
   guarded,
+  invalid,
   isObject,
   operatorLine,
   readRequest,
@@ -21,6 +22,7 @@ import { readRequestJson, sendJson } from "./http.js";
 import { createPolkadot } from "./polkadot.js";
 import { openStore, type SettlementStore } from "./store.js";
 import { createTron } from "./tron.js";
+import { unexpectedSettle, unexpectedVerify } from "./unexpected.js";
 
 export interface ProfileFacilitatorConfig {
   /** "host:port" */
@@ -119,8 +121,7 @@ export async function serveProfileFacilitator(c: ProfileFacilitatorConfig): Prom
     try {
       return await rail.verify(r);
     } catch (e) {
-      log({ event: "verify-error", network: r.paymentRequirements.network }, e);
-      return { isValid: false, invalidReason: "unexpected_verify_error" };
+      return invalid(unexpectedVerify(log, { event: "verify-error", network: r.paymentRequirements.network }, e));
     }
   }
 
@@ -133,8 +134,7 @@ export async function serveProfileFacilitator(c: ProfileFacilitatorConfig): Prom
     try {
       return await rail.settle(r);
     } catch (e) {
-      log({ event: "settle-error", network }, e);
-      return failed("unexpected_settle_error", "", network);
+      return unexpectedSettle(log, { event: "settle-error", network }, e);
     }
   }
 

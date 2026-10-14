@@ -31,6 +31,7 @@ import {
 import { base58check } from "./base58check.js";
 import { NodeError, postJson, sleep } from "./http.js";
 import { answerReserve, inTime, type SettlementStore, type Stored } from "./store.js";
+import { settleReason, unexpectedSettle, unexpectedVerify } from "./unexpected.js";
 
 export interface TronNode {
   network: `tron:${number}`;
@@ -50,11 +51,6 @@ interface Checked {
   maxTimeoutSeconds: number;
 }
 
-/** A verify reason as a settle answer's: a node that could not be read before submission is a settle error. */
-function settleReason(r: InvalidReason): string {
-  return r === "unexpected_verify_error" ? "unexpected_settle_error" : r;
-}
-
 function hexOf(b: Uint8Array): string {
   return Buffer.from(b).toString("hex");
 }
@@ -62,6 +58,17 @@ function hexOf(b: Uint8Array): string {
 /** A permission's threshold or a key's weight: java-tron prints an int64 as a JSON number, read as a safe one ≥ 0. */
 function int64(v: unknown): bigint | undefined {
   return typeof v === "number" && Number.isSafeInteger(v) && v >= 0 ? BigInt(v) : undefined;
+}
+
+/**
+ * Why the FullNode did not accept a broadcast: java-tron's `code` and `message`, or a `malformed` NodeError for an
+ * answer that has no `code`.
+ */
+function refusalOf(sent: unknown): Error {
+  if (!isObject(sent) || typeof sent["code"] !== "string") {
+    return new NodeError("malformed", true, "/wallet/broadcasthex: code");
+  }
+  return new Error(`${sent["code"]}: ${typeof sent["message"] === "string" ? sent["message"] : ""}`);
 }
 
 function sameBytes(a: Uint8Array, b: Uint8Array): boolean {
@@ -111,6 +118,23 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
       log({ event: "node-call-failed", ...about(c), call }, e);
       throw e;
     });
+  /**
+   * `unexpected_verify_error` for an answer to `call` this facilitator cannot read: a `node-call-failed` entry whose
+   * cause is a `malformed` NodeError naming the part it cannot read.
+   */
+  const malformed = (c: Checked, call: string, part: string) =>
+    unexpectedVerify(
+      log,
+      { event: "node-call-failed", ...about(c), call },
+      new NodeError("malformed", true, `${call}: ${part}`),
+    );
+  /** The entry for a settle whose deadline, `settleWaitMs` after its request, passed before `before`. */
+  const deadlinePassed = (c: Checked, before: string) => ({
+    event: "settle-deadline-passed",
+    ...about(c),
+    before,
+    settleWaitMs,
+  });
   /** The stored row, or undefined when the store does not answer by `deadline`; the failure goes to the operator log. */
   const readStored = (c: Checked, deadline: number) =>
     inTime(s.read(c.network, c.txid), deadline).catch((e: unknown) => {
@@ -148,13 +172,21 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     };
   }
 
-  /** A FullNode call's JSON answer, bounded by `deadline` (a `performance.now()` time) and by the node call bound. */
-  async function ask(c: Checked, path: string, body: unknown, deadline: number): Promise<unknown> {
+  /**
+   * A FullNode call's JSON answer, as `answer`, bounded by `deadline` (a `performance.now()` time) and by the node call
+   * bound; a call that fails gives `unexpected_verify_error`.
+   */
+  async function ask(
+    c: Checked,
+    path: string,
+    body: unknown,
+    deadline: number,
+  ): Promise<{ answer: unknown } | InvalidReason> {
+    const url = `${byNetwork.get(c.network)!.fullNode}${path}`;
     try {
-      return await postJson(`${byNetwork.get(c.network)!.fullNode}${path}`, body, deadline - performance.now());
+      return { answer: await postJson(url, body, deadline - performance.now()) };
     } catch (e) {
-      log({ event: "node-call-failed", ...about(c), call: path }, e);
-      return undefined;
+      return unexpectedVerify(log, { event: "node-call-failed", ...about(c), call: path }, e);
     }
   }
 
@@ -164,19 +196,24 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
    * permission: the address's own key, weight 1, threshold 1.
    */
   async function permitted(c: Checked, deadline: number): Promise<InvalidReason | null> {
-    const account = await ask(c, "/wallet/getaccount", { address: hexOf(c.raw.owner) }, deadline);
-    if (!isObject(account)) return "unexpected_verify_error";
+    const call = "/wallet/getaccount";
+    const read = await ask(c, call, { address: hexOf(c.raw.owner) }, deadline);
+    if (typeof read === "string") return read;
+    const account = read.answer;
+    if (!isObject(account)) return malformed(c, call, "the account");
     const permission = account["owner_permission"];
     if (permission === undefined) return null;
-    if (!isObject(permission) || !Array.isArray(permission["keys"])) return "unexpected_verify_error";
+    if (!isObject(permission) || !Array.isArray(permission["keys"])) return malformed(c, call, "owner_permission.keys");
     const threshold = int64(permission["threshold"]);
-    if (threshold === undefined) return "unexpected_verify_error";
+    if (threshold === undefined) return malformed(c, call, "owner_permission.threshold");
     const owner = hexOf(c.raw.owner);
     let weight = 0n;
     for (const key of permission["keys"] as unknown[]) {
-      if (!isObject(key) || typeof key["address"] !== "string") return "unexpected_verify_error";
+      if (!isObject(key) || typeof key["address"] !== "string") {
+        return malformed(c, call, "owner_permission.keys[].address");
+      }
       const w = int64(key["weight"]);
-      if (w === undefined) return "unexpected_verify_error";
+      if (w === undefined) return malformed(c, call, "owner_permission.keys[].weight");
       if (key["address"].toLowerCase() === owner) weight = w;
     }
     return weight >= threshold ? null : "unsupported_permission";
@@ -191,19 +228,24 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     const refHash = c.raw.refBlockHash;
     if (refBytes.length !== 2 || refHash.length !== 8) return "invalid_transaction";
     const now = await ask(c, "/wallet/getnowblock", {}, deadline);
-    const header = isObject(now) ? now["block_header"] : undefined;
+    if (typeof now === "string") return now;
+    const header = isObject(now.answer) ? now.answer["block_header"] : undefined;
     const raw = isObject(header) ? header["raw_data"] : undefined;
     const head = isObject(raw) ? raw["number"] : undefined;
-    if (typeof head !== "number" || !Number.isSafeInteger(head) || head < 0) return "unexpected_verify_error";
+    if (typeof head !== "number" || !Number.isSafeInteger(head) || head < 0) {
+      return malformed(c, "/wallet/getnowblock", "block_header.raw_data.number");
+    }
     const low = (refBytes[0]! << 8) | refBytes[1]!;
     const number = head - ((head % 65_536) - low + 65_536) % 65_536;
     if (number < 0) return "invalid_transaction";
-    const block = await ask(c, "/wallet/getblock", { id_or_num: String(number), detail: false }, deadline);
-    if (!isObject(block)) return "unexpected_verify_error";
+    const read = await ask(c, "/wallet/getblock", { id_or_num: String(number), detail: false }, deadline);
+    if (typeof read === "string") return read;
+    const block = read.answer;
+    if (!isObject(block)) return malformed(c, "/wallet/getblock", "the block");
     if (Object.keys(block).length === 0) return "invalid_transaction";
     const id = block["blockID"];
     if (typeof id !== "string" || !/^[0-9a-f]{64}$/.test(id) || BigInt(`0x${id.slice(0, 16)}`) !== BigInt(number)) {
-      return "unexpected_verify_error";
+      return malformed(c, "/wallet/getblock", "blockID");
     }
     return id.slice(16, 32) === hexOf(refHash) ? null : "invalid_transaction";
   }
@@ -213,9 +255,10 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
    * `/wallet/gettransactionfrompending` for its pending pool. Each answers `{}` for an id it does not hold.
    */
   async function unheld(c: Checked, path: string, deadline: number): Promise<InvalidReason | null> {
-    const tx = await ask(c, path, { value: c.txid }, deadline);
-    if (!isObject(tx)) return "unexpected_verify_error";
-    return Object.keys(tx).length === 0 ? null : "invalid_transaction_state";
+    const read = await ask(c, path, { value: c.txid }, deadline);
+    if (typeof read === "string") return read;
+    if (!isObject(read.answer)) return malformed(c, path, "the transaction");
+    return Object.keys(read.answer).length === 0 ? null : "invalid_transaction_state";
   }
 
   /** The two id reads, made together: the FullNode's blocks, then its pending pool. */
@@ -228,9 +271,10 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
 
   /** The node's simulation of `transfer(payTo, amount)` from the owner on the asset. */
   async function simulated(c: Checked, deadline: number): Promise<InvalidReason | null> {
-    const sim = await ask(
+    const call = "/wallet/triggerconstantcontract";
+    const read = await ask(
       c,
-      "/wallet/triggerconstantcontract",
+      call,
       {
         owner_address: hexOf(c.raw.owner),
         contract_address: hexOf(c.raw.contractAddress),
@@ -239,7 +283,9 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
       },
       deadline,
     );
-    if (!isObject(sim) || !isObject(sim["result"])) return "unexpected_verify_error";
+    if (typeof read === "string") return read;
+    const sim = read.answer;
+    if (!isObject(sim) || !isObject(sim["result"])) return malformed(c, call, "result");
     if (sim["result"]["result"] !== true) return "invalid_transaction";
     const ret = isObject(sim["transaction"]) ? sim["transaction"]["ret"] : undefined;
     if (Array.isArray(ret) && ret.some((x) => isObject(x) && x["ret"] === "FAILED")) return "invalid_transaction";
@@ -259,7 +305,7 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     const now = BigInt(Date.now());
     const expiration = c.raw.expiration;
     if (expiration <= now || expiration > now + BigInt(c.maxTimeoutSeconds) * 1000n) return "invalid_payload";
-    if (deadline - performance.now() <= 0) return "unexpected_verify_error";
+    if (deadline - performance.now() <= 0) return unexpectedVerify(log, deadlinePassed(c, "node reads"));
     const [account, reference, [inBlocks, inPool], simulation] = await Promise.all([
       permitted(c, deadline),
       tapos(c, deadline),
@@ -277,8 +323,7 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     try {
       stored = await inTime(s.read(c.network, c.txid), Infinity);
     } catch (e) {
-      log({ event: "store-call-failed", ...about(c), call: "read" }, e);
-      return invalid("unexpected_verify_error", c.payer);
+      return invalid(unexpectedVerify(log, { event: "store-call-failed", ...about(c), call: "read" }, e), c.payer);
     }
     if (stored.state !== "none") return invalid("invalid_transaction_state", c.payer);
     const now = await checkNow(c);
@@ -412,13 +457,16 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     try {
       sent = await postJson(`${node.fullNode}/wallet/broadcasthex`, { transaction: c.hex }, deadline - performance.now());
     } catch (e) {
-      log({ event: "node-call-failed", ...about(c), call: "/wallet/broadcasthex" }, e);
-      return e instanceof NodeError && !e.sent
-        ? failed("unexpected_settle_error", "", c.network)
-        : pending(c.txid, c.network);
+      const entry = { event: "node-call-failed", ...about(c), call: "/wallet/broadcasthex" };
+      if (e instanceof NodeError && !e.sent) return unexpectedSettle(log, entry, e);
+      log(entry, e);
+      return pending(c.txid, c.network);
     }
     if (isObject(sent) && sent["code"] === "DUP_TRANSACTION_ERROR") return consumed(c);
-    if (!isObject(sent) || sent["result"] !== true) return failed("unexpected_settle_error", "", c.network);
+    if (!isObject(sent) || sent["result"] !== true) {
+      const entry = { event: "node-call-failed", ...about(c), call: "/wallet/broadcasthex" };
+      return unexpectedSettle(log, entry, refusalOf(sent));
+    }
     return watch(c, deadline, false);
   }
 
@@ -481,7 +529,7 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     const held = await ids;
     if (held.includes("invalid_transaction_state")) return consumed(c);
     if (now !== null) return failed(settleReason(held.find((r) => r !== null) ?? now), "", network);
-    if (left() <= 0) return failed("unexpected_settle_error", "", network);
+    if (left() <= 0) return unexpectedSettle(log, deadlinePassed(c, "claim"));
     let won: boolean;
     try {
       won = await inTime(s.claim(c.network, c.txid, new Date(Number(c.raw.expiration))), deadline);

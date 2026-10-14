@@ -28,6 +28,7 @@ import {
 } from "./answers.js";
 import { NODE_MAX_BYTES, NODE_TIMEOUT_MS, NodeError, Slots, postJson, sleep, within } from "./http.js";
 import { answerReserve, inTime, type SettlementStore, type Stored } from "./store.js";
+import { settleReason, unexpectedSettle, unexpectedVerify } from "./unexpected.js";
 
 export interface PolkadotNode {
   network: PolkadotNetwork;
@@ -206,6 +207,23 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     ...(c.payer === undefined ? {} : { payer: c.payer }),
     transaction: c.id,
   });
+  /**
+   * `unexpected_verify_error` for an answer to `call` this facilitator cannot read: a `node-call-failed` entry whose
+   * cause is a `malformed` NodeError naming the part it cannot read.
+   */
+  const malformed = (c: { network: string; id: string; payer?: string }, call: string, part: string) =>
+    unexpectedVerify(
+      log,
+      { event: "node-call-failed", ...about(c), call },
+      new NodeError("malformed", true, `${call}: ${part}`),
+    );
+  /** The entry for a settle whose deadline, `settleWaitMs` after its request, passed before `before`. */
+  const deadlinePassed = (c: Checked, before: string) => ({
+    event: "settle-deadline-passed",
+    ...about(c),
+    before,
+    settleWaitMs,
+  });
   /** The stored row, or undefined when the store does not answer by `deadline`; the failure goes to the operator log. */
   const readStored = (c: { network: string; id: string; payer?: string }, deadline: number) =>
     inTime(s.read(c.network, c.id), deadline).catch((e: unknown) => {
@@ -281,8 +299,8 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     try {
       api = await within(apiFor(l.node, timeoutMs), timeoutMs);
     } catch (e) {
-      log({ event: "node-call-failed", ...about({ network: l.node.network, id: l.id }), call: "metadata" }, e);
-      return "unexpected_verify_error";
+      const entry = { event: "node-call-failed", ...about({ network: l.node.network, id: l.id }), call: "metadata" };
+      return unexpectedVerify(log, entry, e);
     }
     let xt;
     try {
@@ -306,15 +324,18 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       return "invalid_payload";
     }
     if (!xt.era.isMortalEra) return "invalid_payload";
+    const payer = xt.signer.toString();
+    const decoded = { network: l.node.network, id: l.id, payer };
     const eventsKey = api.query["system"]?.["events"]?.key();
+    if (eventsKey === undefined) return malformed(decoded, "metadata", "System.Events");
     const bounds = runtimeBounds(api);
-    if (eventsKey === undefined || bounds === undefined) return "unexpected_verify_error";
+    if (bounds === undefined) return malformed(decoded, "metadata", "System.BlockLength, System.BlockHashCount");
     return {
       network: l.node.network,
       api,
       hex: l.extrinsic,
       id: l.id,
-      payer: xt.signer.toString(),
+      payer,
       assetId: l.assetId,
       remarkHash: l.remarkHash,
       era: xt.era.asMortalEra,
@@ -348,7 +369,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     let call = "chain_getBlockHash";
     try {
       best = await rpc(url, call, [], left());
-      if (!isLowerHex(best) || best.length !== 66) return "unexpected_verify_error";
+      if (!isLowerHex(best) || best.length !== 66) return malformed(c, call, "the block hash");
       call = "chain_getHeader";
       header = await rpc(url, call, [best], left());
       call = "state_call";
@@ -359,11 +380,11 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
         left(),
       );
     } catch (e) {
-      log({ event: "node-call-failed", ...about(c), call }, e);
-      return "unexpected_verify_error";
+      return unexpectedVerify(log, { event: "node-call-failed", ...about(c), call }, e);
     }
     const height = blockNumber(header);
-    if (height === undefined || typeof validity !== "string") return "unexpected_verify_error";
+    if (height === undefined) return malformed(c, "chain_getHeader", "number");
+    if (typeof validity !== "string") return malformed(c, "state_call", "the validity");
     if (!validity.startsWith("0x00")) return "invalid_transaction";
     const blocksLeft = Math.max(0, lastBlock(c, height) + 1 - height);
     return { best: height, until: new Date(Date.now() + blocksLeft * SLOW_BLOCK_MS) };
@@ -587,14 +608,11 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     try {
       await rpc(url, "author_submitExtrinsic", [c.hex], deadline - performance.now());
     } catch (e) {
-      log({ event: "node-call-failed", ...about(c), call: "author_submitExtrinsic" }, e);
-      if (e instanceof RpcError) {
-        return seenBefore(e)
-          ? failed("invalid_transaction_state", c.id, c.network)
-          : failed("unexpected_settle_error", "", c.network);
-      }
-      if (e instanceof NodeError && !e.sent) return failed("unexpected_settle_error", "", c.network);
-      return pending(c.id, c.network);
+      const entry = { event: "node-call-failed", ...about(c), call: "author_submitExtrinsic" };
+      const notSubmitted = e instanceof RpcError ? !seenBefore(e) : e instanceof NodeError && !e.sent;
+      if (notSubmitted) return unexpectedSettle(log, entry, e);
+      log(entry, e);
+      return e instanceof RpcError ? failed("invalid_transaction_state", c.id, c.network) : pending(c.id, c.network);
     }
     return scan(c, since, [], deadline, false);
   }
@@ -658,7 +676,6 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     const deadline = performance.now() + settleWaitMs;
     const left = () => deadline - performance.now();
     const network = r.paymentRequirements.network;
-    const settleReason = (v: InvalidReason) => (v === "unexpected_verify_error" ? "unexpected_settle_error" : v);
     const l = await local(r);
     if (typeof l === "string") return failed(l, "", network);
     let stored: Stored;
@@ -675,7 +692,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     const finalized = await finalizedHeight(c, l.node.rpc, deadline);
     const v = await validate(c, left());
     if (typeof v === "string") return failed(settleReason(v), "", network);
-    if (left() <= 0) return failed("unexpected_settle_error", "", network);
+    if (left() <= 0) return unexpectedSettle(log, deadlinePassed(c, "claim"));
     const birth = c.era.birth(v.best);
     const since = Math.min(finalized === undefined ? birth : Math.max(birth, finalized + 1), lastBlock(c, v.best));
     let won: boolean;
