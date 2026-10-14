@@ -17,6 +17,9 @@ pnpm install --frozen-lockfile
 pnpm -r --if-present run build
 ```
 
+The build renders the Mermaid diagrams in Google Chrome. Set `CHROME_PATH` to a Chrome or Chromium executable if
+Chrome is not installed where Playwright looks for it.
+
 Then, in this folder:
 
 ```sh
@@ -38,6 +41,8 @@ pnpm dev         # serve it locally with live reload
   `no-check` is highlighted only. Blocks in the generated API pages are not checked. Twoslash runs on the
   TypeScript 7 that `fumadocs-twoslash` depends on; the TypeScript 6.0.3 in `devDependencies` is for TypeDoc
   (`pnpm run api`), whose supported TypeScript range ends at 6.0.
-- Renders ```` ```mermaid ```` blocks as diagrams.
+- Renders each ```` ```mermaid ```` block to SVG with the `mermaid` package, in a headless Google Chrome, once in a
+  light and once in a dark theme. Both SVGs are in the page's HTML, and the page shows the one for the reader's
+  theme; no diagram code runs in the browser.
 - Writes `/llms.txt`, `/llms-full.txt`, each page as Markdown at `/md/<path>.md`, the search index, `sitemap.xml`,
   `robots.txt` and `/.well-known/security.txt`.

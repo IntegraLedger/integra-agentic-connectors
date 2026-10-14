@@ -1,4 +1,5 @@
 import { resolve, sep } from "node:path";
+import { renderMermaid } from "./mermaid";
 
 /** The parts of a hast node these plugins read or write. */
 interface HastNode {
@@ -33,30 +34,40 @@ function languageOf(code: HastNode): string | undefined {
 }
 
 /**
- * Replaces each ```` ```mermaid ```` block with a `<Mermaid chart="…" />` element, which the
- * page renders as a diagram. Runs before code highlighting.
+ * Renders each ```` ```mermaid ```` block to SVG at build time, in the light and the dark theme, and
+ * replaces it with a `<Mermaid light="…" dark="…" />` element, which the page shows in the reader's
+ * theme. Runs before code highlighting.
  */
 export function rehypeMermaid() {
-  return (tree: HastNode) => {
+  return async (tree: HastNode) => {
+    const found: { parent: HastNode[]; index: number; chart: string }[] = [];
     const visit = (node: HastNode) => {
       const children = node.children ?? [];
-      for (let i = 0; i < children.length; i++) {
-        const child = children[i];
-        if (!child) continue;
+      children.forEach((child, index) => {
         const code = codeOf(child);
         if (code && languageOf(code) === "mermaid") {
-          children[i] = {
-            type: "mdxJsxFlowElement",
-            name: "Mermaid",
-            attributes: [{ type: "mdxJsxAttribute", name: "chart", value: textOf(code).trimEnd() }],
-            children: [],
-          } as HastNode;
+          found.push({ parent: children, index, chart: textOf(code).trimEnd() });
         } else {
           visit(child);
         }
-      }
+      });
     };
     visit(tree);
+    if (found.length === 0) return;
+    const svgs = await renderMermaid(found.map((f) => f.chart), "mermaid");
+    found.forEach(({ parent, index }, i) => {
+      const svg = svgs[i];
+      if (!svg) throw new Error(`no SVG for Mermaid diagram ${i}`);
+      parent[index] = {
+        type: "mdxJsxFlowElement",
+        name: "Mermaid",
+        attributes: [
+          { type: "mdxJsxAttribute", name: "light", value: svg.light },
+          { type: "mdxJsxAttribute", name: "dark", value: svg.dark },
+        ],
+        children: [],
+      } as HastNode;
+    });
   };
 }
 
