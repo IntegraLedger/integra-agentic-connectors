@@ -53,8 +53,9 @@ vectors. A sample that needs a chain uses a local stand-in or the package's own 
   dependencies are ranges: `@integraledger/lcp` is a peer of both packages, with an exact devDependency for their own
   tests, so an application and these packages share one copy of lcp.
 - **Comments that say what the code does.**
-- **No business or legal logic.** The door and the facilitator check that a payment is bound to its ATR; they never
-  judge amount, payee, asset, timing or payer against the ATR's content.
+- **No business or legal logic.** The door checks that a payment is bound to its ATR, and the facilitator that it
+  carries an ATR hash in its profile's form; neither judges amount, payee, asset, timing or payer against the ATR's
+  content.
 
 ## Sign your commits
 
