@@ -231,8 +231,9 @@ export interface Vector {
     clock: number;
     atrIds: string[];
     /**
-     * One link token per `atrIds` entry, in the same order: random, base64url without padding. The ATR minted with that
-     * id is served at `storageBase` followed by its token, which is the answer's `link`, never a path built from the hash.
+     * One link token per `atrIds` entry, in the same order: the canonical base64url, without padding, of 16 random
+     * bytes (22 characters). The ATR minted with that id is served at `storageBase` followed by its token, which is the
+     * answer's `link`, never a path built from the hash.
      */
     linkTokens: string[];
     /** The tenant's hosts: an agreement URL is on the agreement's `host`, or on the tenant's only host. */
@@ -250,8 +251,9 @@ export interface Vector {
       host?: string;
     };
     /**
-     * One agreement token per record that needs the agreement step, in the order the steps issue them: random, base64url
-     * without padding. The agreement URL is `https://<host>/agreement/` followed by its token.
+     * One agreement token per record that needs the agreement step, in the order the steps issue them: the canonical
+     * base64url, without padding, of 16 random bytes (22 characters). The agreement URL is `https://<host>/agreement/`
+     * followed by its token.
      */
     agreementTokens?: string[];
     /**
