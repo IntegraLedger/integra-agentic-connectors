@@ -47,12 +47,15 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
 
 ## What `/settle` does
 
-1. Repeats every check of `/verify`.
+1. Repeats the checks of `/verify` that read nothing from the node (steps 1 and 2).
 2. Reads the stored answer for the extrinsic's BLAKE2b-256 hash. A stored success means the payment is consumed: the
    repeat answers `invalid_transaction_state` with the success's `transaction`, never a second success. Any other
-   final answer is returned as it is.
-3. Claims the hash, with the first block to scan: the block after the finalized head read before validation, never
-   before the era's birth.
+   final answer is returned as it is. A claimed hash, or a stored `settlement_pending`, is followed from the chain: the
+   extrinsic is decoded again and step 5's scan goes on from the blocks its row records as not yet read, and nothing
+   is submitted.
+3. For a hash the store does not hold, decodes the extrinsic and asks the node to validate it, as `/verify` does
+   (steps 3 and 4). Then claims the hash, with the first block to scan: the block after the finalized head read before
+   validation, never before the era's birth.
 4. Submits with `author_submitExtrinsic`. A refusal that says the node has already seen the extrinsic or its nonce
    (1013 already imported, 1012 temporarily banned, or 1010 with an outdated nonce) is a consumed payment, answered
    `invalid_transaction_state` with the extrinsic's hash, and no block is scanned for it. Any other refusal, or a
@@ -64,7 +67,8 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
    `BlockHashCount` + 1 blocks before it, and the chain refuses an extrinsic whose birth block's hash is gone. The scan
    reads first the finalized blocks, then the blocks up to the head. In the block that holds the extrinsic, success
    needs `System.ExtrinsicSuccess`, `System.Remarked` for R's BLAKE2b-256 and `Assets.Transferred` for `asset`. A
-   failure counts only in a finalized block.
+   success read in a block above the finalized head can be reorganised out of the chain. A failure counts only in a
+   finalized block.
 6. A finalized block the node cannot give, its body or, for the block that holds the extrinsic, its events, is recorded
    as unread and skipped. The scan goes on to the blocks after it, so a success in a later block is still found, and the
    unread block is read again on each later pass and on each repeat. A block read that cannot start before the deadline,

@@ -43,7 +43,7 @@ controls, to the resource servers that use it.
 | `invalid_transaction` | yes | yes | The node refuses the transaction in simulation or validation. On Tron this includes a reference block (TaPoS) that does not match the node's. |
 | `unexpected_verify_error` | yes | no | The node or the store could not be read. |
 | `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission. |
-| `settlement_pending` | no | yes | Submitted, and not yet final when the wait ended. |
+| `settlement_pending` | no | yes | Submitted, or possibly submitted (the store could not be read), and not yet final or not yet stored when the wait ended. |
 | `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. On Polkadot, also a repeat of a payment whose success has been answered, or a submission the node refuses as one it has already seen (already imported, temporarily banned, or an outdated nonce). |
 
 `unsupported_permission` and `invalid_transaction` are this facilitator's, for a Tron owner permission that does not
@@ -76,7 +76,8 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   block that can include the extrinsic (the era's last, and no later than `System.BlockHashCount` + 1 blocks after its
   birth), counted from the best block at 12 seconds a block.
 - A row whose answer is final (`success: true`, or a failure other than `settlement_pending`) is kept for 24 hours
-  after `until`, so a repeat in that time reads the stored answer before anything is verified again.
+  after `until`, so a repeat in that time reads the stored answer before the expiration check and the node reads are
+  made again.
 - A row whose answer is not final (claimed with no answer, or `settlement_pending`) is kept, whatever its age, until a
   repeated `/settle` reads the chain and writes a final answer, or the answer to a refused or unsent broadcast or
   submission makes it final. A repeat therefore always finds the id of a payment this facilitator submitted, and never

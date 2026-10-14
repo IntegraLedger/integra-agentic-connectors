@@ -14,8 +14,8 @@ its facilitator.
 
 The seller door and the facilitator do different jobs, in this order:
 
-1. `claim` at the seller door: the payment carries the H issued for this request. Every refusal comes here, before
-   money moves.
+1. `claim` at the seller door: the payment carries the H issued for this request. The seller door's refusals come here,
+   before money moves.
 2. `/verify` and `/settle` at the facilitator: the payment is valid for its requirements, and is submitted.
 3. `report` at the seller door: the facilitator's `transaction` becomes the record's reference.
 

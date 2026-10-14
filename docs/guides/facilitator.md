@@ -200,7 +200,9 @@ success."* Of two concurrent settles of one payment, one answers success and the
   across every process that shares the store, to the `/settle` whose write stores it, on Tron and on Polkadot. On
   Tron, a transaction id the node already holds is refused.
 - **Success only from the chain.** `success: true` is given only when a node shows the transaction in a block with
-  the profile's success conditions: on Tron, receipt result `SUCCESS` and a `Transfer` log from the token.
+  the facilitator's success conditions: on Tron, receipt result `SUCCESS`, which the profile requires, and a `Transfer`
+  log from the token. A success read at the head, above the solidified or finalized block, can be reorganised out of
+  the chain.
 - **What it does not check.** It checks that the payment carries H in the profile's form, not which H the seller issued.
   Its store claims a payment's id once, so the payment is submitted once. On Tron and on Polkadot, a success is answered
   only by the settle whose write stored it, and a repeated `/settle` of that payment answers `invalid_transaction_state`

@@ -29,8 +29,9 @@ validate or simulate it, submits exactly the bytes the payer signed, deduplicate
 
 - **Agentic Transaction Record (ATR):** the agreement's record, a JSON document the seller serves.
 - **ATR hash (H):** SHA-256 over the ATR's exact bytes.
-- **Legal Context Protocol (LCP):** the pattern these profiles implement: the payment carries H, so paying is agreeing
-  to that exact record.
+- **Legal Context Protocol (LCP):** the pattern these profiles implement: H bound into the payment, so that where the
+  payment the buyer approves carries H, that approval is the buyer's acceptance of that exact record; where it does
+  not, the pairing's `proves` says so.
 - **Pairing:** a payment protocol, scheme and rail combination. This facilitator serves two:
   `x402/exact/tron/lcp-trc20-memo` and `x402/exact/polkadot/lcp-assets-remark`.
 - **Binding:** how H rides in a pairing's payment: here, the Tron memo and the Polkadot remark.
@@ -266,14 +267,15 @@ The answer is `{isValid: true, payer}`, with `payer` the owner in base58check.
    payment is broadcast at most once.
 6. Reads the transaction's status every second with `@integraledger/lcp`'s `tronStatus`, by transaction id: through the
    Solidity node's `/walletsolidity` API for solidified data first, then the FullNode's `/wallet` API at the head.
-   Success requires receipt result `SUCCESS` **and** a `Transfer` log emitted by `asset`. The value the call returned is
-   not read: a TRC-20 token may return false from `transfer` and still transfer, and USDT-TRC20 does. `tronStatus`
-   answers a receipt with another result, or `SUCCESS` with no such log, as failed at whichever lookup finds it first;
-   the facilitator takes that failure as final only from the Solidity node's lookup, which reads solidified blocks
-   alone. A transaction whose expiration has passed can never be included once the solidified head, read first, is two
-   slots past it and neither lookup finds it, each naming a latest block at or past that head's time, read from its node
-   before the lookup. A lookup whose node cannot give that time, or whose latest block is behind the head, leaves the
-   answer pending. Each failure is answered `invalid_transaction_state`.
+   Success requires receipt result `SUCCESS` **and** a `Transfer` log emitted by `asset`. A success read at the head,
+   before its block is solidified, can be reorganised out of the chain. The value the call returned is not read: a
+   TRC-20 token may return false from `transfer` and still transfer, and USDT-TRC20 does. `tronStatus` answers a receipt
+   with another result, or `SUCCESS` with no such log, as failed at whichever lookup finds it first; the facilitator
+   takes that failure as final only from the Solidity node's lookup, which reads solidified blocks alone. A transaction
+   whose expiration has passed can never be included once the solidified head, read first, is two slots past it and
+   neither lookup finds it, each naming a latest block at or past that head's time, read from its node before the
+   lookup. A lookup whose node cannot give that time, or whose latest block is behind the head, leaves the answer
+   pending. Each failure is answered `invalid_transaction_state`.
 7. Stores the answer and returns it. A success is returned only by the settle whose write stored it, so of two
    concurrent settles of one payment, one answers success and the other `invalid_transaction_state` with the id. A
    success, or an answer with an empty `transaction`, whose write fails is answered `settlement_pending` with the id.
@@ -298,12 +300,15 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
 
 ### What `/settle` does on Polkadot
 
-1. Repeats every check of `/verify`.
+1. Repeats the checks of `/verify` that read nothing from the node (steps 1 and 2).
 2. Reads the stored answer for the extrinsic's BLAKE2b-256 hash. A stored success means the payment is consumed: the
    repeat answers `invalid_transaction_state` with the success's `transaction`, never a second success. Any other
-   final answer is returned as it is.
-3. Claims the hash, with the first block to scan: the block after the finalized head read before validation, never
-   before the era's birth.
+   final answer is returned as it is. A claimed hash, or a stored `settlement_pending`, is followed from the chain: the
+   extrinsic is decoded again and step 5's scan goes on from the blocks its row records as not yet read, and nothing
+   is submitted.
+3. For a hash the store does not hold, decodes the extrinsic and asks the node to validate it, as `/verify` does
+   (steps 3 and 4). Then claims the hash, with the first block to scan: the block after the finalized head read before
+   validation, never before the era's birth.
 4. Submits with `author_submitExtrinsic`. A refusal that says the node has already seen the extrinsic or its nonce
    (1013 already imported, 1012 temporarily banned, or 1010 with an outdated nonce) is a consumed payment, answered
    `invalid_transaction_state` with the extrinsic's hash, and no block is scanned for it. Any other refusal, or a
@@ -315,7 +320,8 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
    `BlockHashCount` + 1 blocks before it, and the chain refuses an extrinsic whose birth block's hash is gone. The scan
    reads first the finalized blocks, then the blocks up to the head. In the block that holds the extrinsic, success
    needs `System.ExtrinsicSuccess`, `System.Remarked` for R's BLAKE2b-256 and `Assets.Transferred` for `asset`. A
-   failure counts only in a finalized block.
+   success read in a block above the finalized head can be reorganised out of the chain. A failure counts only in a
+   finalized block.
 6. A finalized block the node cannot give, its body or, for the block that holds the extrinsic, its events, is recorded
    as unread and skipped. The scan goes on to the blocks after it, so a success in a later block is still found, and the
    unread block is read again on each later pass and on each repeat. A block read that cannot start before the deadline,
@@ -390,7 +396,7 @@ controls, to the resource servers that use it.
 | `invalid_transaction` | yes | yes | The node refuses the transaction in simulation or validation. On Tron this includes a reference block (TaPoS) that does not match the node's. |
 | `unexpected_verify_error` | yes | no | The node or the store could not be read. |
 | `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission. |
-| `settlement_pending` | no | yes | Submitted, and not yet final when the wait ended. |
+| `settlement_pending` | no | yes | Submitted, or possibly submitted (the store could not be read), and not yet final or not yet stored when the wait ended. |
 | `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. On Polkadot, also a repeat of a payment whose success has been answered, or a submission the node refuses as one it has already seen (already imported, temporarily banned, or an outdated nonce). |
 
 `unsupported_permission` and `invalid_transaction` are this facilitator's, for a Tron owner permission that does not
@@ -423,7 +429,8 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   block that can include the extrinsic (the era's last, and no later than `System.BlockHashCount` + 1 blocks after its
   birth), counted from the best block at 12 seconds a block.
 - A row whose answer is final (`success: true`, or a failure other than `settlement_pending`) is kept for 24 hours
-  after `until`, so a repeat in that time reads the stored answer before anything is verified again.
+  after `until`, so a repeat in that time reads the stored answer before the expiration check and the node reads are
+  made again.
 - A row whose answer is not final (claimed with no answer, or `settlement_pending`) is kept, whatever its age, until a
   repeated `/settle` reads the chain and writes a final answer, or the answer to a refused or unsent broadcast or
   submission makes it final. A repeat therefore always finds the id of a payment this facilitator submitted, and never
@@ -474,7 +481,9 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   across every process that shares the store, to the `/settle` whose write stores it, on Tron and on Polkadot. On
   Tron, a transaction id the node already holds is refused.
 - **Success only from the chain.** `success: true` is given only when a node shows the transaction in a block with
-  the profile's success conditions: on Tron, receipt result `SUCCESS` and a `Transfer` log from the token.
+  the facilitator's success conditions: on Tron, receipt result `SUCCESS`, which the profile requires, and a `Transfer`
+  log from the token. A success read at the head, above the solidified or finalized block, can be reorganised out of
+  the chain.
 - **What it does not check.** It checks that the payment carries H in the profile's form, not which H the seller issued.
   Its store claims a payment's id once, so the payment is submitted once. On Tron and on Polkadot, a success is answered
   only by the settle whose write stored it, and a repeated `/settle` of that payment answers `invalid_transaction_state`
