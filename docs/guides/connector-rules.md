@@ -44,7 +44,7 @@ its first `?`, what follows it (or `""`), and SHA-256 over the body bytes as rec
 ## 5. Place the values where the buyer's agent approves, before approval; fail closed
 
 Put `carriers` and `link` in the field the pairing provides, using the LCP package's entry point for that protocol
-(x402: the published profile `x402-exact-eip155-eip3009`; UCP and ACP: `links[]`, `messages[]` and `metadata` through
+(x402: the published profile `x402/exact/eip155/eip3009`; UCP and ACP: `links[]`, `messages[]` and `metadata` through
 their entry points). A connector that is not configured, or whose `issue` failed, stops that checkout path: it never
 completes a sale on it unbound.
 

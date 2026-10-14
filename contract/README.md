@@ -140,7 +140,7 @@ native-field
 ```
 
 Place `carriers` and `link` where the buyer's agent approves the payment, through the LCP package's entry point for
-the protocol. For x402 that is the published profile `x402-exact-eip155-eip3009`.
+the protocol. For x402 that is the published profile `x402/exact/eip155/eip3009`.
 
 ## The flows
 
