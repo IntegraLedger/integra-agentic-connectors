@@ -36,8 +36,9 @@ A report is either an **outcome** or a channel's **close**.
 | `4xx` | Refused. | Do not retry the same body. |
 | `503` | Not available now. | Retry after `Retry-After` seconds. |
 
-Retry until a 2xx or a 4xx. A report of money that moved is recorded even when it comes without a claim, and the
-record then states what is missing.
+Retry until a 2xx or a 4xx. On a pairing the door can read, a paid report of an unclaimed payment is recorded when the
+door's read of the payment settles the record, and the record then states what is missing; otherwise nothing is recorded
+and the record stays issued.
 
 ## A report with nothing read yet
 

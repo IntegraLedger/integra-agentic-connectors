@@ -230,11 +230,12 @@ After payment, call `report` with the platform's payment reference as it comes, 
   whose hash is read only through the claim, the record stays issued.
 
 The door reads a reported payment on the rail before it records it; on a pairing with nothing to read, the seller's
-report is the settlement. A report of money that moved is recorded even without a claim, and the record then states what
-is missing. On a record with no claim, on a pairing the door can read, send `chosen` (and, on x402, `request`), from
-which the door takes the payment's read keys, its network among them, and on a paid report of an unclaimed
-`mpp/charge/evm/transaction` or `mpp/charge/evm/hash` payment, the credential's `source`, from which it takes the
-payer's Transfer identity. The door reads the payment only on the network the option pays on, and a report whose
+report is the settlement. On a pairing the door can read, a paid report of an unclaimed payment is recorded when the
+door's read of the payment settles the record, and the record then states what is missing; otherwise nothing is recorded
+and the record stays issued. On a record with no claim, on a pairing the door can read, send `chosen` (and, on x402,
+`request`), from which the door takes the payment's read keys, its network among them, and on a paid report of an
+unclaimed `mpp/charge/evm/transaction` or `mpp/charge/evm/hash` payment, the credential's `source`, from which it takes
+the payer's Transfer identity. The door reads the payment only on the network the option pays on, and a report whose
 `network` is another answers `409 report/network-mismatch`. A report naming another pairing than the record's answers
 `409 report/pairing-mismatch`.
 

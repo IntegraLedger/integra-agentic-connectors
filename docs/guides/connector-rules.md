@@ -72,8 +72,9 @@ the rail before it records it:
 - a `202` whose `state` is `issued` means nothing is recorded, because no read checked the hash: report again later;
   on a pairing whose hash is read only through the claim, the record stays issued.
 
-A report of money that moved is recorded even when it comes without a claim, and the record then states what is
-missing. A `claim/in-progress` answer to a retry of the same presentation means the first attempt won.
+On a pairing the door can read, a paid report of an unclaimed payment is recorded when the door's read of the payment
+settles the record, and the record then states what is missing; otherwise nothing is recorded and the record stays
+issued. A `claim/in-progress` answer to a retry of the same presentation means the first attempt won.
 
 *Why:* the claim is the one check that the payment carries this ATR's hash, and it must come before money moves; a
 payment that has moved is never refused, and its record never claims more than was checked.
