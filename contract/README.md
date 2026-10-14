@@ -155,7 +155,8 @@ Call `issue` before the buyer approves, once per checkout state.
 - `content` holds 0 to 56 slots. Each slot is one JSON value, sent as padded base64 of its exact bytes. The door
   writes the bytes into the ATR as received.
 - `request` is required on an x402 surface: `{method, path, query, bodyDigest}`, the method token, the
-  request-target up to its first `?`, what follows it (or `""`), and SHA-256 over the body bytes as received.
+  request-target up to its first `?`, what follows it (or `""`), and SHA-256 over the body bytes as received. The
+  request-target, `path` + `?` + `query` (`path` alone where it had no `?`), is at most 8192 characters.
 - `lifetimeSeconds` is the challenge's lifetime, 1 to 604 800. On x402, use the largest `maxTimeoutSeconds`.
 
 The answer's `agreement`, when present, means the record needs the agreement step; see

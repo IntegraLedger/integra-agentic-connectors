@@ -36,7 +36,8 @@ the allowed characters (`^[A-Za-z0-9._:-]{1,128}$`) is replaced by the SHA-256 h
 ## 4. The request commitment is the LCP package's rule
 
 On an x402 surface, send `request` = `{method, path, query, bodyDigest}`: the method token, the request-target up to
-its first `?`, what follows it (or `""`), and SHA-256 over the body bytes as received.
+its first `?`, what follows it (or `""`), and SHA-256 over the body bytes as received. The request-target, `path` +
+`?` + `query` (`path` alone where it had no `?`), is at most 8192 characters.
 
 *Why:* the ATR records the request its payment options answer, and the claim checks the same commitment.
 

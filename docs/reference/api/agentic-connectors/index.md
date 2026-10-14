@@ -253,7 +253,8 @@ A payment's outcome; `reference`: 1–256 characters, no control characters.
 
 ### RequestCommitment
 
-The request an x402 challenge answers.
+The request an x402 challenge answers. The request-target it commits to, `path` + `?` + `query` (`path` alone where
+the target had no `?`), is at most 8192 characters; each member has its own bound too.
 
 #### Properties
 

@@ -160,7 +160,7 @@ An object. A member not listed here is refused.
 
 ### RequestCommitment
 
-The request an x402 challenge answers: the method, the target split at its first `?`, and SHA-256 over the body bytes as received.
+The request an x402 challenge answers: the method, the target split at its first `?`, and SHA-256 over the body bytes as received. The request-target, `path` + `?` + `query` (`path` alone where the target had no `?`), is at most 8192 characters; each member has its own bound too.
 
 An object. A member not listed here is refused.
 

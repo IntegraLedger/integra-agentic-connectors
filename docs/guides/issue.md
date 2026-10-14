@@ -24,7 +24,8 @@ reserved. A slot's bytes must be exactly one JSON value (RFC 8259): the door wri
 
 ## The request commitment
 
-On x402, `request` commits the ATR to the HTTP request its options answer:
+On x402, `request` commits the ATR to the HTTP request its options answer. Its request-target, `path` + `?` + `query`
+(`path` alone where the target had no `?`), is at most 8192 characters.
 
 - `method`: the method token, such as `GET`;
 - `path`: the request-target up to its first `?`;

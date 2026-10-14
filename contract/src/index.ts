@@ -14,7 +14,10 @@ export interface ContentSlot {
   slot: string;
   bytes: string;
 }
-/** The request an x402 challenge answers. */
+/**
+ * The request an x402 challenge answers. The request-target it commits to, `path` + `?` + `query` (`path` alone where
+ * the target had no `?`), is at most 8192 characters; each member has its own bound too.
+ */
 export interface RequestCommitment {
   method: string;
   path: string;

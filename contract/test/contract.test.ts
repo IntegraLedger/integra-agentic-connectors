@@ -10,8 +10,8 @@ import { readdirSync, readFileSync } from "node:fs";
 import { Ajv2020 } from "ajv/dist/2020.js";
 import addFormatsModule from "ajv-formats";
 import { describe, expect, it } from "vitest";
-import { BINDINGS, type Json, type LcpPattern } from "@integraledger/lcp";
-import { exactEip3009, exactErc7710 } from "@integraledger/lcp/x402";
+import { BINDINGS, isRefusal, type Json, type LcpPattern } from "@integraledger/lcp";
+import { exactEip3009, exactErc7710, requestCommitment } from "@integraledger/lcp/x402";
 import {
   OPENAPI_BYTES,
   REFUSALS,
@@ -181,6 +181,13 @@ describe("the OpenAPI document", () => {
     expect(s.IssueRequest.properties.mintRequestId.pattern).toBe("^[A-Za-z0-9._:-]{1,128}$");
     expect(s.Reference).toMatchObject({ minLength: 1, maxLength: 256 });
     expect(s.ClaimRequest.properties.network).toMatchObject({ maxLength: 64 });
+  });
+
+  it("RequestCommitment states the request-target bound the LCP package applies: 8192 characters", async () => {
+    expect(doc.components.schemas.RequestCommitment.description).toContain("is at most 8192 characters");
+    const at = (length: number) => requestCommitment({ method: "GET", target: `/${"a".repeat(length - 1)}`, body: new Uint8Array() });
+    expect(isRefusal(await at(8192))).toBe(false);
+    expect(await at(8193)).toMatchObject({ refused: true, code: "x402/request-too-large" });
   });
 
   it("LcpPattern admits the patterns the pairings publish, with and without a named instrument", () => {
