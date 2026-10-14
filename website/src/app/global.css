@@ -34,6 +34,13 @@ html:not(.dark) .twoslash-popover {
   border-radius: 2px;
 }
 
+/* A table (in the wrapper the docs layout gives it) is laid out and painted only when it nears the viewport, so
+   the reference pages' tables cost no rendering work while they are off screen. */
+.prose div:has(> table) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 480px;
+}
+
 /* Code keeps every character as typed. */
 code,
 pre,
