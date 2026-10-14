@@ -112,7 +112,7 @@ const SCHEME = /^[a-z][a-z0-9+.-]*:/i;
  *
  * Absolute URLs, root-relative paths and in-page `#` links are left as they are. A link to a
  * page that does not exist in the documentation tree fails the build; a missing target
- * outside the tree is reported and still rewritten. The page's Markdown copy carries each
+ * outside the tree is reported, and its link rewritten. The page's Markdown copy carries each
  * rewritten link too.
  */
 export function remarkDocLinks(options: DocLinksOptions) {

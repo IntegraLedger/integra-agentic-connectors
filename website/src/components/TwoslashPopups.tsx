@@ -22,7 +22,7 @@ function triggerOf(target: EventTarget | null): HTMLElement | null {
  * a second click, on a click elsewhere, or on Escape. A trigger the pointer crosses on its way into the shown
  * popup does not replace it. Enter or Space on a trigger moves focus into its popup; Tab past the popup's last
  * focusable element closes it and moves on to the element after the trigger, and Shift+Tab out of it returns to the
- * trigger with the popup still shown. Escape from inside the popup closes it and returns focus to the trigger.
+ * trigger, and the popup stays shown. Escape from inside the popup closes it and returns focus to the trigger.
  */
 export function TwoslashPopups({ src }: { src: string }) {
   useEffect(() => {
