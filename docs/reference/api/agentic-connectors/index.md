@@ -279,15 +279,10 @@ One vector: requests to the door and the answers they must produce.
 | Property | Type | Description |
 | ------ | ------ | ------ |
 | <a id="property-fixed"></a> `fixed` | `object` | - |
-| `fixed.agreement?` | `object` | The tenant's agreement step: the nominal payment's pairing, network, asset, payee, amount and time bound. |
-| `fixed.agreement.amount` | `string` | - |
-| `fixed.agreement.asset` | `string` | - |
-| `fixed.agreement.extra?` | `object` | - |
+| `fixed.agreement?` | `object` | The tenant's agreement step: the pairing and network its nominal payment is made with. |
 | `fixed.agreement.host?` | `string` | The tenant host the agreement URL is on; required when `hosts` has more than one. |
-| `fixed.agreement.maxTimeoutSeconds` | `number` | - |
 | `fixed.agreement.network` | `string` | - |
 | `fixed.agreement.pairing` | `string` | - |
-| `fixed.agreement.payTo` | `string` | - |
 | `fixed.agreementTokens?` | `string`[] | One agreement token per record that needs the agreement step, in the order the steps issue them: the canonical base64url, without padding, of 16 random bytes (22 characters). The agreement URL is `https://<host>/agreement/` followed by its token. |
 | `fixed.atrIds` | `string`[] | - |
 | `fixed.clock` | `number` | - |

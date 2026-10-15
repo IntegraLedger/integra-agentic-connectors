@@ -238,15 +238,10 @@ export interface Vector {
     linkTokens: string[];
     /** The tenant's hosts: an agreement URL is on the agreement's `host`, or on the tenant's only host. */
     hosts?: string[];
-    /** The tenant's agreement step: the nominal payment's pairing, network, asset, payee, amount and time bound. */
+    /** The tenant's agreement step: the pairing and network its nominal payment is made with. */
     agreement?: {
       pairing: string;
       network: string;
-      asset: string;
-      payTo: string;
-      amount: string;
-      maxTimeoutSeconds: number;
-      extra?: { [k: string]: Json };
       /** The tenant host the agreement URL is on; required when `hosts` has more than one. */
       host?: string;
     };

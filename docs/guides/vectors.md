@@ -23,11 +23,11 @@ A vector is `{name, fixed, steps, source}`.
   resources and their pairings, the storage base, the clock (Unix seconds), the ATR identifiers the steps mint, in
   order, and `linkTokens`, one random token per identifier: the ATR is served at the storage base followed by its token,
   the answer's `link`, never at a path built from the hash. Where a step needs the agreement step, it also names the
-  tenant's hosts and its agreement: the nominal payment's pairing, network, asset, payee, amount and time bound, and the
-  `host` its URL is on when the tenant has more than one; and `agreementTokens`, one random token per agreement URL, in
-  issue order: the URL is `https://<host>/agreement/<token>`. Where a step reads the rail, `reader` states what the
-  network's reader answers: its `finalized` and `safe` block marks and each receipt it holds. A vector with no `reader`
-  has none, and nothing is read.
+  tenant's hosts and its agreement: the pairing and network of the nominal payment, and the `host` its URL is on when
+  the tenant has more than one; and `agreementTokens`, one random token per agreement URL, in issue order: the URL is
+  `https://<host>/agreement/<token>`. Where a step reads the rail, `reader` states what the network's reader answers:
+  its `finalized` and `safe` block marks and each receipt it holds. A vector with no `reader` has none, and nothing is
+  read.
 - Each step is `{agreed?, request, expect, stored?, storedFiles?}`:
   - `agreed`: the buyer's agreement payment for that record was recorded before the request, as
     `{atrHash, network, transaction}`;
