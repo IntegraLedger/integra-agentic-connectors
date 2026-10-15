@@ -88,5 +88,5 @@ repository root:
 npx wrangler deploy -c website/wrangler.toml
 ```
 
-Each build writes a `security.txt` whose `Expires` is 180 days after the build, so the deploy from each release renews
-it.
+Each build writes a `security.txt` whose `Expires` is 180 days after the committer date of the commit it is built from,
+so two builds of one commit write the same file, and the deploy from each release renews it.
