@@ -11,7 +11,7 @@
 // ends when the test moves the clock to its end, never because the machine is slow.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
-import { controlledClock, fixture, freePort, freshDatabase, post, stub, type Clock, type Stub } from "./support.js";
+import { controlledClock, fixture, onWorkerPort, freshDatabase, post, stub, type Clock, type Stub } from "./support.js";
 
 vi.mock("../src/http.js", async (original) => (await import("./support.js")).countingSleep(await original<typeof import("../src/http.js")>()));
 
@@ -88,14 +88,16 @@ async function start(): Promise<void> {
     if (method === "chain_getBlock") return answer({ block: { header: {}, extrinsics: ["0x280402000b"] } });
     return { jsonrpc: "2.0", id, error: { code: -32601, message: `no stub for ${method} ${p}` } };
   });
-  const port = await freePort();
-  const f = await serveProfileFacilitator({
-    listen: `127.0.0.1:${port}`,
-    polkadot: [{ network: NETWORK, rpc: node.url }],
-    store: { url: db.url },
-    settleWaitMs: clock.settleWait(3_000),
-    operatorLog: (entry, cause) => entries.push({ entry, cause }),
-  });
+  const rpc = node.url;
+  const { port, server: f } = await onWorkerPort((p) =>
+    serveProfileFacilitator({
+      listen: `127.0.0.1:${p}`,
+      polkadot: [{ network: NETWORK, rpc }],
+      store: { url: db.url },
+      settleWaitMs: clock.settleWait(3_000),
+      operatorLog: (entry, cause) => entries.push({ entry, cause }),
+    }),
+  );
   closeFacilitator = f.close;
   base = `http://127.0.0.1:${port}`;
 }

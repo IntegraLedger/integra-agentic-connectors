@@ -18,7 +18,7 @@ import { openStore } from "../src/store.js";
 import {
   controlledClock,
   fixture,
-  freePort,
+  onWorkerPort,
   freshDatabase,
   post,
   stub,
@@ -106,14 +106,15 @@ async function start(settleWaitMs: number): Promise<void> {
     }
     return tronChainReads(path, sent) ?? {};
   });
-  const port = await freePort();
-  const f = await serveProfileFacilitator({
-    listen: `127.0.0.1:${port}`,
-    tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],
-    store: { url: db.url },
-    settleWaitMs: clock.settleWait(settleWaitMs),
-    operatorLog: (entry, cause) => entries.push({ entry, cause }),
-  });
+  const { port, server: f } = await onWorkerPort((p) =>
+    serveProfileFacilitator({
+      listen: `127.0.0.1:${p}`,
+      tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],
+      store: { url: db.url },
+      settleWaitMs: clock.settleWait(settleWaitMs),
+      operatorLog: (entry, cause) => entries.push({ entry, cause }),
+    }),
+  );
   closeFacilitator = f.close;
   base = `http://127.0.0.1:${port}`;
 }

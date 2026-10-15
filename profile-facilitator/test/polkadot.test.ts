@@ -18,7 +18,7 @@ import {
   asked,
   controlledClock,
   fixture,
-  freePort,
+  onWorkerPort,
   freshDatabase,
   gate,
   post,
@@ -172,14 +172,15 @@ async function start(chain: Chain = {}, network: string = NETWORK, settleWaitMs 
     }
     return { jsonrpc: "2.0", id, error: { code: -32601, message: `no stub for ${method} ${p}` } };
   }, chain.leaves);
-  const port = await freePort();
-  const f = await serveProfileFacilitator({
-    listen: `127.0.0.1:${port}`,
-    polkadot: [{ network: network as typeof NETWORK, rpc: node.url }],
-    store: { url: db.url },
-    settleWaitMs: clock.settleWait(settleWaitMs),
-    operatorLog: (entry, cause) => entries.push({ entry, cause }),
-  });
+  const { port, server: f } = await onWorkerPort((p) =>
+    serveProfileFacilitator({
+      listen: `127.0.0.1:${p}`,
+      polkadot: [{ network: network as typeof NETWORK, rpc: node.url }],
+      store: { url: db.url },
+      settleWaitMs: clock.settleWait(settleWaitMs),
+      operatorLog: (entry, cause) => entries.push({ entry, cause }),
+    }),
+  );
   closeFacilitator = f.close;
   base = `http://127.0.0.1:${port}`;
 }

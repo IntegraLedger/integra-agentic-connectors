@@ -13,7 +13,7 @@ import { serveProfileFacilitator } from "../src/index.js";
 import {
   controlledClock,
   fixture,
-  freePort,
+  onWorkerPort,
   freshDatabase,
   gate,
   post,
@@ -85,13 +85,14 @@ beforeEach(async () => {
     if (path === "/wallet/gettransactioninfobyid") return live["infoNotFound"];
     return tronChainReads(path, sent) ?? {};
   });
-  const port = await freePort();
-  const f = await serveProfileFacilitator({
-    listen: `127.0.0.1:${port}`,
-    tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],
-    store: { url: db.url },
-    settleWaitMs: 1_000,
-  });
+  const { port, server: f } = await onWorkerPort((p) =>
+    serveProfileFacilitator({
+      listen: `127.0.0.1:${p}`,
+      tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],
+      store: { url: db.url },
+      settleWaitMs: 1_000,
+    }),
+  );
   closeFacilitator = f.close;
   base = `http://127.0.0.1:${port}`;
 });

@@ -21,7 +21,7 @@ import {
   controlledClock,
   fixture,
   gate,
-  freePort,
+  onWorkerPort,
   freshDatabase,
   HANG,
   post,
@@ -177,14 +177,15 @@ async function start(n: Node = {}, settleWaitMs = 3_000): Promise<void> {
     if (path === "/wallet/gettransactionfrompending" && n.pendingPool !== undefined) return n.pendingPool();
     return tronChainReads(path, sent) ?? {};
   }, n.leaves);
-  const port = await freePort();
-  const f = await serveProfileFacilitator({
-    listen: `127.0.0.1:${port}`,
-    tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],
-    store: { url: db.url },
-    settleWaitMs: clock.settleWait(settleWaitMs),
-    operatorLog: (entry, cause) => entries.push({ entry, cause }),
-  });
+  const { port, server: f } = await onWorkerPort((p) =>
+    serveProfileFacilitator({
+      listen: `127.0.0.1:${p}`,
+      tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],
+      store: { url: db.url },
+      settleWaitMs: clock.settleWait(settleWaitMs),
+      operatorLog: (entry, cause) => entries.push({ entry, cause }),
+    }),
+  );
   closeFacilitator = f.close;
   base = `http://127.0.0.1:${port}`;
 }
@@ -533,13 +534,14 @@ describe("deduplication", () => {
     });
     expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(SUCCESS);
     const other = await freshDatabase();
-    const port = await freePort();
-    const second = await serveProfileFacilitator({
-      listen: `127.0.0.1:${port}`,
-      tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],
-      store: { url: other.url },
-      settleWaitMs: 3_000,
-    });
+    const { port, server: second } = await onWorkerPort((p) =>
+      serveProfileFacilitator({
+        listen: `127.0.0.1:${p}`,
+        tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],
+        store: { url: other.url },
+        settleWaitMs: 3_000,
+      }),
+    );
     try {
       expect((await post(`http://127.0.0.1:${port}/verify`, body(TX_V2))).json).toEqual({
         isValid: false,

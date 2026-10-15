@@ -22,7 +22,7 @@ import { ApiPromise } from "@polkadot/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
 import { BLOCK_READS, blockReads } from "../src/polkadot.js";
-import { controlledClock, fixture, freePort, freshDatabase, post, reaches, stub, until, type Clock, type Stub } from "./support.js";
+import { controlledClock, fixture, onWorkerPort, freshDatabase, post, reaches, stub, until, type Clock, type Stub } from "./support.js";
 
 vi.mock("../src/http.js", async (original) => (await import("./support.js")).countingSleep(await original<typeof import("../src/http.js")>()));
 
@@ -161,13 +161,15 @@ async function start(settleWaitMs = 1_500): Promise<void> {
     }
     return { jsonrpc: "2.0", id, error: { code: -32601, message: `no stub for ${method} ${p}` } };
   });
-  const port = await freePort();
-  const f = await serveProfileFacilitator({
-    listen: `127.0.0.1:${port}`,
-    polkadot: [{ network: NETWORK, rpc: node.url }],
-    store: { url: db.url },
-    settleWaitMs: clock.settleWait(settleWaitMs),
-  });
+  const rpc = node.url;
+  const { port, server: f } = await onWorkerPort((p) =>
+    serveProfileFacilitator({
+      listen: `127.0.0.1:${p}`,
+      polkadot: [{ network: NETWORK, rpc }],
+      store: { url: db.url },
+      settleWaitMs: clock.settleWait(settleWaitMs),
+    }),
+  );
   closeFacilitator = f.close;
   base = `http://127.0.0.1:${port}`;
   // A /verify loads the runtime metadata before any /settle.

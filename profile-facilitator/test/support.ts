@@ -1,9 +1,8 @@
-// Test support: a fresh Postgres database per test file, local node stubs over node:http, a free port below the
-// kernel's outgoing range, JSON POSTs, and the controlled clock the facilitator's waits run on.
+// Test support: a fresh Postgres database per test, local node stubs over node:http, servers started on this vitest
+// worker's own ports, JSON POSTs, and the controlled clock the facilitator's waits run on.
 import { randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { createServer as netServer } from "node:net";
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { gunzipSync } from "node:zlib";
 import pg from "pg";
 import { vi } from "vitest";
@@ -324,26 +323,58 @@ function ephemeralLow(): number {
   }
 }
 
+/** The ports of this process's nodes made with `leaves`, each kept from its first listen until it closes. */
+const kept = new Set<number>();
+
 /**
- * A port on 127.0.0.1, free when chosen. It lies below the kernel's range for outgoing connections, so no client
- * socket, and no socket in TIME_WAIT, holds it when the facilitator binds it, and above 10080, the highest of the
- * Fetch Standard's bad ports, to which `fetch` refuses to connect.
+ * This vitest worker's ports on 127.0.0.1: the slice of 500, by its VITEST_POOL_ID, of the ports below the kernel's
+ * range for outgoing connections and above 10080, the highest of the Fetch Standard's bad ports, to which `fetch`
+ * refuses to connect. Below that range the kernel gives no port to an outgoing connection; a socket left in TIME_WAIT
+ * by a server's own connections does not stop a listen, which Node binds with SO_REUSEADDR. Test files that run at
+ * the same time in one vitest run have different pool ids, so within a run a server of another file is never started
+ * on one of these ports; another vitest run on the same host uses the same slices.
  */
-export async function freePort(): Promise<number> {
+function workerPorts(): { low: number; high: number } {
   const low = 10_081;
-  const high = Math.min(ephemeralLow(), 32_768);
-  if (high - low < 1_000) throw new Error(`no port range below the kernel's outgoing range (it starts at ${high})`);
+  const width = 500;
+  const slices = Math.floor((Math.min(ephemeralLow(), 32_768) - low) / width);
+  const pool = Number(process.env["VITEST_POOL_ID"]);
+  if (!Number.isInteger(pool) || pool < 1) {
+    throw new Error(`VITEST_POOL_ID is not a pool id: ${process.env["VITEST_POOL_ID"]}`);
+  }
+  if (pool > slices) {
+    throw new Error(`pool id ${pool} has no slice of 500 ports below the outgoing range (${slices} slices)`);
+  }
+  return { low: low + (pool - 1) * width, high: low + pool * width };
+}
+
+/**
+ * Starts a server with `start` on one of this worker's ports, and gives the port with what `start` returned. The bind
+ * is the server's own, so the port is never free between its choice and its use. A port another server holds fails
+ * the bind with EADDRINUSE, and another port is tried; a kept port is never tried.
+ */
+export async function onWorkerPort<T>(start: (port: number) => Promise<T>): Promise<{ port: number; server: T }> {
+  const { low, high } = workerPorts();
   for (;;) {
     const port = low + Math.floor(Math.random() * (high - low));
-    const s = netServer();
-    const bound = await new Promise<boolean>((resolve) => {
-      s.once("error", () => resolve(false));
-      s.listen(port, "127.0.0.1", () => resolve(true));
-    });
-    if (!bound) continue;
-    await new Promise<void>((resolve) => s.close(() => resolve()));
-    return port;
+    if (kept.has(port)) continue;
+    try {
+      return { port, server: await start(port) };
+    } catch (e) {
+      if ((e as { code?: unknown }).code !== "EADDRINUSE") throw e;
+    }
   }
+}
+
+/** Listens on 127.0.0.1 at `port`, and rejects with the listen's error. */
+function listenAt(server: Server, port: number): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(port, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
 }
 
 export interface Call {
@@ -365,8 +396,9 @@ export interface Stub {
  *
  * With `leaves`, the node stops listening once `leaves` is true of the calls it has received, so a later request is
  * refused at connect and carries no byte to it, while each call it has received is answered. Each answer closes its
- * connection, so no later request is sent over an earlier connection, and the node listens on a `freePort()`, which
- * `listen()` takes again.
+ * connection, so no later request is sent over an earlier connection. The node listens on one of this worker's ports,
+ * kept for it until it closes, so no other server here is started on it while it is stopped, and `listen()` takes it
+ * again.
  */
 export async function stub(
   answer: (path: string, body: unknown) => unknown | Promise<unknown>,
@@ -397,19 +429,20 @@ export async function stub(
     res.writeHead(200, { "content-type": raw ? "text/html" : "application/json", ...closing });
     res.end(out);
   });
-  const chosen = leaves === undefined ? 0 : await freePort();
-  await new Promise<void>((resolve) => server.listen(chosen, "127.0.0.1", resolve));
+  if (leaves === undefined) await listenAt(server, 0);
+  else kept.add((await onWorkerPort((p) => listenAt(server, p))).port);
   const port = (server.address() as { port: number }).port;
   return {
     url: `http://127.0.0.1:${port}`,
     calls,
     async listen() {
-      await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
+      await listenAt(server, port);
     },
     async close() {
       for (const r of open) r.destroy();
       server.closeAllConnections();
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      kept.delete(port);
     },
   };
 }
