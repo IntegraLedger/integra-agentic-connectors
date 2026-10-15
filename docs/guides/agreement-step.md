@@ -20,10 +20,11 @@ sequenceDiagram
     participant C as Connector
     participant D as Seller door
     participant B as Buyer's agent
+    participant U as agreement.url
     C->>D: issue
     D-->>C: atrHash, link, carriers, agreement {url, network, pairing}
     C->>B: the carriers, with agreement.url beside them
-    B->>D: pays agreement.url (a nominal payment carrying H)
+    B->>U: pays (a nominal payment carrying H)
     C->>D: status
     D-->>C: agreement.state recorded
     C->>B: the full payment may start
