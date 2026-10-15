@@ -1,11 +1,13 @@
 // Compiles and runs every TypeScript sample in the READMEs (every README.md in the tree) and in docs/, against the
 // packages built in this tree.
 //
-// A sample is a fenced block (``` or ~~~) whose language is `ts` or `typescript`. A block fenced in another TypeScript
-// or JavaScript language (`tsx`, `mts`, `js`, `TS`, …) fails, so no sample leaves the run by its label. A fenced `text`
-// block whose info string holds `output`, directly after a sample, is that sample's expected standard output; a sample
-// without one fails. A sample whose info string holds `server` is sent SIGTERM once it has printed its first line, and
-// must then exit 0. A run that finds no sample fails.
+// A fence opens with three or more backticks or tildes and closes with a line of at least as many of the same
+// character, indented up to three spaces, as Markdown closes it, or as far as the opening. A sample is a fenced block
+// whose language is `ts` or `typescript`. A block fenced in another TypeScript or JavaScript language (`tsx`, `mts`,
+// `js`, `TS`, …) fails, so no sample leaves the run by its label. A fenced `text` block whose info string holds
+// `output`, directly after a sample, is that sample's expected standard output; a sample without one fails. A sample
+// whose info string holds `server` is sent SIGTERM once it has printed its first line, and must then exit 0. A run that
+// finds no sample fails.
 //
 // A sample runs inside the package it imports (`@integraledger/profile-facilitator`, else
 // `@integraledger/agentic-connectors`), so both it and `@integraledger/lcp` resolve as they do for an installer. It
@@ -62,7 +64,7 @@ function blocks(file) {
     const [, indent, fence, lang, info] = open;
     const body = [];
     let j = i + 1;
-    const close = new RegExp(`^${indent}${fence[0]}{${fence.length},}\\s*$`);
+    const close = new RegExp(`^(?: {0,3}|${indent})${fence[0]}{${fence.length},}\\s*$`);
     for (; j < lines.length && !close.test(lines[j]); j++) body.push(lines[j].slice(indent.length));
     out.push({ lang, info, body: body.join("\n"), line: i + 1 });
     i = j;
