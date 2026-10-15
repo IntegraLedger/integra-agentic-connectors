@@ -127,7 +127,7 @@ The request cannot be served as sent.
 
 ## 503
 
-Not available now; retry after one second.
+Not available now; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402.
 
 | Code | Meaning |
 |---|---|

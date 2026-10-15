@@ -46,7 +46,7 @@ Requires the seller credential: `Authorization: Bearer isk_…`.
 | 422 | The request cannot be served as sent. | [Refusal](#refusal): [`door/request-required`](./refusals.md#doorrequest-required), [`issue/input-bounds`](./refusals.md#issueinput-bounds), [`issue/pairing-not-served`](./refusals.md#issuepairing-not-served), [`issue/offer-refused`](./refusals.md#issueoffer-refused), [`issue/mixed-protocols`](./refusals.md#issuemixed-protocols), [`core/slot-name`](./refusals.md#coreslot-name), [`core/slot-reserved`](./refusals.md#coreslot-reserved), [`core/slot-duplicate`](./refusals.md#coreslot-duplicate), [`core/content-not-json`](./refusals.md#corecontent-not-json), [`core/binding-not-json`](./refusals.md#corebinding-not-json), [`core/too-large`](./refusals.md#coretoo-large) |  |
 | 431 | The request's header block is larger than the runtime reads. | [RuntimeRefusal](#runtimerefusal): [`bad-request`](./refusals.md#bad-request) |  |
 | 500 | The request could not be served; quote the `correlationId` to the door's operator. | [RuntimeRefusal](#runtimerefusal): [`fault`](./refusals.md#fault) |  |
-| 503 | Not available now; retry after one second. | [Refusal](#refusal): [`issue/deadline`](./refusals.md#issuedeadline), [`issue/contributor-unavailable`](./refusals.md#issuecontributor-unavailable), [`issue/storage-unavailable`](./refusals.md#issuestorage-unavailable), [`issue/store-unavailable`](./refusals.md#issuestore-unavailable), [`issue/capacity`](./refusals.md#issuecapacity); [RuntimeRefusal](#runtimerefusal): [`at-capacity`](./refusals.md#at-capacity) | `Retry-After`: `1` |
+| 503 | Not available now; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402. | [Refusal](#refusal): [`issue/deadline`](./refusals.md#issuedeadline), [`issue/contributor-unavailable`](./refusals.md#issuecontributor-unavailable), [`issue/storage-unavailable`](./refusals.md#issuestorage-unavailable), [`issue/store-unavailable`](./refusals.md#issuestore-unavailable), [`issue/capacity`](./refusals.md#issuecapacity); [RuntimeRefusal](#runtimerefusal): [`at-capacity`](./refusals.md#at-capacity) | `Retry-After`: `1` |
 
 ### claim
 
@@ -72,7 +72,7 @@ Requires the seller credential: `Authorization: Bearer isk_…`.
 | 422 | The request cannot be served as sent. | [Refusal](#refusal): [`door/request-required`](./refusals.md#doorrequest-required), [`claim/pairing-unknown`](./refusals.md#claimpairing-unknown), [`claim/not-bound`](./refusals.md#claimnot-bound), [`claim/nothing-to-check`](./refusals.md#claimnothing-to-check) |  |
 | 431 | The request's header block is larger than the runtime reads. | [RuntimeRefusal](#runtimerefusal): [`bad-request`](./refusals.md#bad-request) |  |
 | 500 | The request could not be served; quote the `correlationId` to the door's operator. | [RuntimeRefusal](#runtimerefusal): [`fault`](./refusals.md#fault) |  |
-| 503 | Not available now; retry after one second. | [Refusal](#refusal): [`claim/store-unavailable`](./refusals.md#claimstore-unavailable), [`claim/read-unavailable`](./refusals.md#claimread-unavailable); [RuntimeRefusal](#runtimerefusal): [`at-capacity`](./refusals.md#at-capacity) | `Retry-After`: `1` |
+| 503 | Not available now; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402. | [Refusal](#refusal): [`claim/store-unavailable`](./refusals.md#claimstore-unavailable), [`claim/read-unavailable`](./refusals.md#claimread-unavailable); [RuntimeRefusal](#runtimerefusal): [`at-capacity`](./refusals.md#at-capacity) | `Retry-After`: `1` |
 
 ### report
 
@@ -98,7 +98,7 @@ Requires the seller credential: `Authorization: Bearer isk_…`.
 | 422 | The request cannot be served as sent. | [Refusal](#refusal): [`door/chosen-required`](./refusals.md#doorchosen-required), [`door/reference-required`](./refusals.md#doorreference-required), [`door/receipt-required`](./refusals.md#doorreceipt-required), [`claim/pairing-unknown`](./refusals.md#claimpairing-unknown) |  |
 | 431 | The request's header block is larger than the runtime reads. | [RuntimeRefusal](#runtimerefusal): [`bad-request`](./refusals.md#bad-request) |  |
 | 500 | The request could not be served; quote the `correlationId` to the door's operator. | [RuntimeRefusal](#runtimerefusal): [`fault`](./refusals.md#fault) |  |
-| 503 | Not available now; retry after one second. | [Refusal](#refusal): [`settle/store-unavailable`](./refusals.md#settlestore-unavailable); [RuntimeRefusal](#runtimerefusal): [`at-capacity`](./refusals.md#at-capacity) | `Retry-After`: `1` |
+| 503 | Not available now; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402. | [Refusal](#refusal): [`settle/store-unavailable`](./refusals.md#settlestore-unavailable); [RuntimeRefusal](#runtimerefusal): [`at-capacity`](./refusals.md#at-capacity) | `Retry-After`: `1` |
 
 ### status
 
@@ -120,7 +120,7 @@ Requires the seller credential: `Authorization: Bearer isk_…`.
 | 413 | The body is larger than the runtime accepts for any request. | [RuntimeRefusal](#runtimerefusal): [`body-too-large`](./refusals.md#body-too-large) |  |
 | 431 | The request's header block is larger than the runtime reads. | [RuntimeRefusal](#runtimerefusal): [`bad-request`](./refusals.md#bad-request) |  |
 | 500 | The request could not be served; quote the `correlationId` to the door's operator. | [RuntimeRefusal](#runtimerefusal): [`fault`](./refusals.md#fault) |  |
-| 503 | Not available now; retry after one second. | [Refusal](#refusal): [`settle/store-unavailable`](./refusals.md#settlestore-unavailable); [RuntimeRefusal](#runtimerefusal): [`at-capacity`](./refusals.md#at-capacity) | `Retry-After`: `1` |
+| 503 | Not available now; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402. | [Refusal](#refusal): [`settle/store-unavailable`](./refusals.md#settlestore-unavailable); [RuntimeRefusal](#runtimerefusal): [`at-capacity`](./refusals.md#at-capacity) | `Retry-After`: `1` |
 
 ### openapi
 

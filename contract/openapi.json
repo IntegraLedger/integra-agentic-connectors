@@ -416,13 +416,13 @@
             }
           },
           "503": {
-            "description": "Not available now; retry after one second.",
+            "description": "Not available now; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402.",
             "content": {
               "application/json": {
                 "schema": {
                   "oneOf": [
                     {
-                      "description": "Not available now; retry after one second.",
+                      "description": "Not available now; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402.",
                       "allOf": [
                         {
                           "$ref": "#/components/schemas/Refusal"
@@ -896,13 +896,13 @@
             }
           },
           "503": {
-            "description": "Not available now; retry after one second.",
+            "description": "Not available now; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402.",
             "content": {
               "application/json": {
                 "schema": {
                   "oneOf": [
                     {
-                      "description": "Not available now; retry after one second.",
+                      "description": "Not available now; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402.",
                       "allOf": [
                         {
                           "$ref": "#/components/schemas/Refusal"
@@ -1349,13 +1349,13 @@
             }
           },
           "503": {
-            "description": "Not available now; retry after one second.",
+            "description": "Not available now; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402.",
             "content": {
               "application/json": {
                 "schema": {
                   "oneOf": [
                     {
-                      "description": "Not available now; retry after one second.",
+                      "description": "Not available now; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402.",
                       "allOf": [
                         {
                           "$ref": "#/components/schemas/Refusal"
@@ -1671,13 +1671,13 @@
             }
           },
           "503": {
-            "description": "Not available now; retry after one second.",
+            "description": "Not available now; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402.",
             "content": {
               "application/json": {
                 "schema": {
                   "oneOf": [
                     {
-                      "description": "Not available now; retry after one second.",
+                      "description": "Not available now; retry after one second. A 503 is never a 402: if the retry answers 503 too, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only with a 402.",
                       "allOf": [
                         {
                           "$ref": "#/components/schemas/Refusal"
