@@ -64,9 +64,9 @@ the pairing's statement of what it proves says so. Whatever the protocol and rai
 
 ## Pairings and bindings
 
-A **pairing** is a payment protocol, scheme and rail combination, such as `x402/exact/eip155/eip3009`. The seller
-door accepts every pairing `@integraledger/lcp` registers; [the pairings reference](../reference/pairings.md) lists
-them.
+A **pairing** is a payment protocol, scheme and rail combination, such as `x402/exact/eip155/eip3009`. Its id is one
+`@integraledger/lcp` registers, and a resource serves the pairings the seller declared for it;
+[the pairings reference](../reference/pairings.md) lists them.
 
 A **binding** is how H rides in a pairing's payment: the field its specification defines. On
 `x402/exact/eip155/eip3009`, H is the EIP-3009 authorization's `nonce`, which the payer signs and which lands on chain
