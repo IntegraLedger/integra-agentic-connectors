@@ -151,6 +151,7 @@ jobs:
           const bad = [];
           // Spelled in parts, so that this step's own lines do not hold what it looks for.
           const PATH_FILE = ["GITHUB", "PATH"].join("_");
+          const ENV_FILE = ["GITHUB", "ENV"].join("_");
           if (process.version !== `v${v}`) bad.push(`node ${process.version} runs this step, where .node-version names ${v}`);
           const tarball = `node-v${v}-linux-x64.tar.xz`;
           const url = `https://nodejs.org/dist/v${v}/${tarball}`;
@@ -178,9 +179,28 @@ jobs:
           for (const [f, lines] of text) {
             const at = (i) => `${f}:${i + 1}`;
             lines.forEach((l, i) => {
-              // Nothing runs another Node.js, changes PATH, or lets a step or a job be skipped or fail without failing the run.
-              if (/setup-[n]ode|continue-on-[e]rror|^\s*(- )?(if|container|PATH):/.test(l)) bad.push(`${at(i)}: ${l.trim()}`);
+              // Nothing runs another Node.js or another shell, changes PATH or the environment of the steps after
+              // it, or lets a step or a job be skipped or fail without failing the run.
+              if (/setup-[n]ode|continue-on-[e]rror|^\s*(- )?(if|container|shell|PATH):/.test(l)) bad.push(`${at(i)}: ${l.trim()}`);
               if (l.includes(PATH_FILE) && !paths.has(l)) bad.push(`${at(i)}: a PATH entry other than the fetched Node.js and pnpm`);
+              if (l.includes(ENV_FILE)) bad.push(`${at(i)}: a step sets the environment of the steps after it`);
+            });
+            // The patterns here read lines, so every workflow is written in YAML's plain block style: outside a block
+            // scalar (`run: |`), a line is blank, a comment, one plain key and its value, or a sequence entry that is
+            // one plain word (a port mapping such as 5432:5432). No value is a flow mapping other than {}, a flow
+            // sequence of anything but plain words, an anchor, an alias or a tag.
+            let scalar = -1;
+            lines.forEach((l, i) => {
+              const indent = l.length - l.trimStart().length;
+              if (scalar >= 0 && (l.trim() === "" || indent > scalar)) return;
+              scalar = -1;
+              if (blank(l)) return;
+              const key = /^( *)(- )?[A-Za-z0-9_-]+:(?: +(.*))?$/.exec(l);
+              const word = /^ *- [A-Za-z0-9_./][A-Za-z0-9_./-]*(:[A-Za-z0-9_./-]+)*$/.test(l);
+              const value = (key?.[3] ?? "").replace(/(^| +)#.*$/, "");
+              if ((key === null && !word) || /^[&*!]/.test(value) || (value.startsWith("{") && value !== "{}") || (value.startsWith("[") && !/^\[[^\][{}:#"']*\]$/.test(value))) {
+                bad.push(`${at(i)}: not one plain key and value: ${l.trim()}`);
+              } else if (/^[|>][-+1-9]*$/.test(value)) scalar = key[1].length + (key[2] ? 2 : 0);
             });
             const start = lines.indexOf("jobs:");
             if (start < 0 || lines.lastIndexOf("jobs:") !== start) {
