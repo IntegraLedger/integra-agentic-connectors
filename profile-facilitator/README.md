@@ -319,7 +319,8 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
    (steps 3 and 4), reading the finalized head before the validation. The settle's wait is checked before each of
    these three node reads and before each node call they make: once `settleWaitMs` has passed, it sends no node call
    and answers `unexpected_settle_error`. A metadata load, which serves every request for the network, is not started
-   then; one started earlier goes on within its own bound.
+   then; one started earlier goes on within its own bound of 30 seconds, and sends no node call once that bound has
+   passed.
    Step 1's refusals come first; the decode's refusals need the node's metadata, so they are given only while the wait
    leaves time for it. Then claims the hash, with the first block to scan: the block after the finalized head read
    before validation, never before the era's birth. Once the wait for the chain has ended, the submission would have
@@ -481,7 +482,9 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   before the claim, and the end of the wait for the chain for the submission and the reads that follow the chain:
   that wait ends a second before the deadline (a quarter of a shorter `settleWaitMs`), the time kept for storing the
   answer. A call its bound leaves no time for is not sent. A Polkadot metadata load serves every request for its
-  network: its calls have the node call bound alone, and the load as a whole 30 seconds.
+  network, so no request's deadline bounds it: the load has 30 seconds as a whole, and each of its calls has the node
+  call bound within the time the load has left. Once the 30 seconds have passed, the load is given up: it has no call
+  in flight and sends no further call, and a later request starts a fresh load.
 - A request body is at most 64 KiB. The server's request timeout is `settleWaitMs` plus 60 seconds.
 - The table holds a row with a final answer until 24 hours after its validity window ends. A row with no final answer
   stays until a repeated `/settle` for it gives one. Each such row is a payment that passed every check and was

@@ -170,6 +170,11 @@ export function resumeLate(matches: (call: string, body: unknown) => boolean): {
   return { arrived: () => held.arrived && unanswered === 0, resume: () => held.resume.open() };
 }
 
+/** How many node and store calls the facilitator has made whose answers have not arrived. */
+export function unansweredCalls(): number {
+  return unanswered;
+}
+
 export interface Clock {
   /** Milliseconds the clock has moved since `controlledClock` installed it. */
   readonly elapsed: number;

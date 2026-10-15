@@ -57,7 +57,8 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
    (steps 3 and 4), reading the finalized head before the validation. The settle's wait is checked before each of
    these three node reads and before each node call they make: once `settleWaitMs` has passed, it sends no node call
    and answers `unexpected_settle_error`. A metadata load, which serves every request for the network, is not started
-   then; one started earlier goes on within its own bound.
+   then; one started earlier goes on within its own bound of 30 seconds, and sends no node call once that bound has
+   passed.
    Step 1's refusals come first; the decode's refusals need the node's metadata, so they are given only while the wait
    leaves time for it. Then claims the hash, with the first block to scan: the block after the finalized head read
    before validation, never before the era's birth. Once the wait for the chain has ended, the submission would have

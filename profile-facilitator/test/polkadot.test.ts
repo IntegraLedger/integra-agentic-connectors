@@ -25,6 +25,7 @@ import {
   reaches,
   resumeLate,
   stub,
+  unansweredCalls,
   until,
   type Call,
   type Clock,
@@ -847,6 +848,96 @@ describe("the operator log", () => {
     expect((await first).json).toEqual({ isValid: false, invalidReason: "unexpected_verify_error" });
     expect(entries.map((e) => e.entry)).toEqual([LOAD_ENTRY, LOAD_ENTRY]);
     expect((entries[1]!.cause as Error).message).toBe(ANOTHER_CHAIN);
+  });
+
+  // A metadata load has 30 s as a whole. A /settle with settleWaitMs 1,000 starts the load and stops waiting for it at
+  // 1,000 ms; the load is given up at 30,000 ms, and its failure reaches the log from its own handler, its cause the
+  // timeout. From then on the load asks for no node call and has none in flight.
+  const GIVEN_UP = { event: "node-call-failed", network: NETWORK, transaction: HASH_V3, call: "metadata" };
+  /** A node call's method, and for `state_call` the runtime call it names. */
+  const named = (sent: unknown) => {
+    const { method, params } = sent as { method: string; params: unknown[] };
+    return method === "state_call" ? `${method} ${String(params[0])}` : method;
+  };
+  const isMethodsRead = (_url: string, sent: unknown) => named(sent) === "rpc_methods";
+  const VERSIONS = "state_call Metadata_metadata_versions";
+
+  it("a metadata load given up at its bound asks for no node call after it, and the next request starts a fresh load", async () => {
+    // The load's methods read answers within its bound, and the facilitator goes on with it only once the clock is at
+    // 30,000 ms, as after time spent elsewhere: the rest of the load's calls would follow it.
+    await start({}, NETWORK, 1_000);
+    const methods = resumeLate(isMethodsRead);
+    const answer = post(`${base}/settle`, body());
+    let after: string[] = [];
+    let sent = 0;
+    try {
+      await reaches(answer, methods.arrived);
+      await clock.advanceTo(1_000);
+      expect((await answer).json).toEqual(REFUSED);
+      const wanted = asked.length;
+      sent = node.calls.length;
+      await clock.advanceTo(30_000);
+      await until(() => entries.length === 2);
+      methods.resume();
+      // One turn of the event loop: the load goes on from its methods read.
+      await new Promise((resolve) => setImmediate(resolve));
+      after = asked.slice(wanted).map((a) => named(a.body));
+    } finally {
+      // A test that stops early lets the held load answer, so the facilitator closes.
+      methods.resume();
+    }
+    expect(entries.map((e) => [e.entry, (e.cause as NodeError).code])).toEqual([
+      [GIVEN_UP, "timeout"],
+      [GIVEN_UP, "timeout"],
+    ]);
+    expect(after).toEqual([]);
+    expect(node.calls).toHaveLength(sent);
+    const loads = calls("rpc_methods").length;
+    expect((await post(`${base}/verify`, body())).json).toEqual({ isValid: true, payer: PAYER });
+    expect(calls("rpc_methods")).toHaveLength(loads + 1);
+  });
+
+  it("a metadata load given up at its bound ends the call it has in flight then, and asks for no node call after it", async () => {
+    // The facilitator goes on with the load's methods read at 26,000 ms, as after time spent elsewhere. The load sends
+    // its versions read then, with 4,000 ms of its 30 s left, and the node holds the answer: the node call bound
+    // alone would end that read at 31,000 ms.
+    const versions = gate();
+    await start(
+      {
+        hold: async (method, params) => {
+          if (named({ method, params }) === VERSIONS) await versions.opened;
+        },
+      },
+      NETWORK,
+      1_000,
+    );
+    const methods = resumeLate(isMethodsRead);
+    const answer = post(`${base}/settle`, body());
+    let inFlight = -1;
+    let after: string[] = [];
+    try {
+      await reaches(answer, methods.arrived);
+      await clock.advanceTo(1_000);
+      expect((await answer).json).toEqual(REFUSED);
+      await clock.advanceTo(26_000);
+      methods.resume();
+      await until(() => node.calls.some((c) => named(c.body) === VERSIONS));
+      const wanted = asked.length;
+      await clock.advanceTo(30_000);
+      await until(() => entries.length === 2);
+      inFlight = unansweredCalls();
+      await clock.advanceTo(31_000);
+      after = asked.slice(wanted).map((a) => named(a.body));
+    } finally {
+      // A test that stops early lets the held answers go, so the facilitator closes.
+      versions.open();
+      methods.resume();
+    }
+    expect(entries.map((e) => [e.entry, (e.cause as NodeError).code])).toEqual([
+      [GIVEN_UP, "timeout"],
+      [GIVEN_UP, "timeout"],
+    ]);
+    expect({ inFlight, after }).toEqual({ inFlight: 0, after: [] });
   });
 
   it("a store call that fails reaches the log with the network, the hash and the call, and the answer is pending with the hash", async () => {

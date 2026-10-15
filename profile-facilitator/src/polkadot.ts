@@ -37,7 +37,11 @@ export interface PolkadotNode {
 }
 
 const POLL_MS = 1_000;
-/** The longest a metadata load may take: its calls are each bounded, and this bounds them together. */
+/**
+ * The longest a metadata load may take. Each of its calls is bounded by the node call bound and by the time the load
+ * has left, and a call the load has no time left for is not sent: a load given up at this bound has no call in flight
+ * and sends no further call.
+ */
 const INIT_TIMEOUT_MS = 30_000;
 /** Milliseconds per block, used to turn the era's last block into the row's `until`. */
 const SLOW_BLOCK_MS = 12_000;
@@ -97,14 +101,20 @@ async function rpc(url: string, method: string, params: unknown[], timeoutMs?: n
   return answer["result"];
 }
 
-/** A provider for `@polkadot/api` whose every call is one bounded JSON-RPC POST, with no subscriptions. */
-function boundedProvider(url: string): Provider {
+/**
+ * A provider for `@polkadot/api`, with no subscriptions, for one metadata load that ends at `deadline` (on
+ * `performance.now()`). Every call is one JSON-RPC POST bounded by the node call bound and by the time left before
+ * `deadline`; once `deadline` has passed, a call is not sent and fails as `spent`. `@polkadot/api` goes on with a
+ * load's calls once its caller stops waiting for the load; this bound ends them, so a load given up at its deadline has
+ * no call in flight and sends no further call.
+ */
+function boundedProvider(url: string, deadline: number): Provider {
   const provider = {
     hasSubscriptions: false,
     isClonable: false,
     isConnected: true,
     clone(): Provider {
-      return boundedProvider(url);
+      return boundedProvider(url, deadline);
     },
     async connect(): Promise<void> {},
     async disconnect(): Promise<void> {},
@@ -112,7 +122,9 @@ function boundedProvider(url: string): Provider {
       return () => {};
     },
     send<T>(method: string, params: unknown[]): Promise<T> {
-      return rpc(url, method, params) as Promise<T>;
+      const left = deadline - performance.now();
+      if (left <= 0) return Promise.reject(new NodeError("spent", false, method));
+      return rpc(url, method, params, left) as Promise<T>;
     },
     subscribe(): Promise<number | string> {
       return Promise.reject(new Error("subscriptions are not used"));
@@ -281,10 +293,16 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     }
   }
 
+  /**
+   * The network's metadata, loaded through a provider whose calls end at the load's deadline, `INIT_TIMEOUT_MS` after
+   * the load starts. The load is given up at that deadline: it has no call in flight then and sends none after it, and
+   * a later request starts a fresh load.
+   */
   async function load(node: PolkadotNode): Promise<ApiPromise> {
-    const api = new ApiPromise({ provider: boundedProvider(node.rpc), noInitWarn: true, initWasm: false });
+    const deadline = performance.now() + INIT_TIMEOUT_MS;
+    const api = new ApiPromise({ provider: boundedProvider(node.rpc, deadline), noInitWarn: true, initWasm: false });
     try {
-      await within(api.isReadyOrError, INIT_TIMEOUT_MS);
+      await within(api.isReadyOrError, deadline - performance.now());
     } catch (e) {
       void api.disconnect();
       throw e;

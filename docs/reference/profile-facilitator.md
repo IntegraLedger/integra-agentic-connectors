@@ -111,7 +111,9 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   before the claim, and the end of the wait for the chain for the submission and the reads that follow the chain:
   that wait ends a second before the deadline (a quarter of a shorter `settleWaitMs`), the time kept for storing the
   answer. A call its bound leaves no time for is not sent. A Polkadot metadata load serves every request for its
-  network: its calls have the node call bound alone, and the load as a whole 30 seconds.
+  network, so no request's deadline bounds it: the load has 30 seconds as a whole, and each of its calls has the node
+  call bound within the time the load has left. Once the 30 seconds have passed, the load is given up: it has no call
+  in flight and sends no further call, and a later request starts a fresh load.
 - A Polkadot node that keeps the state of every block (an archive node) gives the events of any block; a pruning
   node discards the state of older blocks, and a block that holds the extrinsic and whose state is discarded keeps the
   answer `settlement_pending`.
