@@ -11,7 +11,7 @@ never issued. Every step is a complete program you can run.
 ## 1. Install
 
 ```sh
-npm install @integraledger/agentic-connectors @integraledger/lcp
+npm install @integraledger/agentic-connectors @integraledger/lcp@~0.4.0
 ```
 
 The package needs Node.js `>=26.11.1` and is ESM only, and takes `@integraledger/lcp` (`~0.4.0`) as a peer dependency.

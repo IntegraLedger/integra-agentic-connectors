@@ -61,7 +61,7 @@ sequenceDiagram
 ## Install
 
 ```sh
-npm install @integraledger/profile-facilitator @integraledger/lcp
+npm install @integraledger/profile-facilitator @integraledger/lcp@~0.4.0
 ```
 
 It needs Node.js `>=26.11.1`, Postgres (the tests run on Postgres 18), and an HTTP endpoint for each network you
