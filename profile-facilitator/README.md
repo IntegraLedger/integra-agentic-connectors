@@ -27,7 +27,7 @@ validate or simulate it, submits exactly the bytes the payer signed, deduplicate
 
 ## Key concepts
 
-- **Agentic Transaction Record (ATR):** the agreement's record, a JSON document the seller serves.
+- **Agentic Transaction Record (ATR):** the agreement's record, the exact bytes the seller serves.
 - **ATR hash (H):** SHA-256 over the ATR's exact bytes.
 - **Legal Context Protocol (LCP):** the pattern these profiles implement: H bound into the payment, so that where the
   payment the buyer approves carries H, that approval is the buyer's acceptance of that exact record; where it does
