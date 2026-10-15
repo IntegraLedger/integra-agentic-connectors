@@ -11,7 +11,7 @@ The package's entry point exports:
 
 | Export | Kind | What it is |
 |---|---|---|
-| `serveProfileFacilitator(config)` | `(c: ProfileFacilitatorConfig) => Promise<{ close(): Promise<void> }>` | Opens the store, starts the HTTP server and resolves once it listens. |
+| `serveProfileFacilitator(config)` | `(c: ProfileFacilitatorConfig) => Promise<{ close(): Promise<void> }>` | Opens the store, starts the HTTP server and resolves once it listens. If it cannot start, it closes the store and rejects with the error that stopped it, such as the listen's `EADDRINUSE`. |
 | `ProfileFacilitatorConfig` | interface | The configuration: see [Run the profile facilitator](../guides/facilitator.md#configuration). |
 
 The generated declarations are in [the API reference](./api/profile-facilitator/index.md).

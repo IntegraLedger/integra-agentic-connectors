@@ -74,122 +74,132 @@ export async function serveProfileFacilitator(c: ProfileFacilitatorConfig): Prom
     Number.isFinite(c.settleWaitMs) && c.settleWaitMs > 0 ? c.settleWaitMs : DEFAULT_SETTLE_WAIT_MS;
   const log = guarded(c.operatorLog ?? operatorLine);
   const store: SettlementStore = await openStore(c.store.url, log);
-  const tron = createTron(
-    (c.tron ?? []).map((n) => ({ ...n, fullNode: trimmed(n.fullNode), solidityNode: trimmed(n.solidityNode) })),
-    store,
-    settleWaitMs,
-    log,
-  );
-  const polkadot = createPolkadot(
-    (c.polkadot ?? []).map((n) => ({ ...n, rpc: trimmed(n.rpc) })),
-    store,
-    settleWaitMs,
-    log,
-  );
+  // If the facilitator does not start, what it opened is closed before its error goes to the caller unchanged: the
+  // store's pool and sweep, and the Polkadot rail, which opens a node's client only on that node's first request.
+  let closeNodes = async (): Promise<void> => {};
+  try {
+    const tron = createTron(
+      (c.tron ?? []).map((n) => ({ ...n, fullNode: trimmed(n.fullNode), solidityNode: trimmed(n.solidityNode) })),
+      store,
+      settleWaitMs,
+      log,
+    );
+    const polkadot = createPolkadot(
+      (c.polkadot ?? []).map((n) => ({ ...n, rpc: trimmed(n.rpc) })),
+      store,
+      settleWaitMs,
+      log,
+    );
+    closeNodes = () => polkadot.close();
 
-  const supported = {
-    kinds: [
-      ...tron.networks.map((network) => ({
-        x402Version: 2,
-        scheme: "exact",
-        network,
-        extra: { assetTransferMethod: LCP_TRC20_MEMO },
-      })),
-      ...polkadot.networks.map((network) => ({
-        x402Version: 2,
-        scheme: "exact",
-        network,
-        extra: { assetTransferMethod: LCP_ASSETS_REMARK },
-      })),
-    ],
-    extensions: [],
-    signers: {},
-  };
+    const supported = {
+      kinds: [
+        ...tron.networks.map((network) => ({
+          x402Version: 2,
+          scheme: "exact",
+          network,
+          extra: { assetTransferMethod: LCP_TRC20_MEMO },
+        })),
+        ...polkadot.networks.map((network) => ({
+          x402Version: 2,
+          scheme: "exact",
+          network,
+          extra: { assetTransferMethod: LCP_ASSETS_REMARK },
+        })),
+      ],
+      extensions: [],
+      signers: {},
+    };
 
-  function railOf(r: FacilitatorRequest) {
-    const n = r.paymentRequirements.network;
-    if (tron.networks.includes(n)) return tron;
-    if (polkadot.networks.includes(n)) return polkadot;
-    return undefined;
-  }
-
-  async function verify(body: unknown): Promise<VerifyAnswer> {
-    const r = readRequest(body);
-    if (typeof r === "string") return { isValid: false, invalidReason: r };
-    const rail = railOf(r);
-    if (rail === undefined) return { isValid: false, invalidReason: "invalid_network" };
-    try {
-      return await rail.verify(r);
-    } catch (e) {
-      return invalid(unexpectedVerify(log, { event: "verify-error", network: r.paymentRequirements.network }, e));
+    function railOf(r: FacilitatorRequest) {
+      const n = r.paymentRequirements.network;
+      if (tron.networks.includes(n)) return tron;
+      if (polkadot.networks.includes(n)) return polkadot;
+      return undefined;
     }
-  }
 
-  async function settle(body: unknown): Promise<SettleAnswer> {
-    const r = readRequest(body);
-    if (typeof r === "string") return failed(r, "", networkOf(body));
-    const network = r.paymentRequirements.network;
-    const rail = railOf(r);
-    if (rail === undefined) return failed("invalid_network", "", network);
-    try {
-      return await rail.settle(r);
-    } catch (e) {
-      return unexpectedSettle(log, { event: "settle-error", network }, e);
+    async function verify(body: unknown): Promise<VerifyAnswer> {
+      const r = readRequest(body);
+      if (typeof r === "string") return { isValid: false, invalidReason: r };
+      const rail = railOf(r);
+      if (rail === undefined) return { isValid: false, invalidReason: "invalid_network" };
+      try {
+        return await rail.verify(r);
+      } catch (e) {
+        return invalid(unexpectedVerify(log, { event: "verify-error", network: r.paymentRequirements.network }, e));
+      }
     }
-  }
 
-  async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
-    const path = (req.url ?? "").split("?")[0];
-    if (path === "/supported") {
-      if (req.method !== "GET") return sendJson(res, 405, { error: "method not allowed" });
-      return sendJson(res, 200, supported);
+    async function settle(body: unknown): Promise<SettleAnswer> {
+      const r = readRequest(body);
+      if (typeof r === "string") return failed(r, "", networkOf(body));
+      const network = r.paymentRequirements.network;
+      const rail = railOf(r);
+      if (rail === undefined) return failed("invalid_network", "", network);
+      try {
+        return await rail.settle(r);
+      } catch (e) {
+        return unexpectedSettle(log, { event: "settle-error", network }, e);
+      }
     }
-    if (path !== "/verify" && path !== "/settle") return sendJson(res, 404, { error: "not found" });
-    if (req.method !== "POST") return sendJson(res, 405, { error: "method not allowed" });
-    const read = await readRequestJson(req);
-    if (read !== undefined && "tooLarge" in read) {
-      res.setHeader("connection", "close");
-      sendJson(res, 413, { error: "the body is larger than 64 KiB" });
-      req.destroy();
-      return;
-    }
-    if (read !== undefined && "left" in read) {
-      // The client left before its body was complete: there is no one to answer, and nothing failed here to log.
-      res.destroy();
-      return;
-    }
-    if (path === "/verify") {
-      if (read === undefined) return sendJson(res, 400, { isValid: false, invalidReason: "invalid_payload" });
-      return sendJson(res, 200, await verify(read.json));
-    }
-    if (read === undefined) return sendJson(res, 400, failed("invalid_payload", "", ""));
-    return sendJson(res, 200, await settle(read.json));
-  }
 
-  const server = createServer((req, res) => {
-    handle(req, res).catch((e: unknown) => {
-      log({ event: "request-error", path: (req.url ?? "").split("?")[0] }, e);
-      if (!res.headersSent) sendJson(res, 500, { error: "internal error" });
-      else res.destroy();
-    });
-  });
-  server.requestTimeout = settleWaitMs + 60_000;
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(port, host, () => {
-      server.off("error", reject);
-      resolve();
-    });
-  });
+    async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+      const path = (req.url ?? "").split("?")[0];
+      if (path === "/supported") {
+        if (req.method !== "GET") return sendJson(res, 405, { error: "method not allowed" });
+        return sendJson(res, 200, supported);
+      }
+      if (path !== "/verify" && path !== "/settle") return sendJson(res, 404, { error: "not found" });
+      if (req.method !== "POST") return sendJson(res, 405, { error: "method not allowed" });
+      const read = await readRequestJson(req);
+      if (read !== undefined && "tooLarge" in read) {
+        res.setHeader("connection", "close");
+        sendJson(res, 413, { error: "the body is larger than 64 KiB" });
+        req.destroy();
+        return;
+      }
+      if (read !== undefined && "left" in read) {
+        // The client left before its body was complete: there is no one to answer, and nothing failed here to log.
+        res.destroy();
+        return;
+      }
+      if (path === "/verify") {
+        if (read === undefined) return sendJson(res, 400, { isValid: false, invalidReason: "invalid_payload" });
+        return sendJson(res, 200, await verify(read.json));
+      }
+      if (read === undefined) return sendJson(res, 400, failed("invalid_payload", "", ""));
+      return sendJson(res, 200, await settle(read.json));
+    }
 
-  return {
-    async close() {
-      await new Promise<void>((resolve) => {
-        server.close(() => resolve());
-        server.closeAllConnections();
+    const server = createServer((req, res) => {
+      handle(req, res).catch((e: unknown) => {
+        log({ event: "request-error", path: (req.url ?? "").split("?")[0] }, e);
+        if (!res.headersSent) sendJson(res, 500, { error: "internal error" });
+        else res.destroy();
       });
-      await polkadot.close();
-      await store.close();
-    },
-  };
+    });
+    server.requestTimeout = settleWaitMs + 60_000;
+    await new Promise<void>((resolve, reject) => {
+      server.once("error", reject);
+      server.listen(port, host, () => {
+        server.off("error", reject);
+        resolve();
+      });
+    });
+
+    return {
+      async close() {
+        await new Promise<void>((resolve) => {
+          server.close(() => resolve());
+          server.closeAllConnections();
+        });
+        await polkadot.close();
+        await store.close();
+      },
+    };
+  } catch (e) {
+    await closeNodes();
+    await store.close();
+    throw e;
+  }
 }
