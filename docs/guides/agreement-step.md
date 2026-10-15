@@ -38,12 +38,15 @@ sequenceDiagram
    - elsewhere, as `legalContextAgreementUrl` beside `legalContextUrl`, or the protocol's own place beside the link.
 3. The buyer's agent pays the nominal amount at `agreement.url`, on `agreement.network`, with the agreement's
    `pairing`: a pairing whose `publicProof` is true, so its settlement leaves a public record that commits to H.
-4. Read `status` until `agreement.state` is `recorded`. Until then, `claim` answers `409 claim/agreement-first`.
+4. Read `status` until `agreement.state` is `recorded`. Until then, `claim` answers `409 claim/agreement-first` for a
+   payment through a pairing whose `publicProof` is false, where that pairing takes a claim.
    `stale` is terminal: the agreement payment was claimed, and 604 800 seconds after its `settleBy` no read has shown
    it settled or unable to settle, so that agreement is never recorded.
 5. Take the full payment, and claim or report it as its pairing needs.
 
-Never start or accept the full payment before the agreement is recorded.
+Never start or accept a full payment through a pairing whose `publicProof` is false before the agreement is recorded;
+a payment whose pairing you cannot name counts as one. A payment through an offered pairing whose `publicProof` is
+true carries H publicly and needs no agreement.
 
 ## What the record states
 
@@ -53,8 +56,8 @@ the places of `<network>` and `<transaction>` in the pairing's sentence. The sen
 
 ## A payment before the agreement
 
-A payment reported before the agreement is recorded has moved, so it is recorded. Its record states what is missing
-(vector `CV10`):
+A payment through a pairing whose `publicProof` is false, reported before the agreement is recorded, has moved, so it
+is recorded. Its record states what is missing (vector `CV10`):
 
 ```ts title="before-agreement.ts"
 import type { RecordView } from "@integraledger/agentic-connectors";

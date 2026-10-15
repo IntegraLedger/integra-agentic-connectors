@@ -270,11 +270,15 @@ settlement leaves a public record that commits to H.
 
 - Place `agreement.url` beside the carriers: on MPP as `opaque.legalContextAgreementUrl`; elsewhere as
   `legalContextAgreementUrl` beside `legalContextUrl`, or in the protocol's own place beside the link.
-- Never start or accept the full payment before `status` shows `agreement.state` `recorded`. Until then `claim`
-  answers `409 claim/agreement-first`. An agreement leg whose claimed payment shows neither settlement nor failure
-  604 800 seconds after its `settleBy` becomes `stale`, which is terminal: that agreement is never recorded.
-- A payment reported before the agreement is recorded is still recorded, and its record says that no agreement was
-  recorded before it and that nothing public carries this ATR's hash (vector `CV10`).
+- Never start or accept a full payment through a pairing whose `publicProof` is false before `status` shows
+  `agreement.state` `recorded`; until then, where that pairing takes a claim, `claim` answers
+  `409 claim/agreement-first`. A payment whose pairing you cannot name counts as one whose `publicProof` is false. A
+  payment through an offered pairing whose `publicProof` is true carries H publicly and needs no agreement. An
+  agreement leg whose claimed payment shows neither settlement nor failure 604 800 seconds after its `settleBy` becomes
+  `stale`, which is terminal: that agreement is never recorded.
+- A payment through a pairing whose `publicProof` is false, reported before the agreement is recorded, is recorded,
+  and its record says that no agreement was recorded before it and that nothing public carries this ATR's hash (vector
+  `CV10`).
 
 A plain card checkout uses the pairing `card/seller-reference`: `issue` takes a card option `{scheme, checkout}` and
 the checkout as shown, in `content`; `claim` answers `422 claim/nothing-to-check`; and `report` takes the

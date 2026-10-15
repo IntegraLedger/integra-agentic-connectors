@@ -113,9 +113,12 @@ pays a nominal amount at `agreement.url`, on `agreement.network`, through `agree
 `publicProof` is true, so its settlement leaves a public record that commits to the ATR hash. Place `agreement.url`
 where the buyer's agent can see it, beside the carriers: on MPP as `opaque.legalContextAgreementUrl`; elsewhere as
 `legalContextAgreementUrl` beside `legalContextUrl`, or the protocol's own place beside the link. Never start or accept
-the full payment before the agreement is recorded: `status` shows `agreement.state` `recorded`, and until then `claim`
-answers `claim/agreement-first`. A payment reported before the agreement is recorded is recorded, and its record states
-that no agreement was recorded before it and that nothing public carries this ATR's hash.
+a full payment through a pairing whose `publicProof` is false before the agreement is recorded: `status` shows
+`agreement.state` `recorded`, and until then, where that pairing takes a claim, `claim` answers
+`claim/agreement-first`. A payment whose pairing you cannot name counts as one whose `publicProof` is false; a payment
+through an offered pairing whose `publicProof` is true carries the hash publicly and needs no agreement. A payment
+through a pairing whose `publicProof` is false, reported before the agreement is recorded, is recorded, and its record
+states that no agreement was recorded before it and that nothing public carries this ATR's hash.
 
 *Why:* where the payment itself carries no public proof of the hash, the agreement payment is that proof, and it must
 be on record before the payment it covers.
