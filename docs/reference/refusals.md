@@ -7,7 +7,7 @@ description: "Every code the seller door refuses with, and the codes the runtime
 
 # Refusal codes
 
-A refusal is a JSON object `{"code", "sentence", "correlationId"}`. The `code` of a refusal the door answers is one of the 47 below and is stable. The `sentence` is for people and may be reworded. The `correlationId` names the call in the door's log.
+A refusal is a JSON object `{"code", "sentence", "correlationId"}`. The `code` of a refusal the door answers is one of the 48 below and is stable. The `sentence` is for people and may be reworded. The `correlationId` names the call in the door's log.
 
 Every `503` answer carries `Retry-After: 1`: retry the same request after a second. Every other refusal is final for the request as sent, except `claim/agreement-first`, where the same claim can be sent again once `status` shows the agreement `recorded`, and `settle/not-settling` answering a `declined` report sent before the payment is claimed, where the same report can be sent again once it is claimed.
 
@@ -73,6 +73,7 @@ The record is in a state that does not allow this.
 | <a id="claimagreement-first"></a>`claim/agreement-first` | The record needs the agreement step, and the agreement payment is not recorded yet. Claim this payment once it is. |
 | <a id="claiminstrument-claimed"></a>`claim/instrument-claimed` | This payment instrument is already claimed for another record. |
 | <a id="reportpairing-mismatch"></a>`report/pairing-mismatch` | The report names a pairing other than the record's (the claimed pairing, or before a claim one the record offered), or `chosen` is not an option this record issued, with its `request` where the options are tied to the request. |
+| <a id="reportnetwork-mismatch"></a>`report/network-mismatch` | The report names a network other than the one its chosen option pays on. |
 | <a id="settleother-reference"></a>`settle/other-reference` | This record was settled with another reference. |
 | <a id="settlenot-settling"></a>`settle/not-settling` | The record is not in a state that allows this report. |
 

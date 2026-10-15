@@ -1196,6 +1196,7 @@
                         "code": {
                           "enum": [
                             "report/pairing-mismatch",
+                            "report/network-mismatch",
                             "settle/other-reference",
                             "settle/not-settling"
                           ]
@@ -2698,6 +2699,7 @@
               "claim/agreement-first",
               "claim/instrument-claimed",
               "report/pairing-mismatch",
+              "report/network-mismatch",
               "settle/other-reference",
               "settle/not-settling",
               "claim/lapsed",

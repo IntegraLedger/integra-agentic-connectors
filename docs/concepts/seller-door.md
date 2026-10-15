@@ -55,6 +55,6 @@ The door carries no business or legal logic. It never refuses a payment that has
 
 ## Refusals
 
-A refusal is `{code, sentence, correlationId}`. The door's refusals take an HTTP status from a closed table of 47 codes;
+A refusal is `{code, sentence, correlationId}`. The door's refusals take an HTTP status from a closed table of 48 codes;
 the HTTP runtime in front of the door answers a few codes of its own in the same shape. The `code` is stable; the
 `sentence` is for people. Every `503` carries `Retry-After: 1`. See [the refusal codes](../reference/refusals.md).

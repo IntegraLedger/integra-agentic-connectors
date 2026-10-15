@@ -176,7 +176,8 @@ describe("the OpenAPI document", () => {
       ],
       "post /report": [
         ...posted,
-        ...["door/not-found", "report/pairing-mismatch", "settle/other-reference", "settle/not-settling"],
+        ...["door/not-found", "report/pairing-mismatch", "report/network-mismatch", "settle/other-reference"],
+        "settle/not-settling",
         ...["door/chosen-required", "door/reference-required", "door/receipt-required", "claim/pairing-unknown"],
         "settle/store-unavailable",
       ],

@@ -176,6 +176,7 @@ export const REFUSALS: Readonly<Record<string, number>> = Object.freeze({
   "claim/agreement-first": 409,
   "claim/instrument-claimed": 409,
   "report/pairing-mismatch": 409,
+  "report/network-mismatch": 409,
   "settle/other-reference": 409,
   "settle/not-settling": 409,
   "claim/lapsed": 410,

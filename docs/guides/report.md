@@ -20,7 +20,7 @@ A report is either an **outcome** or a channel's **close**.
 | `outcome` | yes | | `paid` or `declined`. |
 | `state` | | yes | `closed`. |
 | `reference` | on `paid` | yes | The platform's payment reference as it comes, 1 to 256 characters with no control characters: the facilitator's `transaction`, the processor's payment id, the close transaction. |
-| `network` | no | no | The payment's network, or `card` for a card payment. |
+| `network` | no | no | The payment's network, or `card` for a card payment. On a record with no claim, the network the `chosen` option pays on, or omit it: the door reads that payment only on the option's network, and another answers `409 report/network-mismatch`. |
 | `chosen` | on a record with no claim | no | The option the payment paid, as issued. The door takes the payment's read keys from it. |
 | `request` | with `chosen`, on x402 | | The request commitment the option was issued for. |
 | `receipt` | on a confirm-only channel pairing's `paid` | | The receipt the channel's opening answered. |

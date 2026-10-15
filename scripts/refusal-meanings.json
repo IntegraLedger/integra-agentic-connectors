@@ -43,6 +43,7 @@
   "claim/store-unavailable": "Not available now; retry after one second.",
   "claim/read-unavailable": "The landed payment could not be read on the rail yet. Retry shortly.",
   "report/pairing-mismatch": "The report names a pairing other than the record's (the claimed pairing, or before a claim one the record offered), or `chosen` is not an option this record issued, with its `request` where the options are tied to the request.",
+  "report/network-mismatch": "The report names a network other than the one its chosen option pays on.",
   "settle/other-reference": "This record was settled with another reference.",
   "settle/not-settling": "The record is not in a state that allows this report.",
   "settle/store-unavailable": "Not available now; retry after one second."

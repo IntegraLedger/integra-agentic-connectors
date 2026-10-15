@@ -230,8 +230,9 @@ After payment, call `report` with the platform's payment reference as it comes, 
 
 The door reads a reported payment on the rail before it records it. A report of money that moved is recorded even
 without a claim, and the record then states what is missing. On a record with no claim, send `chosen` (and, on
-x402, `request`), from which the door takes the payment's read keys. A report naming another pairing than the
-record's answers `409 report/pairing-mismatch`.
+x402, `request`), from which the door takes the payment's read keys, its network among them: the door reads that
+payment only on the network the option pays on, and a report whose `network` is another answers
+`409 report/network-mismatch`. A report naming another pairing than the record's answers `409 report/pairing-mismatch`.
 
 ### Status
 
@@ -360,7 +361,7 @@ Every export of the package's entry point:
 | `ReportRequest`, `ReportOutcome`, `ReportClosed` | types | `report`'s body: a `paid` or `declined` outcome, or a channel's close. |
 | `RecordView`, `Proves`, `AgreementView`, `ChannelView` | types | A record, what it proves, and its agreement and channel legs. |
 | `Refusal` | type | `{code, sentence, correlationId}`. |
-| `REFUSALS` | `Readonly<Record<string, number>>` | The closed refusal table: each of the 47 codes and its HTTP status. |
+| `REFUSALS` | `Readonly<Record<string, number>>` | The closed refusal table: each of the 48 codes and its HTTP status. |
 | `OPENAPI_BYTES` | `Uint8Array` | The exact bytes of `openapi.json`. |
 | `VECTORS` | `Readonly<Record<string, Vector>>` | The vector files, parsed, by name (`CV1` to `CV10`). |
 | `Vector` | type | One vector's shape. |
@@ -388,7 +389,7 @@ console.log(REFUSALS["issue/storage-unavailable"], retryable("issue/storage-unav
 ```
 
 ```text output
-47
+48
 409 false
 503 true
 ```
@@ -400,7 +401,7 @@ console.log(REFUSALS["issue/storage-unavailable"], retryable("issue/storage-unav
 | 403 | `door/browser-origin` |
 | 404 | `door/not-found`, `door/resource-unknown`, `claim/unknown` |
 | 405 | `door/method` |
-| 409 | `issue/mint-request-reused`, `issue/mint-request-lapsed`, `claim/in-progress`, `claim/paid`, `claim/not-this-request`, `claim/channel-open`, `claim/channel-not-open`, `claim/agreement-first`, `claim/instrument-claimed`, `report/pairing-mismatch`, `settle/other-reference`, `settle/not-settling` |
+| 409 | `issue/mint-request-reused`, `issue/mint-request-lapsed`, `claim/in-progress`, `claim/paid`, `claim/not-this-request`, `claim/channel-open`, `claim/channel-not-open`, `claim/agreement-first`, `claim/instrument-claimed`, `report/pairing-mismatch`, `report/network-mismatch`, `settle/other-reference`, `settle/not-settling` |
 | 410 | `claim/lapsed` |
 | 413 | `door/too-large` |
 | 415 | `door/media-type` |
