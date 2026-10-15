@@ -44,6 +44,14 @@ The pages in `docs/reference/` that `scripts/docs.mjs` writes, and the API pages
 A sample that talks to the seller door runs against `scripts/stand-in-door.mjs`, which answers from the contract's
 vectors. A sample that needs a chain uses a local stand-in or the package's own vectors, and says so.
 
+The documentation site checks its own build. In `website/`, after `pnpm build` there:
+
+- `node scripts/check-highlighting.mjs` highlights a TypeScript sample and a JavaScript sample with the options
+  `source.config.ts` gives the code highlighter: once with the clock as it is, and once with a clock that moves 600 ms
+  at every read while a sample is tokenized and its Twoslash popups are highlighted. It checks that both give the same
+  HTML, and that `const` and `myObject` take github-light-default's colours. Each line is tokenized to its end however
+  long that takes (`tokenizeTimeLimit: 0`), so a busy machine colours the code as an idle one does.
+
 ## What a change carries
 
 - **Tests whose expected values come from outside the code:** a public specification, a published vector, a recorded

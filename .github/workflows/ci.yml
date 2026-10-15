@@ -390,3 +390,6 @@ jobs:
       - name: Every page loads under its own Content-Security-Policy, with no violation or error, names its links and finds each fragment
         working-directory: website
         run: node scripts/check-pages.mjs
+      - name: The code highlighting gives one result however long tokenizing takes, in the themes' colours
+        working-directory: website
+        run: node scripts/check-highlighting.mjs

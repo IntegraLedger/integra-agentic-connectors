@@ -92,6 +92,10 @@ export default defineConfig({
       // Every text colour of these two themes is at least 4.5:1 on its code background (global.css):
       // white in light mode, the card colour in dark mode.
       themes: { light: "github-light-default", dark: "github-dark-default" },
+      // Every line is tokenized to its end. With a time limit (Shiki's default is 500 ms), a line that takes longer,
+      // as a first line does while the grammar compiles on a busy machine, stops early and the rest of it takes one
+      // colour, so one page could build with different colours. The Twoslash popups highlight with these options.
+      tokenizeTimeLimit: 0,
       transformers: [
         ...(rehypeCodeDefaultOptions.transformers ?? []),
         transformerTwoslash({
