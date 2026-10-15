@@ -5,8 +5,9 @@ description: The ATR, its hash, the Legal Context Protocol, pairings, bindings a
 
 # Proof of agreement
 
-Every payment a connector handles carries one proof: the hash of the record the buyer and the seller agreed to. This
-page defines the terms the rest of the documentation uses.
+Proof of agreement rests on one value: H, the hash of the record the buyer and the seller agreed to. H is placed in
+every payment request. The payment carries it where its pairing can; where it cannot, the agreement payment carries it
+before the payment, and a record without one says so. This page defines the terms the rest of the documentation uses.
 
 ## The Agentic Transaction Record (ATR)
 
@@ -58,7 +59,8 @@ the pairing's statement of what it proves says so. Whatever the protocol and rai
    request.
 2. The buyer fetches the ATR, hashes the bytes it received, and compares the result with H before it signs anything.
 3. The buyer's payment carries H, in the field the protocol or rail provides.
-4. The seller checks that the payment carries the H it issued for this request.
+4. Where the payment's pairing carries H, the seller checks that the payment carries the H it issued for this
+   request; where it cannot, the agreement payment carries H before the payment.
 
 ## Pairings and bindings
 
