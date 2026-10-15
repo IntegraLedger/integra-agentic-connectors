@@ -42,7 +42,7 @@ controls, to the resource servers that use it.
 | `unsupported_permission` | yes | yes | Tron: the transaction carries more than one signature, or the owner's permission does not accept its one signature (the key's weight is below the threshold). |
 | `invalid_transaction` | yes | yes | The node refuses the transaction in simulation or validation. On Tron this includes a reference block (TaPoS) that does not match the node's. |
 | `unexpected_verify_error` | yes | no | The node or the store could not be read. |
-| `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission, or the settle's `settleWaitMs` passed before a node read or its claim, or its wait for the chain ended before its submission. |
+| `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission, or the settle's `settleWaitMs` passed before a node read, or its wait for the chain ended before its claim or its submission. |
 | `settlement_pending` | no | yes | Submitted, or possibly submitted (the store could not be read), and not yet final or not yet stored when the wait ended. |
 | `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. On Polkadot, also a repeat of a payment whose success has been answered, or a submission the node refuses as one it has already seen (already imported, temporarily banned, or an outdated nonce). |
 
@@ -107,8 +107,11 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   until the scan's deadline; one that cannot start by then is recorded as unread, like a block the node cannot give,
   and read again later. Every other node call has no such limit. On Tron, `/verify` makes six FullNode calls:
   the account, the two id reads, the simulation and the head read at once, then the reference block read. A node call
-  is sent only while its bound leaves it time, and in `/settle` that bound ends at the settle's deadline: a call it
-  leaves no time for is not sent.
+  is sent only while its bound leaves it time. In `/settle` that bound is the settle's deadline for the node reads
+  before the claim, and the end of the wait for the chain for the submission and the reads that follow the chain:
+  that wait ends a second before the deadline (a quarter of a shorter `settleWaitMs`), the time kept for storing the
+  answer. A call its bound leaves no time for is not sent. A Polkadot metadata load serves every request for its
+  network: its calls have the node call bound alone, and the load as a whole 30 seconds.
 - A Polkadot node that keeps the state of every block (an archive node) gives the events of any block; a pruning
   node discards the state of older blocks, and a block that holds the extrinsic and whose state is discarded keeps the
   answer `settlement_pending`.
@@ -131,8 +134,8 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   gets the stored answer), with the call or the bound: an error's entry above;
   `node-call-failed` for a node answer the facilitator cannot read, its cause a `malformed` error naming the part, and
   for a Tron broadcast the node does not accept, its cause the node's `code` and `message`; and
-  `settle-deadline-passed` for a settle whose deadline passed before its node reads, one of their node calls, or its
-  claim, or whose wait for the chain ended before its submission, with `before`, the step it did not start
+  `settle-deadline-passed` for a settle whose deadline passed before its node reads or one of their node calls, or
+  whose wait for the chain ended before its claim or its submission, with `before`, the step it did not start
   (`node reads` or `claim`, and on Polkadot, once the extrinsic is decoded, `finalized head` or `validation`) or the
   call it did not send, named as `node-call-failed` names it, and `settleWaitMs`. A read made while following the
   chain (a Tron status read, a Polkadot head or block read) that the wait for the chain leaves no time for is not

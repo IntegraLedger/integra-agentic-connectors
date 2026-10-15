@@ -453,11 +453,12 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
   /**
    * Reads the transaction's status every second until `deadline`, and the stored answer too when `stored` is set,
    * answering with the first final answer either gives. A stored success is another settle's, so it gives the consumed
-   * answer. Once `deadline` has passed, no status is read: the answer is the one the wait's end gives. Broadcasts
-   * nothing.
+   * answer. Once `deadline` has passed, neither the store nor the status is read: the answer is the one the wait's end
+   * gives. Broadcasts nothing.
    */
   async function watch(c: Checked, deadline: number, stored: boolean): Promise<SettleAnswer> {
     for (;;) {
+      if (deadline - performance.now() <= 0) return pending(c.txid, c.network);
       if (stored) {
         const row = await readStored(c, deadline);
         if (row?.state === "answered" && !isPending(row.answer)) return row.answer.success ? consumed(c) : row.answer;
@@ -527,9 +528,11 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
    * the deadline are checked before any node call: a deadline spent there sends none, and gives
    * `unexpected_settle_error`, or `invalid_payload` for an expiration outside the window. A node read the deadline
    * leaves no time for once the reads have started is not sent either, and in its place among the refusals gives
-   * `unexpected_settle_error`, with one entry naming the call. The node's id reads answer first: an id the node holds,
-   * in a block or its pending pool, is consumed too, whatever else the checks refuse, the expiration window among them,
-   * and a node that does not answer them gives `unexpected_settle_error`.
+   * `unexpected_settle_error`, with one entry naming the call; for an expiration outside the window, an id read not
+   * sent finds nothing, and the answer is `invalid_payload`, with no entry. The node's id reads answer first: an id
+   * the node holds, in a block or its pending pool, is consumed too, whatever else the checks refuse, the expiration
+   * window among them, and a node that does not answer them gives `unexpected_settle_error`.
+   * No id is claimed once the wait for the chain has ended: its broadcast would have no time left.
    * A claimed id is never released: a broadcast the node refused as a duplicate is a consumed payment, and any other
    * refused broadcast, or a broadcast request that cannot have reached the node, gives `unexpected_settle_error` with
    * no transaction, which says nothing was broadcast. Each is stored final, and every repeat gets the stored answer.
@@ -564,11 +567,13 @@ export function createTron(nodes: readonly TronNode[], s: SettlementStore, settl
     const held = await ids;
     if (held.includes("invalid_transaction_state")) return consumed(c);
     if (now !== null) {
-      const refused = held.find((r) => r !== null) ?? now;
+      // An expired transaction's id reads look only for a held id: one the deadline leaves no time for leaves the
+      // expiration's refusal, as the deadline check before the reads gives it.
+      const refused = held.find((r) => r !== null && (before === null || typeof r === "string")) ?? now;
       if (typeof refused === "object") return unexpectedSettle(log, deadlinePassed(c, refused.spent));
       return failed(settleReason(refused), "", network);
     }
-    if (left() <= 0) return unexpectedSettle(log, deadlinePassed(c, "claim"));
+    if (waitUntil - performance.now() <= 0) return unexpectedSettle(log, deadlinePassed(c, "claim"));
     let won: boolean;
     try {
       won = await inTime(s.claim(c.network, c.txid, new Date(Number(c.raw.expiration))), deadline);

@@ -243,8 +243,8 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
    * the version read, the wait for a load another request started, and the wait for a new load. One failed load is one
    * failure, with one operator entry. A load that fails while the request that started it waits is that request's
    * failure, which it reports; one that fails once that request has stopped waiting goes to the operator log from the
-   * handler below, with that request's payment `fields` and the load's cause. A new load is not started once
-   * `timeoutMs` is spent: that is a `spent` NodeError.
+   * handler below, with that request's payment `fields` and the load's cause. Once `timeoutMs` is spent, a new load is
+   * not started and a load in flight is not waited for: that is a `spent` NodeError.
    */
   async function apiFor(node: PolkadotNode, fields: Record<string, string>, timeoutMs: number): Promise<ApiPromise> {
     const deadline = performance.now() + timeoutMs;
@@ -256,7 +256,11 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     if (loading !== undefined) {
       // A load that failed has gone to the operator log, from the request that started it or from the handler below;
       // a new one is made.
-      const api = await within(loading.catch(() => undefined), left());
+      // With no time left, a load in flight ends the wait at once: this request sends nothing.
+      const spent = left() <= 0;
+      const api = await within(loading.catch(() => undefined), left()).catch((e: unknown) => {
+        throw spent ? new NodeError("spent", false, "metadata") : e;
+      });
       if (api !== undefined && api.runtimeVersion.specVersion.toNumber() === spec) return api;
       apis.delete(node.network);
       void api?.disconnect();
@@ -704,12 +708,13 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
 
   /**
    * Reads a claimed id, or a stored pending answer, again from the chain until the answer's reserve before `deadline`,
-   * from the stored `since` and `unread`, then stores what it read. Once that wait has ended, the node is asked nothing:
-   * the answer is the stored one, as a repeat gets it, or pending with the hash.
+   * from the stored `since` and `unread`, then stores what it read. The decode is bounded by that wait too. Once that
+   * wait has ended, the node is asked nothing: the answer is the stored one, as a repeat gets it, or pending with the
+   * hash.
    */
   async function follow(l: Local, since: number | null, unread: number[], deadline: number): Promise<SettleAnswer> {
     const waitUntil = deadline - answerReserve(settleWaitMs);
-    const c = waitUntil - performance.now() > 0 ? await decode(l, deadline - performance.now()) : undefined;
+    const c = waitUntil - performance.now() > 0 ? await decode(l, waitUntil - performance.now()) : undefined;
     const decoded = typeof c === "object" && !("spent" in c) ? c : undefined;
     if (decoded === undefined || since === null) {
       const row = await readStored(decoded ?? { network: l.node.network, id: l.id }, deadline);
@@ -731,7 +736,8 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
    * with its entry naming the call. A refusal the client's own bytes give comes first, so the decode's refusals, which
    * need the metadata, are given when the deadline leaves time for it. The scan starts after the finalized head read before
    * validation (never before the era's birth): validation at the best block shows the extrinsic absent from that
-   * block's ancestry, and the finalized head is in every later best chain.
+   * block's ancestry, and the finalized head is in every later best chain. No hash is claimed once the wait for the
+   * chain has ended: its submission would have no time left.
    */
   async function settle(r: FacilitatorRequest): Promise<SettleAnswer> {
     const deadline = performance.now() + settleWaitMs;
@@ -760,7 +766,8 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
     const v = await validate(c, left());
     if (typeof v === "string") return failed(settleReason(v), "", network);
     if ("spent" in v) return unexpectedSettle(log, deadlinePassed(c, v.spent));
-    if (left() <= 0) return unexpectedSettle(log, deadlinePassed(c, "claim"));
+    const waitUntil = deadline - answerReserve(settleWaitMs);
+    if (waitUntil - performance.now() <= 0) return unexpectedSettle(log, deadlinePassed(c, "claim"));
     const birth = c.era.birth(v.best);
     const since = Math.min(finalized === undefined ? birth : Math.max(birth, finalized + 1), lastBlock(c, v.best));
     let won: boolean;
@@ -775,7 +782,7 @@ export function createPolkadot(nodes: readonly PolkadotNode[], s: SettlementStor
       const claimed = row !== undefined && row.state !== "none" ? row : undefined;
       return follow(l, claimed?.since ?? null, claimed?.unread ?? [], deadline);
     }
-    return keep(c, await submit(c, since, deadline - answerReserve(settleWaitMs)), deadline);
+    return keep(c, await submit(c, since, waitUntil), deadline);
   }
 
   async function close(): Promise<void> {

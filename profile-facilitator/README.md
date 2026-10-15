@@ -263,8 +263,11 @@ The answer is `{isValid: true, payer}`, with `payer` the owner in base58check.
    the window among them. A node that does not answer the id reads gives `unexpected_settle_error`. Otherwise an
    expiration outside the window is answered `invalid_payload`, and for one inside it the facilitator makes the other
    node reads of `/verify`; a refusal is answered with an empty `transaction`. Once the reads have started, one the
-   wait leaves no time for is not sent, and in its place among the refusals is answered `unexpected_settle_error`.
-4. Claims the transaction id with one conditional insert, so concurrent settles of one payment broadcast once.
+   wait leaves no time for is not sent, and in its place among the refusals is answered `unexpected_settle_error`;
+   for an expiration outside the window, an id read not sent finds nothing, and the answer is `invalid_payload`.
+4. Claims the transaction id with one conditional insert, so concurrent settles of one payment broadcast once. Once
+   the wait for the chain has ended, the broadcast would have no time left: it claims nothing and answers
+   `unexpected_settle_error`, and nothing is stored, so a repeat of the payment is settled as a new one.
 5. Broadcasts the signed bytes with `/wallet/broadcasthex`. A `DUP_TRANSACTION_ERROR` says the node already holds the
    transaction: the payment is consumed, answered `invalid_transaction_state` with the id. Any other refusal, or a
    request that cannot have reached the node, is answered `unexpected_settle_error` with an empty `transaction`:
@@ -315,10 +318,13 @@ The answer is `{isValid: true, payer}`, with `payer` the signer in SS58.
 3. For a hash the store does not hold, decodes the extrinsic and asks the node to validate it, as `/verify` does
    (steps 3 and 4), reading the finalized head before the validation. The settle's wait is checked before each of
    these three node reads and before each node call they make: once `settleWaitMs` has passed, it sends no node call
-   and answers `unexpected_settle_error`.
+   and answers `unexpected_settle_error`. A metadata load, which serves every request for the network, is not started
+   then; one started earlier goes on within its own bound.
    Step 1's refusals come first; the decode's refusals need the node's metadata, so they are given only while the wait
    leaves time for it. Then claims the hash, with the first block to scan: the block after the finalized head read
-   before validation, never before the era's birth.
+   before validation, never before the era's birth. Once the wait for the chain has ended, the submission would have
+   no time left: it claims nothing and answers `unexpected_settle_error`, and nothing is stored, so a repeat of the
+   payment is settled as a new one.
 4. Submits with `author_submitExtrinsic`. A refusal that says the node has already seen the extrinsic or its nonce
    (1013 already imported, 1012 temporarily banned, or 1010 with an outdated nonce) is a consumed payment, answered
    `invalid_transaction_state` with the extrinsic's hash, and no block is scanned for it. Any other refusal, or a
@@ -406,7 +412,7 @@ controls, to the resource servers that use it.
 | `unsupported_permission` | yes | yes | Tron: the transaction carries more than one signature, or the owner's permission does not accept its one signature (the key's weight is below the threshold). |
 | `invalid_transaction` | yes | yes | The node refuses the transaction in simulation or validation. On Tron this includes a reference block (TaPoS) that does not match the node's. |
 | `unexpected_verify_error` | yes | no | The node or the store could not be read. |
-| `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission, or the settle's `settleWaitMs` passed before a node read or its claim, or its wait for the chain ended before its submission. |
+| `unexpected_settle_error` | no | yes | The node could not be read before submission, or refused the submission, or the settle's `settleWaitMs` passed before a node read, or its wait for the chain ended before its claim or its submission. |
 | `settlement_pending` | no | yes | Submitted, or possibly submitted (the store could not be read), and not yet final or not yet stored when the wait ended. |
 | `invalid_transaction_state` | yes | yes | `/settle`: included and failed, or it can never be included. On Tron also a consumed payment: its success was already answered, or the node already holds its id. `/verify` (Tron): the node, in a block or its pending pool, or the store already holds the transaction id. On Polkadot, also a repeat of a payment whose success has been answered, or a submission the node refuses as one it has already seen (already imported, temporarily banned, or an outdated nonce). |
 
@@ -471,8 +477,11 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   until the scan's deadline; one that cannot start by then is recorded as unread, like a block the node cannot give,
   and read again later. Every other node call has no such limit. On Tron, `/verify` makes six FullNode calls:
   the account, the two id reads, the simulation and the head read at once, then the reference block read. A node call
-  is sent only while its bound leaves it time, and in `/settle` that bound ends at the settle's deadline: a call it
-  leaves no time for is not sent.
+  is sent only while its bound leaves it time. In `/settle` that bound is the settle's deadline for the node reads
+  before the claim, and the end of the wait for the chain for the submission and the reads that follow the chain:
+  that wait ends a second before the deadline (a quarter of a shorter `settleWaitMs`), the time kept for storing the
+  answer. A call its bound leaves no time for is not sent. A Polkadot metadata load serves every request for its
+  network: its calls have the node call bound alone, and the load as a whole 30 seconds.
 - A request body is at most 64 KiB. The server's request timeout is `settleWaitMs` plus 60 seconds.
 - The table holds a row with a final answer until 24 hours after its validity window ends. A row with no final answer
   stays until a repeated `/settle` for it gives one. Each such row is a payment that passed every check and was
@@ -492,8 +501,8 @@ CREATE INDEX IF NOT EXISTS settlement_final_until ON settlement (until)
   gets the stored answer), with the call or the bound: an error's entry above;
   `node-call-failed` for a node answer the facilitator cannot read, its cause a `malformed` error naming the part, and
   for a Tron broadcast the node does not accept, its cause the node's `code` and `message`; and
-  `settle-deadline-passed` for a settle whose deadline passed before its node reads, one of their node calls, or its
-  claim, or whose wait for the chain ended before its submission, with `before`, the step it did not start
+  `settle-deadline-passed` for a settle whose deadline passed before its node reads or one of their node calls, or
+  whose wait for the chain ended before its claim or its submission, with `before`, the step it did not start
   (`node reads` or `claim`, and on Polkadot, once the extrinsic is decoded, `finalized head` or `validation`) or the
   call it did not send, named as `node-call-failed` names it, and `settleWaitMs`. A read made while following the
   chain (a Tron status read, a Polkadot head or block read) that the wait for the chain leaves no time for is not

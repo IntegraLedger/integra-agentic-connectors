@@ -1233,4 +1233,93 @@ describe("the operator log", () => {
       expect(node.calls).toHaveLength(sent);
     },
   );
+
+  it("a settle whose runtime version read answers once its deadline has passed, while a metadata load another request started is in flight, waits for nothing and reaches the log once, as settle-deadline-passed naming the metadata", async () => {
+    // A /verify starts the load, and the facilitator goes on with the node's metadata answer only when the test lets
+    // it. A /settle's runtime version read answers within its bound, and the facilitator goes on with it once the clock
+    // is at settleWaitMs (1,000 ms): the settle has no time left to wait for that load, as it has none to start one
+    // (the IN_STEP row for the runtime version read).
+    await start({ finalized: () => BEST - 2 }, NETWORK, 1_000);
+    const load = resumeLate((_url, sent) => {
+      const b = sent as { method: string; params: unknown[] };
+      return isMetadata(b.method, b.params);
+    });
+    const first = post(`${base}/verify`, body());
+    let json: unknown;
+    let after: string[] = [];
+    try {
+      await reaches(first, load.arrived);
+      const version = resumeLate(isCall("state_getRuntimeVersion"));
+      const second = post(`${base}/settle`, body());
+      await reaches(second, version.arrived);
+      const wanted = asked.length;
+      await clock.advanceTo(1_000);
+      version.resume();
+      // One turn of the event loop: the /settle goes on from its version read to its wait for the load; then the clock
+      // fires what is due at once.
+      await new Promise((resolve) => setImmediate(resolve));
+      await clock.advance(0);
+      json = (await second).json;
+      after = methodsOf(wanted);
+    } finally {
+      load.resume();
+    }
+    expect(json).toEqual(REFUSED);
+    expect(after).toEqual([]);
+    expect(entries.map((e) => [e.entry, e.cause === undefined ? undefined : (e.cause as NodeError).code])).toEqual([
+      [{ event: "settle-deadline-passed", network: NETWORK, transaction: HASH_V3, before: "metadata", settleWaitMs: 1_000 }, undefined],
+    ]);
+    expect((await first).json).toEqual({ isValid: true, payer: PAYER });
+  });
+
+  it("a claimed hash whose runtime version read answers once the wait for the chain has ended starts no metadata load and asks for no node call after it", async () => {
+    // follow decodes only for the scan, and the scan reads nothing once the wait for the chain has ended, at 750 ms of
+    // settleWaitMs 1,000. The settle's store read goes on at 749 ms, so the decode starts with 1 ms of that wait left;
+    // its runtime version read answers within its bound, and the facilitator goes on with it at 900 ms, inside the
+    // answer's reserve. The metadata, not yet loaded, is not loaded then: nothing would read with it.
+    await start({ finalized: () => BEST - 2 }, NETWORK, 1_000);
+    await db.pool.query("INSERT INTO settlement (network, id, answer, until, since) VALUES ($1, $2, NULL, $3, $4)", [
+      NETWORK,
+      HASH_V3,
+      new Date(Date.now() + 600_000).toISOString(),
+      BEST + 1,
+    ]);
+    const read = resumeLate((call) => call === "store.read");
+    const answer = post(`${base}/settle`, body());
+    await reaches(answer, read.arrived);
+    await clock.advanceTo(749);
+    const version = resumeLate(isCall("state_getRuntimeVersion"));
+    read.resume();
+    await reaches(answer, version.arrived);
+    const wanted = asked.length;
+    await clock.advanceTo(900);
+    version.resume();
+    expect((await answer).json).toEqual(PENDING_V3);
+    expect(entries).toEqual([]);
+    expect(methodsOf(wanted)).toEqual([]);
+  });
+
+  it("a settle whose validation answers once the wait for the chain has ended claims nothing, reaches the log once, as settle-deadline-passed before the claim, and a repeat settles", async () => {
+    // The validation's answer goes on at 800 ms of settleWaitMs 1,000: past the wait for the chain (750 ms), before the
+    // deadline. A submission then has no time left, so a claim could only store unexpected_settle_error for good.
+    await start({ finalized: () => BEST - 2 }, NETWORK, 1_000);
+    const validation = resumeLate((_url, sent) => {
+      const b = sent as { method: string; params: unknown[] };
+      return isValidation(b.method, b.params);
+    });
+    const answer = post(`${base}/settle`, body());
+    await reaches(answer, validation.arrived);
+    await clock.advanceTo(800);
+    validation.resume();
+    const first = (await answer).json;
+    const rows = (await db.pool.query("SELECT answer FROM settlement")).rows;
+    const repeat = await settle();
+    expect({ first, entries: entries.map((e) => e.entry), rows, repeat, submissions: calls("author_submitExtrinsic").length }).toEqual({
+      first: REFUSED,
+      entries: [{ event: "settle-deadline-passed", ...ABOUT, before: "claim", settleWaitMs: 1_000 }],
+      rows: [],
+      repeat: { success: true, transaction: `${BLOCK_HASH}-2`, network: NETWORK, payer: PAYER },
+      submissions: 1,
+    });
+  });
 });

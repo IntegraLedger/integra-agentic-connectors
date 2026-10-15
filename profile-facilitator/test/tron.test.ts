@@ -1413,6 +1413,87 @@ describe("the operator log", () => {
     expect(calls("/wallet/broadcasthex")).toHaveLength(0);
   });
 
+  it("a settle of an expired transaction whose deadline passes between its check and its id reads is refused as invalid_payload, writes no entry, and sends only the read started before it", async () => {
+    // The expiration window is checked first, and an expired transaction's id reads are made only while the deadline
+    // leaves time for them, to find it consumed. The clock reads 999 ms of settleWaitMs 1,000 until the facilitator
+    // asks for its first id read, and 1,000 ms from then on: that read is sent and finds nothing, and the other is not
+    // sent. The answer is the one the deadline check gives an expired transaction with no time left.
+    await start({}, 1_000);
+    vi.setSystemTime(EXPIRATION_V2 + 1);
+    const read = resumeLate((call) => call === "store.read");
+    const answer = post(`${base}/settle`, body(TX_V2));
+    await reaches(answer, read.arrived);
+    const wanted = asked.length;
+    const now = vi.spyOn(performance, "now").mockImplementation(() => (asked.length > wanted ? 1_000 : 999));
+    let json: unknown;
+    try {
+      read.resume();
+      json = (await answer).json;
+    } finally {
+      now.mockRestore();
+    }
+    expect(pathsOf(wanted)).toEqual(["/wallet/gettransactionbyid", "/wallet/gettransactionfrompending"]);
+    expect(node.calls.map((c) => c.path)).toEqual(["/wallet/gettransactionbyid"]);
+    expect({ json, entries: entries.map((e) => e.entry) }).toEqual({
+      json: { success: false, errorReason: "invalid_payload", transaction: "", network: NETWORK },
+      entries: [],
+    });
+  });
+
+  it("a settle whose node reads answer once the wait for the chain has ended claims nothing, reaches the log once, as settle-deadline-passed before the claim, and a repeat settles", async () => {
+    // The simulation's answer goes on at 800 ms of settleWaitMs 1,000: past the wait for the chain (750 ms), before the
+    // deadline. A broadcast then has no time left, so a claim could only store unexpected_settle_error for good.
+    await start({}, 1_000);
+    const simulation = resumeLate((url) => url.endsWith("/wallet/triggerconstantcontract"));
+    const answer = post(`${base}/settle`, body(TX_V2));
+    await reaches(answer, simulation.arrived);
+    await clock.advanceTo(800);
+    simulation.resume();
+    const first = (await answer).json;
+    const logged = entries.map((e) => e.entry);
+    const rows = (await db.pool.query("SELECT answer FROM settlement")).rows;
+    const repeat = await settle();
+    expect({ first, entries: logged, rows, repeat, broadcasts: calls("/wallet/broadcasthex").length }).toEqual({
+      first: REFUSED,
+      entries: [{ event: "settle-deadline-passed", ...ABOUT, before: "claim", settleWaitMs: 1_000 }],
+      rows: [],
+      repeat: SUCCESS,
+      broadcasts: 1,
+    });
+  });
+
+  it("a stored settlement_pending whose store read answers once the wait for the chain has ended makes no store read that wait leaves no time for, and writes no entry", async () => {
+    // As the FOLLOWED rows above, on a store that does not answer at once: another session holds the table locked until
+    // the clock has fired what is due. A store read given no time ends then, as a store-call-failed entry.
+    await start({}, 1_000);
+    await db.pool.query("INSERT INTO settlement (network, id, answer, until) VALUES ($1, $2, $3, $4)", [
+      NETWORK,
+      TXID_V2,
+      JSON.stringify(PENDING),
+      new Date(EXPIRATION_V2).toISOString(),
+    ]);
+    const read = resumeLate((call) => call === "store.read");
+    const answer = post(`${base}/settle`, body(TX_V2));
+    await reaches(answer, read.arrived);
+    const locker = await db.pool.connect();
+    try {
+      await locker.query("BEGIN");
+      await locker.query("LOCK TABLE settlement IN ACCESS EXCLUSIVE MODE");
+      await clock.advanceTo(750);
+      read.resume();
+      await until(async () => {
+        const r = await db.pool.query<{ n: number }>("SELECT count(*)::int AS n FROM pg_stat_activity WHERE wait_event_type = 'Lock'");
+        return r.rows[0]!.n > 0;
+      });
+      await clock.advance(0);
+    } finally {
+      await locker.query("ROLLBACK");
+      locker.release();
+    }
+    expect((await answer).json).toEqual(PENDING);
+    expect(entries.map((e) => [e.entry, (e.cause as Error | undefined)?.message])).toEqual([]);
+  });
+
   it("a broadcast the node does not accept reaches the log as the call that failed, its cause the node's code and message, and the answer is unchanged", async () => {
     // Tron mainnet's live answer to a broadcast of V2 past its expiration (fixtures/tron-mainnet-answers.json).
     await start({ broadcast: live["broadcastExpired"] });
