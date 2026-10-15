@@ -40,8 +40,8 @@ flowchart LR
 - **The profile facilitator** verifies and settles x402 payments on the two LCP profiles that carry H in the payer's
   own signed transaction on Tron and Polkadot.
 - Both use [`@integraledger/lcp`](https://github.com/IntegraLedger/integra-protocol), which owns the ATR's assembly
-  and hashing and every binding of H into a payment. Its documentation for 0.4.0, the release both packages pin, is on
-  [its npm page](https://www.npmjs.com/package/@integraledger/lcp/v/0.4.0).
+  and hashing and every binding of H into a payment. Its documentation for 0.4.0, the release both packages pin, is in
+  [its repository at that release](https://github.com/IntegraLedger/integra-protocol/blob/v0.4.0/docs/index.md).
 
 ## Packages
 

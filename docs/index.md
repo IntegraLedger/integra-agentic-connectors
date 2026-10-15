@@ -51,7 +51,7 @@ holds no key and pays no fee.
 
 - [integra-protocol](https://github.com/IntegraLedger/integra-protocol): `@integraledger/lcp`, which assembles and
   hashes the ATR and binds H into x402, MPP, AP2, ACP, UCP, ACK and card payments. Its documentation for 0.4.0, the
-  release these packages pin, is on [its npm page](https://www.npmjs.com/package/@integraledger/lcp/v/0.4.0).
+  release these packages pin, is in [its repository at that release](https://github.com/IntegraLedger/integra-protocol/blob/v0.4.0/docs/index.md).
 - [integra-agentic-terms](https://github.com/IntegraLedger/integra-agentic-terms): the buyer's side, which compares
   the served ATR with H before anything is signed. Documentation at
   [agenticterms.integraledger.com](https://agenticterms.integraledger.com).

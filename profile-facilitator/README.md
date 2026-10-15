@@ -20,7 +20,7 @@ Approving that transaction is then the buyer's acceptance of that exact record, 
 | `x402/exact/polkadot/lcp-assets-remark` | `polkadot:68d56f15f85d3136970ec16946040bc1` (Polkadot Asset Hub) or `polkadot:67f9723393ef76214df0118c34bbbd3d` (Westend Asset Hub) | `lcp-assets-remark` | `system.remark_with_event(R)`, where R is exactly `lcp:sha256:` followed by H in lowercase hex, batched with `assets.transfer_keep_alive` in one `utility.batch_all`. |
 
 This package implements each profile's rule 5, the facilitator's duties. The profiles themselves are published with
-`@integraledger/lcp`, in [integra-protocol](https://github.com/IntegraLedger/integra-protocol).
+`@integraledger/lcp`, in [its repository at 0.4.0](https://github.com/IntegraLedger/integra-protocol/tree/v0.4.0/lcp/profiles), the release this package pins.
 
 The facilitator is a pass-through. It checks the payment against the requirements it is given, asks a node to
 validate or simulate it, submits exactly the bytes the payer signed, deduplicates, and reports what the network shows.
