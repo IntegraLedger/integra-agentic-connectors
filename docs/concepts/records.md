@@ -13,7 +13,7 @@ its own and reads it with `status`.
 ```mermaid
 stateDiagram-v2
     [*] --> issued: issue
-    issued --> settling: claim, or a report the door reads as landed
+    issued --> settling: claim
     settling --> paid: settlement read
     issued --> paid: report of a settled payment
     paid --> closed: report of a channel's close
@@ -23,7 +23,7 @@ stateDiagram-v2
 | State | Meaning |
 |---|---|
 | `issued` | The ATR is in the seller's storage and its hash has been placed. No payment is recorded. |
-| `settling` | A payment was claimed, or reported, and its settlement is not yet read. The door finishes the record. |
+| `settling` | A payment was claimed, and its settlement is not yet read. The door finishes the record. |
 | `paid` | The payment is recorded as settled. |
 | `closed` | A channel pairing's close was reported and read. |
 | `stale` | A payment was claimed, and 604 800 seconds after its `settleBy` no read has shown it settled or unable to settle. Terminal: the record is never paid after that. A claim of it answers 410 `claim/lapsed`, and a report 409 `settle/not-settling`. |
