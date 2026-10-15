@@ -16,7 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { failed, pending } from "../src/answers.js";
 import { serveProfileFacilitator } from "../src/index.js";
 import { openStore } from "../src/store.js";
-import { controlledClock, fixture, onWorkerPort, freshDatabase, post, stub, tronChainReads, type Clock, type Stub } from "./support.js";
+import { controlledClock, fixture, onLockedPort, freshDatabase, post, stub, tronChainReads, type Clock, type Stub } from "./support.js";
 
 vi.mock("../src/http.js", async (original) => (await import("./support.js")).countingSleep(await original<typeof import("../src/http.js")>()));
 
@@ -86,7 +86,7 @@ async function start(): Promise<string> {
     return tronChainReads(path, body);
   });
   const nodeUrl = node.url;
-  const { port, server: f } = await onWorkerPort((p) =>
+  const { port, server: f } = await onLockedPort((p) =>
     serveProfileFacilitator({
       listen: `127.0.0.1:${p}`,
       tron: [{ network: NETWORK, fullNode: nodeUrl, solidityNode: nodeUrl }],

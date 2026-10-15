@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { createServer } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
-import { controlledClock, freshDatabase, onWorkerPort, until } from "./support.js";
+import { controlledClock, freshDatabase, onLockedPort, until } from "./support.js";
 
 let db: Awaited<ReturnType<typeof freshDatabase>>;
 
@@ -37,7 +37,7 @@ describe("a facilitator that cannot start", () => {
   it("on a port another server holds rejects with the listen's error, and no session of its store stays open", async () => {
     const store = namedStore();
     const holder = createServer();
-    const { port } = await onWorkerPort(
+    const { port } = await onLockedPort(
       (p) =>
         new Promise<void>((resolve, reject) => {
           holder.once("error", reject);

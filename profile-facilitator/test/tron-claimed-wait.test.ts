@@ -13,7 +13,7 @@ import { serveProfileFacilitator } from "../src/index.js";
 import {
   controlledClock,
   fixture,
-  onWorkerPort,
+  onLockedPort,
   freshDatabase,
   gate,
   post,
@@ -85,7 +85,7 @@ beforeEach(async () => {
     if (path === "/wallet/gettransactioninfobyid") return live["infoNotFound"];
     return tronChainReads(path, sent) ?? {};
   });
-  const { port, server: f } = await onWorkerPort((p) =>
+  const { port, server: f } = await onLockedPort((p) =>
     serveProfileFacilitator({
       listen: `127.0.0.1:${p}`,
       tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],

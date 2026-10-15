@@ -21,7 +21,7 @@ import {
   controlledClock,
   fixture,
   gate,
-  onWorkerPort,
+  onLockedPort,
   freshDatabase,
   HANG,
   post,
@@ -177,7 +177,7 @@ async function start(n: Node = {}, settleWaitMs = 3_000): Promise<void> {
     if (path === "/wallet/gettransactionfrompending" && n.pendingPool !== undefined) return n.pendingPool();
     return tronChainReads(path, sent) ?? {};
   }, n.leaves);
-  const { port, server: f } = await onWorkerPort((p) =>
+  const { port, server: f } = await onLockedPort((p) =>
     serveProfileFacilitator({
       listen: `127.0.0.1:${p}`,
       tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],
@@ -534,7 +534,7 @@ describe("deduplication", () => {
     });
     expect((await post(`${base}/settle`, body(TX_V2))).json).toEqual(SUCCESS);
     const other = await freshDatabase();
-    const { port, server: second } = await onWorkerPort((p) =>
+    const { port, server: second } = await onLockedPort((p) =>
       serveProfileFacilitator({
         listen: `127.0.0.1:${p}`,
         tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],

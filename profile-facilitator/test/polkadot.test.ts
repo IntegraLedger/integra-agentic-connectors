@@ -18,7 +18,7 @@ import {
   asked,
   controlledClock,
   fixture,
-  onWorkerPort,
+  onLockedPort,
   freshDatabase,
   gate,
   post,
@@ -172,7 +172,7 @@ async function start(chain: Chain = {}, network: string = NETWORK, settleWaitMs 
     }
     return { jsonrpc: "2.0", id, error: { code: -32601, message: `no stub for ${method} ${p}` } };
   }, chain.leaves);
-  const { port, server: f } = await onWorkerPort((p) =>
+  const { port, server: f } = await onLockedPort((p) =>
     serveProfileFacilitator({
       listen: `127.0.0.1:${p}`,
       polkadot: [{ network: network as typeof NETWORK, rpc: node.url }],

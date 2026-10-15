@@ -8,7 +8,7 @@ import { secp256k1 } from "@noble/curves/secp256k1.js";
 import { createHash } from "node:crypto";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
-import { controlledClock, fixture, onWorkerPort, freshDatabase, post, stub, tronChainReads, type Clock, type Stub } from "./support.js";
+import { controlledClock, fixture, onLockedPort, freshDatabase, post, stub, tronChainReads, type Clock, type Stub } from "./support.js";
 
 const RAW_V2 =
   "0a0289ad22087d1ddbe0b0adbe8740a0b6f4b18d34524d6c63703a7368613235363a3078626137383136626638663031636665613431343134306465356461653232323362303033363161333936313737613963623431306666363166323030313561645aae01081f12a9010a31747970652e676f6f676c65617069732e636f6d2f70726f746f636f6c2e54726967676572536d617274436f6e747261637412740a1541f39fd6e51aad88f6f4ce6ab8827279cfffb92266121541a614f803b6fd780986a42c78ec9c7f77e6ded13c2244a9059cbb000000000000000000000000209693bc6afc0c5328ba36faf03c514ef312287c000000000000000000000000000000000000000000000000000000000000271070c0e1f0b18d34900180c2d72f";
@@ -63,7 +63,7 @@ beforeEach(async () => {
     }
     return tronChainReads(path, sent) ?? {};
   });
-  const { port, server: f } = await onWorkerPort((p) =>
+  const { port, server: f } = await onLockedPort((p) =>
     serveProfileFacilitator({
       listen: `127.0.0.1:${p}`,
       tron: [{ network: NETWORK, fullNode: node.url, solidityNode: node.url }],

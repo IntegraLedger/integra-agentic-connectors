@@ -22,7 +22,7 @@ import { ApiPromise } from "@polkadot/api";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { serveProfileFacilitator } from "../src/index.js";
 import { BLOCK_READS, blockReads } from "../src/polkadot.js";
-import { controlledClock, fixture, onWorkerPort, freshDatabase, post, reaches, stub, until, type Clock, type Stub } from "./support.js";
+import { controlledClock, fixture, onLockedPort, freshDatabase, post, reaches, stub, until, type Clock, type Stub } from "./support.js";
 
 vi.mock("../src/http.js", async (original) => (await import("./support.js")).countingSleep(await original<typeof import("../src/http.js")>()));
 
@@ -162,7 +162,7 @@ async function start(settleWaitMs = 1_500): Promise<void> {
     return { jsonrpc: "2.0", id, error: { code: -32601, message: `no stub for ${method} ${p}` } };
   });
   const rpc = node.url;
-  const { port, server: f } = await onWorkerPort((p) =>
+  const { port, server: f } = await onLockedPort((p) =>
     serveProfileFacilitator({
       listen: `127.0.0.1:${p}`,
       polkadot: [{ network: NETWORK, rpc }],
