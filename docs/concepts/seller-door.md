@@ -5,7 +5,7 @@ description: The server-to-server API a connector calls to issue an ATR, claim a
 
 # The seller door
 
-The **seller door** is the HTTP API a seller's own systems call when they, not the door, face the buyer. A
+The **seller door** is the HTTP API a seller's own systems call when they face the buyer. A
 **connector** is the software on the seller's side that calls it: a commerce platform's plugin, a payment app, or a
 seller's own checkout backend.
 
