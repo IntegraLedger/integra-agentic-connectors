@@ -82,8 +82,8 @@ report. The door reads the payment with the keys it takes from them, and the rec
 `outcome: "declined"` reports that the seller declined a claimed payment. The door answers it in one of four ways:
 
 - on a record with no claimed payment, `409 settle/not-settling`;
-- on a pairing the door can read, the door reads the payment on the rail at once and answers `202` with the record
-  `settling`: the report releases nothing by itself, and the read decides;
+- on a pairing the door can read, the door answers `202` with the record `settling` and makes the payment's next read
+  on the rail due at once: the report releases nothing by itself, and that read decides;
 - on a pairing with nothing to read, the door releases the claim and answers `200` with the record `issued`, whose
   payment can be claimed again;
 - on an MPP pairing with nothing to read, the release also removes the record, so the answer is `404 door/not-found`;
