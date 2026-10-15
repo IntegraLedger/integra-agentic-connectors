@@ -190,17 +190,23 @@ jobs:
             // The patterns here read lines, so every workflow is written in YAML's plain block style: outside a block
             // scalar (`run: |`), a line is blank, a comment, one plain key and its value, or a sequence entry that is
             // one plain word (a port mapping such as 5432:5432). No value is a flow mapping other than {}, a flow
-            // sequence of anything but plain words, an anchor, an alias or a tag.
+            // sequence of anything but plain words, an anchor, an alias, a tag or a quoted scalar that does not close
+            // on its own line. The jobs' steps are read only on the lines outside a block scalar.
             let scalar = -1;
+            const inside = new Set();
             lines.forEach((l, i) => {
               const indent = l.length - l.trimStart().length;
-              if (scalar >= 0 && (l.trim() === "" || indent > scalar)) return;
+              if (scalar >= 0 && (l.trim() === "" || indent > scalar)) {
+                inside.add(i);
+                return;
+              }
               scalar = -1;
               if (blank(l)) return;
               const key = /^( *)(- )?[A-Za-z0-9_-]+:(?: +(.*))?$/.exec(l);
               const word = /^ *- [A-Za-z0-9_./][A-Za-z0-9_./-]*(:[A-Za-z0-9_./-]+)*$/.test(l);
               const value = (key?.[3] ?? "").replace(/(^| +)#.*$/, "");
-              if ((key === null && !word) || /^[&*!]/.test(value) || (value.startsWith("{") && value !== "{}") || (value.startsWith("[") && !/^\[[^\][{}:#"']*\]$/.test(value))) {
+              const quoted = /^['"]/.test(key?.[3] ?? "") && !/^('([^']|'')*'|"([^"\\]|\\.)*")( +#.*)?$/.test(key[3]);
+              if ((key === null && !word) || quoted || /^[&*!]/.test(value) || (value.startsWith("{") && value !== "{}") || (value.startsWith("[") && !/^\[[^\][{}:#"']*\]$/.test(value))) {
                 bad.push(`${at(i)}: not one plain key and value: ${l.trim()}`);
               } else if (/^[|>][-+1-9]*$/.test(value)) scalar = key[1].length + (key[2] ? 2 : 0);
             });
@@ -221,11 +227,11 @@ jobs:
             if (found.length === 0) bad.push(`${f}: no job under "jobs:"`);
             for (const job of found) {
               const runs = [];
-              for (let i = job.from; i < job.to; i++) if (/^ +(- )?run:/.test(lines[i])) runs.push(i);
+              for (let i = job.from; i < job.to; i++) if (!inside.has(i) && /^ +(- )?run:/.test(lines[i])) runs.push(i);
               if (runs.length === 0) continue;
               jobs++;
               const fetches = [];
-              for (let i = job.from; i < job.to; i++) if (step.every((s, k) => lines[i + k] === s)) fetches.push(i);
+              for (let i = job.from; i < job.to; i++) if (!inside.has(i) && step.every((s, k) => lines[i + k] === s)) fetches.push(i);
               let next = fetches[0] + step.length;
               while (next < job.to && blank(lines[next])) next++;
               if (fetches.length !== 1) bad.push(`${f}: job ${job.name} runs a step and holds the Fetch Node.js step ${fetches.length} times, where it holds it once`);
