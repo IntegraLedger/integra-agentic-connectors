@@ -42,9 +42,10 @@ flowchart LR
 ## What these packages do not do
 
 They carry no business or legal logic. The door checks one thing: that a payment is bound to this transaction's ATR.
-It never checks amount, payee, asset, timing or payer. A discrepancy between the payment and the ATR's content is
-between the parties, and the ATR records what they agreed. The facilitator checks the payment against the x402
-requirements it is given and submits exactly what the payer signed; it holds no key and pays no fee.
+It never checks whether the payment meets the agreement's terms (amount, payee, asset, timing, payer). A discrepancy
+between the payment and the ATR's content is between the parties, and the ATR records what they agreed. The
+facilitator checks the payment against the x402 requirements it is given and submits exactly what the payer signed; it
+holds no key and pays no fee.
 
 ## Related repositories
 

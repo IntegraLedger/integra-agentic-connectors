@@ -48,8 +48,8 @@ no file. A reused id with other offers or another request answers `409 issue/min
 ## What the door checks, and what it does not
 
 `claim` is the door's one check: the payment carries this ATR's hash, for the options and request it was issued for.
-It never checks amount, payee, asset, timing or payer. A discrepancy is between the parties, and the ATR records what
-they agreed.
+It never checks whether the payment meets the agreement's terms (amount, payee, asset, timing, payer). A discrepancy
+is between the parties, and the ATR records what they agreed.
 
 The door carries no business or legal logic. Where it needs the seller's decision, it relays the seller's own systems'
 answer, and if they cannot answer, the transaction does not proceed. It never refuses a payment that has moved.

@@ -421,8 +421,8 @@ console.log(ids.length, ids.includes("x402/exact/eip155/eip3009"), ids.includes(
   define, such as a price, is refused rather than ignored.
 - The ATR is in the seller's storage before `issue` answers.
 - `claim` checks one thing: the payment carries this ATR's hash, for the options and request it was issued for. It
-  never checks amount, payee, asset, timing or payer. A discrepancy is between the parties, and the ATR records what
-  they agreed.
+  never checks whether the payment meets the agreement's terms (amount, payee, asset, timing, payer). A discrepancy is
+  between the parties, and the ATR records what they agreed.
 - The door never refuses a payment that has moved: a pushed payment that fails the check is declined, and a reported
   payment is recorded with a statement of what is missing.
 - Every record states what it proves, and no more.
