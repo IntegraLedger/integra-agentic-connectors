@@ -1,12 +1,12 @@
 ---
 title: Getting started
-description: Install the contract, then issue an ATR, claim a payment and read a record against a local stand-in door.
+description: Install the contract, then issue an ATR, claim a payment and read a hash the door never issued, against a local stand-in door.
 ---
 
 # Getting started
 
-This page takes one x402 payment through the seller door: issue the ATR, claim the payment, and read the record.
-Every step is a complete program you can run.
+This page takes one x402 payment through the seller door: issue the ATR, claim the payment, and read a hash the door
+never issued. Every step is a complete program you can run.
 
 ## 1. Install
 
