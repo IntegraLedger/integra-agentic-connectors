@@ -120,7 +120,9 @@ jobs:
             const pattern = String(pkg.name).startsWith("@integraledger/") ? named : specifier;
             const walk = (d) => {
               for (const e of fs.readdirSync(d, { withFileTypes: true })) {
-                if (e.name === "node_modules" || e.name === "dist" || e.name.startsWith(".")) continue;
+                // The package's own dist is its build output; a folder named dist below it is source, which the
+                // build reads.
+                if (e.name === "node_modules" || (d === dir && e.name === "dist") || e.name.startsWith(".")) continue;
                 const p = path.join(d, e.name);
                 if (e.isDirectory()) walk(p);
                 else if (code.test(e.name)) {
