@@ -136,7 +136,7 @@ claimed: true pattern: native-field
 The record is now `settling`. Send the payment to your facilitator's `/verify` and `/settle`, then report its
 `transaction` (see [report](./guides/report.md)).
 
-## 5. Read the record
+## 5. Read a hash the door never issued, and see the refusal
 
 ```ts title="status.ts"
 import type { RecordView, Refusal } from "@integraledger/agentic-connectors";
