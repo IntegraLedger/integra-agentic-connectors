@@ -263,14 +263,18 @@ jobs:
           workspace=$(awk '/^[^ #]/ { key = $0; next } key == "packages:" && /^  - /' pnpm-workspace.yaml)
           # Every package in both lockfiles comes from the registry by its integrity: no file, directory, git or tarball.
           exotic=$(grep -nE '^ +resolution:' pnpm-lock.yaml website/pnpm-lock.yaml | grep -vE ':[0-9]+: +resolution: \{integrity: sha512-[A-Za-z0-9+/]+={0,2}\}$' || true)
+          # Every dependency a manifest names resolves to a registry version: a link to a folder has no resolution line.
+          versions=$(grep -nE '^ +version: ' pnpm-lock.yaml website/pnpm-lock.yaml | grep -vE ':[0-9]+: +version: [0-9]' || true)
           # No workflow sets pnpm's settings around the files: by an environment variable, a command-line setting or the
-          # config command (pnpm reads the first two; the patterns are bracketed so that this step does not match itself).
-          around=$(grep -niE 'pnpm[_]config_|--config[.]|pnpm[ ]+config[ ]' .github/workflows/*.yml || true)
-          if [ "$workspace" != "$(printf '  - "*"\n  - "!website"')" ] || [ -n "$exotic$around" ]; then
-            printf 'the install policy is weakened outside the settings:\npnpm-workspace.yaml packages:\n%s\n%s\n' "$workspace" "$(printf '%s\n' "$exotic" "$around" | grep . || true)"
+          # configuration command, by its name, its alias or its shorthands for reading and writing one key, each of which
+          # may follow options, with pnpm called by name, by path, as pnpm.cjs or with a version. The patterns are
+          # bracketed so that this step does not match itself.
+          around=$(grep -niE 'pnpm[_]config_|--config[.]|\bpnpm(\.[cm]?js|@[^[:space:]]*)?[^[:alnum:][:space:]_.([-]*[[:space:]](.*[[:space:]])?(config|c|get|set)([[:space:]]|$)' .github/workflows/*.yml || true)
+          if [ "$workspace" != "$(printf '  - "*"\n  - "!website"')" ] || [ -n "$exotic$versions$around" ]; then
+            printf 'the install policy is weakened outside the settings:\npnpm-workspace.yaml packages:\n%s\n%s\n' "$workspace" "$(printf '%s\n' "$exotic" "$versions" "$around" | grep . || true)"
             exit 1
           fi
-          echo "pnpm-workspace.yaml and website/pnpm-workspace.yaml set minimumReleaseAge 1440 (excluding only @integraledger/*), trustPolicy no-downgrade and strictDepBuilds, allow no dependency build and override only to registry versions; the workspace is every folder but website; both lockfiles take every package from the registry; no workflow sets pnpm's settings"
+          echo "pnpm-workspace.yaml and website/pnpm-workspace.yaml set minimumReleaseAge 1440 (excluding only @integraledger/*), trustPolicy no-downgrade and strictDepBuilds, allow no dependency build and override only to registry versions; the workspace is every folder but website; both lockfiles take every package and every dependency from the registry; no workflow sets pnpm's settings"
       - name: Fetch pnpm
         run: |
           set -eu
