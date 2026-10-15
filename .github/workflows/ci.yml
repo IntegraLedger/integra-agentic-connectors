@@ -393,3 +393,20 @@ jobs:
       - name: The code highlighting gives one result however long tokenizing takes, in the themes' colours
         working-directory: website
         run: node scripts/check-highlighting.mjs
+      - name: Two builds of one commit are byte-equal
+        working-directory: website
+        run: |
+          set -eu
+          sha=$(git rev-parse HEAD)
+          mv out "$RUNNER_TEMP/first-build"
+          rm -rf .next
+          pnpm build
+          status=0
+          diff -r --brief "$RUNNER_TEMP/first-build" out || status=$?
+          case "$status" in
+            0) ;;
+            1) echo "two builds of $sha differ in the files above"; exit 1 ;;
+            *) exit "$status" ;;
+          esac
+          test -d "out/_next/static/$sha" || { echo "the two builds are equal, but their build ID is not the commit's sha, $sha"; exit 1; }
+          echo "two builds of $sha are byte-equal: $(find out -type f | wc -l) files, under the build ID $sha"
