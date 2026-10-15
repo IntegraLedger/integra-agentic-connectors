@@ -258,16 +258,32 @@ jobs:
             grep -qx 'minimumReleaseAge: 1440' "$f"
             grep -qx 'trustPolicy: no-downgrade' "$f"
             grep -qx 'strictDepBuilds: true' "$f"
-            # Every line that starts a setting is one of these seven, so no other setting is read, in any spelling.
-            top=$(grep -vE '^( |#|$)' "$f" | grep -vxE 'packages:|minimumReleaseAge: 1440|trustPolicy: no-downgrade|strictDepBuilds: true|allowBuilds:|minimumReleaseAgeExclude:|overrides:' || true)
-            # Under allowBuilds every entry is a denial; under minimumReleaseAgeExclude the one entry is @integraledger/*;
-            # under packages the entries are "*" and "!website"; under overrides each entry is a registry version, which
-            # minimumReleaseAge and trustPolicy read (a file, link or git source has no release date to read).
-            entries=$(awk '/^[^ #]/ { key = $0; next } /^ *(#|$)/ { next }
-              (key == "allowBuilds:" && !/^  [^ ]+: false$/) ||
+            # Every line that starts a setting is one of these seven, so no other setting is read, in any spelling:
+            # allowBuilds and allowSkills are refused. Each refused line is printed with its line number.
+            top=$(grep -nvE '^( |#|$)' "$f" | grep -vE '^[0-9]+:(packages:|minimumReleaseAge: 1440|trustPolicy: no-downgrade|strictDepBuilds: true|permissions:|minimumReleaseAgeExclude:|overrides:)$' || true)
+            # Under permissions each entry is a package name, plain or double-quoted, mapped in flow style on its line or
+            # in block style on the lines under it to build, skills or both, each false; under minimumReleaseAgeExclude
+            # the one entry is @integraledger/*; under packages the entries are "*" and "!website"; under overrides each
+            # entry is a registry version, which minimumReleaseAge and trustPolicy read (a file, link or git source has
+            # no release date to read).
+            entries=$(awk '
+              BEGIN { pkg = "^  ([A-Za-z0-9][A-Za-z0-9._~-]*|\"(@[A-Za-z0-9._~-]+/)?[A-Za-z0-9][A-Za-z0-9._~-]*\"):" }
+              # A block-mapped package with no key under it is refused.
+              function finish() { if (open != "" && keys == 0) print open; open = ""; keys = 0; split("", seen) }
+              /^ *(#|$)/ { next }
+              /^[^ ]/ { finish(); key = $0; next }
+              key == "permissions:" && /^    / {
+                k = $0; sub(/^ +/, "", k); sub(/:.*/, "", k)
+                if (open == "" || !/^    (build|skills): false$/ || seen[k]++) print FNR ":" $0; else keys++
+                next
+              }
+              key == "permissions:" { finish() }
+              key == "permissions:" && $0 ~ (pkg "$") { open = FNR ":" $0; next }
+              (key == "permissions:" && $0 !~ (pkg " [{] ?(build: false(, ?skills: false)?|skills: false(, ?build: false)?) ?[}]$")) ||
               (key == "minimumReleaseAgeExclude:" && $0 != "  - \"@integraledger/*\"") ||
               (key == "packages:" && $0 != "  - \"*\"" && $0 != "  - \"!website\"") ||
-              (key == "overrides:" && !/^  ("[^"]+"|[A-Za-z0-9._-]+): [~^]?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$/)' "$f")
+              (key == "overrides:" && !/^  ("[^"]+"|[A-Za-z0-9][A-Za-z0-9._@\/>-]*): [~^]?[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$/) { print FNR ":" $0 }
+              END { finish() }' "$f")
             if [ -n "$top$entries" ]; then
               printf '%s weakens the install policy:\n%s\n' "$f" "$(printf '%s\n' "$top" "$entries" | grep .)"
               exit 1
@@ -275,20 +291,20 @@ jobs:
           done
           # The workspace is every folder but the site, so pnpm -r builds, type-checks and tests every package.
           workspace=$(awk '/^[^ #]/ { key = $0; next } key == "packages:" && /^  - /' pnpm-workspace.yaml)
-          # Every package in both lockfiles comes from the registry by its integrity: no file, directory, git or tarball.
+          # Every package in both lockfiles comes from the registry by its integrity, and every dependency a manifest
+          # names is a registry version: no file, directory, link, git or tarball.
           exotic=$(grep -nE '^ +resolution:' pnpm-lock.yaml website/pnpm-lock.yaml | grep -vE ':[0-9]+: +resolution: \{integrity: sha512-[A-Za-z0-9+/]+={0,2}\}$' || true)
-          # Every dependency a manifest names resolves to a registry version: a link to a folder has no resolution line.
-          versions=$(grep -nE '^ +version: ' pnpm-lock.yaml website/pnpm-lock.yaml | grep -vE ':[0-9]+: +version: [0-9]' || true)
+          exotic="$exotic$(grep -nE '^ +version: ' pnpm-lock.yaml website/pnpm-lock.yaml | grep -vE ':[0-9]+: +version: [0-9]' || true)"
           # No workflow sets pnpm's settings around the files: by an environment variable, a command-line setting or the
           # configuration command, by its name, its alias or its shorthands for reading and writing one key, each of which
           # may follow options, with pnpm called by name, by path, as pnpm.cjs or with a version. The patterns are
           # bracketed so that this step does not match itself.
           around=$(grep -niE 'pnpm[_]config_|--config[.]|\bpnpm(\.[cm]?js|@[^[:space:]]*)?[^[:alnum:][:space:]_.([-]*[[:space:]](.*[[:space:]])?(config|c|get|set)([[:space:]]|$)' .github/workflows/*.yml || true)
-          if [ "$workspace" != "$(printf '  - "*"\n  - "!website"')" ] || [ -n "$exotic$versions$around" ]; then
-            printf 'the install policy is weakened outside the settings:\npnpm-workspace.yaml packages:\n%s\n%s\n' "$workspace" "$(printf '%s\n' "$exotic" "$versions" "$around" | grep . || true)"
+          if [ "$workspace" != "$(printf '  - "*"\n  - "!website"')" ] || [ -n "$exotic$around" ]; then
+            printf 'the install policy is weakened outside the settings:\npnpm-workspace.yaml packages:\n%s\n%s\n' "$workspace" "$(printf '%s\n' "$exotic" "$around" | grep . || true)"
             exit 1
           fi
-          echo "pnpm-workspace.yaml and website/pnpm-workspace.yaml set minimumReleaseAge 1440 (excluding only @integraledger/*), trustPolicy no-downgrade and strictDepBuilds, allow no dependency build and override only to registry versions; the workspace is every folder but website; both lockfiles take every package and every dependency from the registry; no workflow sets pnpm's settings"
+          echo "pnpm-workspace.yaml and website/pnpm-workspace.yaml set minimumReleaseAge 1440 (excluding only @integraledger/*), trustPolicy no-downgrade and strictDepBuilds, record every package decision under permissions with each build and skills value false, and override only to registry versions; the workspace is every folder but website; both lockfiles take every package from the registry; no workflow sets pnpm's settings"
       - name: Fetch pnpm
         run: |
           set -eu
