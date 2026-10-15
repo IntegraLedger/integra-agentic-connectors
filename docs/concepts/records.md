@@ -15,6 +15,7 @@ stateDiagram-v2
     [*] --> issued: issue
     issued --> settling: claim
     settling --> paid: settlement read
+    settling --> issued: release, when a read shows the payment unable to settle or a declined report has nothing to read
     issued --> paid: report of a settled payment
     paid --> closed: report of a channel's close
     settling --> stale: 604 800 s after settleBy, nothing read
