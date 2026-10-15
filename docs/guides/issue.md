@@ -34,31 +34,41 @@ On x402, `request` commits the ATR to the HTTP request its options answer. Its r
 - `bodyDigest`: `0x` and the SHA-256 hex of the body bytes as received. An empty body gives
   `0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`.
 
+Compute it with `requestCommitment` from `@integraledger/lcp/x402`: the request commitment is the LCP package's rule
+([rule 4](./connector-rules.md#4-the-request-commitment-is-the-lcp-packages-rule)). It is async, and answers the
+commitment, or a refusal for a request it cannot commit to, such as a target that is not origin-form. The sample
+imports `@integraledger/lcp`, the peer of `@integraledger/agentic-connectors`, so install both, lcp at the peer's
+range:
+
+```sh
+npm install @integraledger/agentic-connectors @integraledger/lcp@~0.4.0
+```
+
 ```ts title="commitment.ts"
-import { createHash } from "node:crypto";
 import type { RequestCommitment } from "@integraledger/agentic-connectors";
+import { isRefusal } from "@integraledger/lcp/core";
+import { requestCommitment } from "@integraledger/lcp/x402";
 
-/** The commitment for a request as received: its method, raw target and body bytes. */
-function commitment(method: string, target: string, body: Uint8Array): RequestCommitment {
-  const at = target.indexOf("?");
-  return {
-    method,
-    path: at === -1 ? target : target.slice(0, at),
-    query: at === -1 ? "" : target.slice(at + 1),
-    bodyDigest: `0x${createHash("sha256").update(body).digest("hex")}`,
-  };
+const answers = [
+  await requestCommitment({ method: "GET", target: "/v1/report", body: new Uint8Array() }),
+  await requestCommitment({ method: "POST", target: "/v1/quote?region=eu", body: new TextEncoder().encode('{"n":1}') }),
+  await requestCommitment({ method: "GET", target: "v1/report", body: new Uint8Array() }),
+];
+for (const answer of answers) {
+  if (isRefusal(answer)) {
+    console.log(answer.code);
+  } else {
+    const request: RequestCommitment = answer;
+    console.log(JSON.stringify(request));
+  }
 }
-
-console.log(JSON.stringify(commitment("GET", "/v1/report", new Uint8Array())));
-console.log(JSON.stringify(commitment("POST", "/v1/quote?region=eu", new TextEncoder().encode('{"n":1}'))));
 ```
 
 ```text output
 {"method":"GET","path":"/v1/report","query":"","bodyDigest":"0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}
 {"method":"POST","path":"/v1/quote","query":"region=eu","bodyDigest":"0x2bfd14f43d17fc7cea24e0917a8879b4b2f880b8baeec1b9d90fbaad655e71bd"}
+x402/request-target-invalid
 ```
-
-`@integraledger/lcp` computes the same commitment (`requestCommitment` in `@integraledger/lcp/x402`); use either.
 
 ## The answer
 
