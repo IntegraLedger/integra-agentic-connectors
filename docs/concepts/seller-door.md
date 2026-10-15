@@ -51,8 +51,7 @@ no file. A reused id with other offers or another request answers `409 issue/min
 It never checks whether the payment meets the agreement's terms (amount, payee, asset, timing, payer). A discrepancy
 is between the parties, and the ATR records what they agreed.
 
-The door carries no business or legal logic. Where it needs the seller's decision, it relays the seller's own systems'
-answer, and if they cannot answer, the transaction does not proceed. It never refuses a payment that has moved.
+The door carries no business or legal logic. It never refuses a payment that has moved.
 
 ## Refusals
 
