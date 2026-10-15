@@ -516,31 +516,50 @@ describe("the vectors", () => {
   it("every link and agreement URL an answer carries is a random token's path, never one built from the hash", () => {
     // A token: at least 16 random bytes, base64url without padding (RFC 4648 §5).
     const isToken = (t: string) => /^[A-Za-z0-9_-]+$/.test(t) && Buffer.from(t, "base64url").length >= 16;
+    // No 8 bytes of a token occur in the hash's 32 bytes.
+    const fromHash = (t: string, h: string) => {
+      const token = Buffer.from(t, "base64url");
+      const hash = Buffer.from(h.slice(2), "hex");
+      for (let i = 0; i + 8 <= token.length; i++) if (hash.includes(token.subarray(i, i + 8))) return true;
+      return false;
+    };
     let links = 0;
     let agreements = 0;
     for (const [name, v] of Object.entries(VECTORS)) {
       const f = v.fixed;
       expect(f.linkTokens, name).toHaveLength(f.atrIds.length);
       for (const t of [...f.linkTokens, ...(f.agreementTokens ?? [])]) expect(isToken(t), `${name} ${t}`).toBe(true);
+      // Each stored ATR's hash, with the id it was minted with.
+      const minted = new Map<string, string>();
+      for (const step of v.steps) {
+        if (step.stored) minted.set(step.stored.sha256, (JSON.parse(step.stored.bytes) as { id: string }).id);
+      }
+      let issued = 0;
       for (const step of v.steps) {
         const b = step.expect.body as Record<string, unknown>;
         if (typeof b["link"] === "string") {
           const issue = b as unknown as IssueResponse;
-          const token = f.linkTokens[f.atrIds.findIndex((_, i) => issue.link === `${f.storageBase}${f.linkTokens[i]}`)];
+          const token = f.linkTokens[f.atrIds.indexOf(minted.get(issue.atrHash) ?? "")];
           expect(token, `${name} link`).toBeDefined();
+          expect(issue.link, name).toBe(`${f.storageBase}${token}`);
           expect(issue.carriers.legalContext.legalContextUrl, name).toBe(issue.link);
           expect(issue.carriers.legal_context.legal_context_url, name).toBe(issue.link);
           expect(issue.link.toLowerCase().includes(issue.atrHash.slice(2).toLowerCase()), name).toBe(false);
+          expect(fromHash(token!, issue.atrHash), `${name} link token`).toBe(false);
           links++;
           const agreement = (b["agreement"] as { url: string } | undefined)?.url;
           if (agreement !== undefined) {
             const host = f.agreement?.host ?? f.hosts?.[0];
-            expect((f.agreementTokens ?? []).map((t) => `https://${host}/agreement/${t}`), name).toContain(agreement);
+            const t = (f.agreementTokens ?? [])[issued++];
+            expect(t, `${name} agreement`).toBeDefined();
+            expect(agreement, name).toBe(`https://${host}/agreement/${t}`);
             expect(agreement.toLowerCase().includes(issue.atrHash.slice(2).toLowerCase()), name).toBe(false);
+            expect(fromHash(t!, issue.atrHash), `${name} agreement token`).toBe(false);
             agreements++;
           }
         }
       }
+      expect(issued, `${name} agreement tokens`).toBe((f.agreementTokens ?? []).length);
     }
     // The vectors that issue (CV1, CV2 twice, CV3, CV6, CV7, CV9, CV10, CV11, CV12), two with the agreement step.
     expect(links).toBe(10);
