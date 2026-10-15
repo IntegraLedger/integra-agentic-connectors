@@ -455,7 +455,8 @@ Each file in `vectors/` is `{name, fixed, steps, source}`:
 - `fixed` names the tenant, its credential and that credential's SHA-256, the resources, the storage base, the clock
   (Unix seconds) and the ATR identifiers the steps mint, in order. Where a step needs the agreement step, it also
   names the tenant's hosts and its agreement, whose `host` names the host its URL is on when the tenant has more
-  than one.
+  than one. Where a step reads the rail, `reader` states what the network's reader answers: its `finalized` and
+  `safe` block marks and each receipt it holds. A vector with no `reader` has none, and nothing is read.
 - Each step is `{agreed?, request, expect, stored?, storedFiles?}`. `agreed` states that the buyer's agreement
   payment for that record was recorded before the request. `stored` is the file the step writes to the seller's
   storage (`{bytes, sha256}`), and `storedFiles` the number of files the storage holds after it.
@@ -471,10 +472,12 @@ Each file in `vectors/` is `{name, fixed, steps, source}`:
 | `CV4` | A content slot holding two JSON values: `422 core/content-not-json`. |
 | `CV5` | No credential (`401`), and an `Origin` header (`403`). |
 | `CV6` | A claim, and its retry answering `409 claim/in-progress`. |
-| `CV7` | A report whose transaction is not read settled: `202` with the record `issued`. |
+| `CV7` | A report with no claim, and no reader for its transaction yet: `202` with the record `issued`. |
 | `CV8` | The status of a hash never issued: `404 door/not-found`. |
 | `CV9` | A plain card checkout with the agreement step. |
 | `CV10` | A card payment reported before the agreement is recorded. |
+| `CV11` | A report with no claim, whose transaction the reader holds settled with the ATR's hash: `200` with the record `paid` on that read. |
+| `CV12` | A report with no claim on a pairing whose hash is read only through the claim: `202` with the record `settling`, unpaid, stating that the hash is not read. |
 
 Every stored ATR's bytes hash to the value the vector states. You can check that without a door:
 
@@ -499,6 +502,8 @@ CV6 ok 0x3c2394624c8c9a61
 CV7 ok 0x44f9a0d126d985d3
 CV9 ok 0xcfa3a6589bf1e273
 CV10 ok 0x61c55d46c99a6199
+CV11 ok 0x44f9a0d126d985d3
+CV12 ok 0x84ff8fab129ebbb9
 ```
 
 The package's own tests validate `openapi.json` against the published OAS 3.1 schema (pinned by its SHA-256), every

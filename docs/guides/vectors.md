@@ -23,7 +23,9 @@ A vector is `{name, fixed, steps, source}`.
   declared resources and their pairings, the storage base, the clock (Unix seconds) and the ATR identifiers the steps
   mint, in order. Where a step needs the agreement step, it also names the tenant's hosts and its agreement: the
   nominal payment's pairing, network, asset, payee, amount and time bound, and the `host` its URL is on when the
-  tenant has more than one.
+  tenant has more than one. Where a step reads the rail, `reader` states what the network's reader answers: its
+  `finalized` and `safe` block marks and each receipt it holds. A vector with no `reader` has none, and nothing is
+  read.
 - Each step is `{agreed?, request, expect, stored?, storedFiles?}`:
   - `agreed`: the buyer's agreement payment for that record was recorded before the request, as
     `{atrHash, network, transaction}`;
@@ -89,6 +91,10 @@ ok   CV9 step 4: GET /status/0xcfa3a6589bf1e273ab105bb7144a2d5944af1caed14f58b39
 ok   CV10 step 1: POST /issue -> 200
 ok   CV10 step 2: POST /report -> 200
 ok   CV10 step 3: GET /status/0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32 -> 200
+ok   CV11 step 1: POST /issue -> 200
+ok   CV11 step 2: POST /report -> 200
+ok   CV12 step 1: POST /issue -> 200
+ok   CV12 step 2: POST /report -> 202
 every step answered as its vector expects
 ```
 
@@ -118,4 +124,6 @@ CV6 506 ok
 CV7 506 ok
 CV9 206 ok
 CV10 206 ok
+CV11 506 ok
+CV12 791 ok
 ```

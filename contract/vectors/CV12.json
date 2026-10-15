@@ -1,0 +1,189 @@
+{
+  "name": "a report with no claim on a pairing whose hash is read only through the claim",
+  "fixed": {
+    "tenant": "t-acme",
+    "credential": "isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+    "credentialDigest": "0xbc357689ffc51ab5e745f005b3df2faaab2c715f110e41fc56d4ca8fdead30d4",
+    "resources": [
+      {
+        "id": "quote",
+        "pairings": [
+          "x402/auth-capture/eip155/eip3009"
+        ]
+      }
+    ],
+    "storageBase": "https://atr.seller.example/",
+    "clock": 1790000000,
+    "atrIds": [
+      "6f1c2b0e-8d4a-4c3b-9e2f-1a7d5c9b3e52"
+    ]
+  },
+  "steps": [
+    {
+      "request": {
+        "method": "POST",
+        "path": "/issue",
+        "headers": {
+          "authorization": "Bearer isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "content-type": "application/json"
+        },
+        "body": {
+          "mintRequestId": "chk_7Q2:v4",
+          "resource": "quote",
+          "lifetimeSeconds": 60,
+          "offers": [
+            {
+              "pairing": "x402/auth-capture/eip155/eip3009",
+              "option": {
+                "scheme": "auth-capture",
+                "network": "eip155:84532",
+                "amount": "10000",
+                "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+                "payTo": "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
+                "maxTimeoutSeconds": 60,
+                "extra": {
+                  "name": "USDC",
+                  "version": "2",
+                  "captureAuthorizer": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+                  "receiverAuthorizer": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+                  "captureDeadline": 1790003600,
+                  "refundDeadline": 1790086400,
+                  "feeRecipient": "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+                  "minFeeBps": 0,
+                  "maxFeeBps": 100
+                }
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "path": "/v1/report",
+            "query": "",
+            "bodyDigest": "0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "content": [
+            {
+              "slot": "terms",
+              "bytes": "IlBheSAxMDAwMCBiYXNlIHVuaXRzIG9mIFVTREMgZm9yIG9uZSByZXBvcnQuIg=="
+            }
+          ]
+        }
+      },
+      "expect": {
+        "status": 200,
+        "body": {
+          "atrHash": "0x84ff8fab129ebbb99d587144e8acd0887a86810ad1e5d2257e097cbbf977a92d",
+          "link": "https://atr.seller.example/0x84ff8fab129ebbb99d587144e8acd0887a86810ad1e5d2257e097cbbf977a92d",
+          "expiresAt": "2026-09-21T14:14:20.000Z",
+          "mintRequestId": "chk_7Q2:v4",
+          "carriers": {
+            "lcp": "lcp:sha256:0x84ff8fab129ebbb99d587144e8acd0887a86810ad1e5d2257e097cbbf977a92d",
+            "legalContext": {
+              "type": "sha256",
+              "value": "0x84ff8fab129ebbb99d587144e8acd0887a86810ad1e5d2257e097cbbf977a92d",
+              "legalContextUrl": "https://atr.seller.example/0x84ff8fab129ebbb99d587144e8acd0887a86810ad1e5d2257e097cbbf977a92d"
+            },
+            "legal_context": {
+              "type": "sha256",
+              "value": "0x84ff8fab129ebbb99d587144e8acd0887a86810ad1e5d2257e097cbbf977a92d",
+              "legal_context_url": "https://atr.seller.example/0x84ff8fab129ebbb99d587144e8acd0887a86810ad1e5d2257e097cbbf977a92d"
+            }
+          },
+          "pairings": [
+            {
+              "pairing": "x402/auth-capture/eip155/eip3009",
+              "pattern": {
+                "pattern": "id-reuse",
+                "canonical": false,
+                "profile": "x402/auth-capture/eip155",
+                "buyerSigns": true,
+                "onChain": true,
+                "zeroPartyRecoverable": false,
+                "forwardIndexable": false,
+                "publicProof": true,
+                "proves": "The payer signed a token authorization whose nonce commits, through the escrow's PaymentInfo, to a salt that is this ATR's hash when unbound, or a commitment over it with the receiver authorizer and policy when bound. The token contract verified the signature when the escrow collected the payment, and the escrow's event carries the salt. When unbound, the salt is this ATR's hash, so the settled transaction itself shows it. When bound, a holder of the ATR, the receiver authorizer and the policy can confirm the hash from the salt; the chain alone does not reveal it. This record covers that first collection; capture, void, refund and reclaim are the operator's and the payer's."
+              }
+            }
+          ]
+        }
+      },
+      "stored": {
+        "bytes": "{\"atrVersion\":\"1\",\"id\":\"6f1c2b0e-8d4a-4c3b-9e2f-1a7d5c9b3e52\",\"x402\":{\"accepts\":[{\"scheme\":\"auth-capture\",\"network\":\"eip155:84532\",\"amount\":\"10000\",\"asset\":\"0x036CbD53842c5426634e7929541eC2318f3dCF7e\",\"payTo\":\"0x209693Bc6afc0C5328bA36FaF03C514EF312287C\",\"maxTimeoutSeconds\":60,\"extra\":{\"name\":\"USDC\",\"version\":\"2\",\"captureAuthorizer\":\"0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC\",\"receiverAuthorizer\":\"0x90F79bf6EB2c4f870365E785982E1f101E93b906\",\"captureDeadline\":1790003600,\"refundDeadline\":1790086400,\"feeRecipient\":\"0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65\",\"minFeeBps\":0,\"maxFeeBps\":100}}],\"request\":{\"method\":\"GET\",\"path\":\"/v1/report\",\"query\":\"\",\"bodyDigest\":\"0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"}},\"terms\":\"Pay 10000 base units of USDC for one report.\"}",
+        "sha256": "0x84ff8fab129ebbb99d587144e8acd0887a86810ad1e5d2257e097cbbf977a92d"
+      }
+    },
+    {
+      "request": {
+        "method": "POST",
+        "path": "/report",
+        "headers": {
+          "authorization": "Bearer isk_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          "content-type": "application/json"
+        },
+        "body": {
+          "atrHash": "0x84ff8fab129ebbb99d587144e8acd0887a86810ad1e5d2257e097cbbf977a92d",
+          "pairing": "x402/auth-capture/eip155/eip3009",
+          "outcome": "paid",
+          "reference": "0x4444444444444444444444444444444444444444444444444444444444444444",
+          "network": "eip155:84532",
+          "chosen": {
+            "scheme": "auth-capture",
+            "network": "eip155:84532",
+            "amount": "10000",
+            "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+            "payTo": "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
+            "maxTimeoutSeconds": 60,
+            "extra": {
+              "name": "USDC",
+              "version": "2",
+              "captureAuthorizer": "0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC",
+              "receiverAuthorizer": "0x90F79bf6EB2c4f870365E785982E1f101E93b906",
+              "captureDeadline": 1790003600,
+              "refundDeadline": 1790086400,
+              "feeRecipient": "0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65",
+              "minFeeBps": 0,
+              "maxFeeBps": 100
+            }
+          },
+          "request": {
+            "method": "GET",
+            "path": "/v1/report",
+            "query": "",
+            "bodyDigest": "0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          }
+        }
+      },
+      "expect": {
+        "status": 202,
+        "body": {
+          "atrHash": "0x84ff8fab129ebbb99d587144e8acd0887a86810ad1e5d2257e097cbbf977a92d",
+          "state": "settling",
+          "expiresAt": "2026-09-21T14:14:20.000Z",
+          "settlement": {
+            "pairing": "x402/auth-capture/eip155/eip3009",
+            "network": "eip155:84532",
+            "reference": "0x4444444444444444444444444444444444444444444444444444444444444444"
+          },
+          "proves": {
+            "claimed": false,
+            "pattern": {
+              "pattern": "id-reuse",
+              "canonical": false,
+              "profile": "x402/auth-capture/eip155",
+              "buyerSigns": true,
+              "onChain": true,
+              "zeroPartyRecoverable": false,
+              "forwardIndexable": false,
+              "publicProof": true,
+              "proves": "This payment is reported without a claim, and this pairing reads this ATR's hash only through the claim, so the hash is not read: nothing shows that this payment carries it."
+            },
+            "settledBy": null
+          },
+          "agreement": null,
+          "channel": null
+        }
+      }
+    }
+  ],
+  "source": "printf '%s' '<stored bytes>' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. The option is lcp 0.4.0's vectors/x402-auth-capture-eip155-eip3009.json fixed.option. In lcp 0.4.0's registry this pairing has status and no recover: with no claim, no read of the transaction can check the hash. The report of money that moved is recorded, never refused: the record is settling, unpaid, with the reported transaction, and its statement says the hash is not read."
+}

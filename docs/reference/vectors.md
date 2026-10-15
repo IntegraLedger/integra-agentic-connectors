@@ -17,10 +17,12 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 | [CV4](#cv4) | content not JSON | 1 | `x402/exact/eip155/eip3009` |
 | [CV5](#cv5) | refusals before work | 2 | `x402/exact/eip155/eip3009` |
 | [CV6](#cv6) | claim | 3 | `x402/exact/eip155/eip3009` |
-| [CV7](#cv7) | a report with nothing read | 2 | `x402/exact/eip155/eip3009` |
+| [CV7](#cv7) | a report with no claim, not read yet | 2 | `x402/exact/eip155/eip3009` |
 | [CV8](#cv8) | status unknown | 1 | `x402/exact/eip155/eip3009` |
 | [CV9](#cv9) | plain card checkout | 4 | `card/seller-reference` |
 | [CV10](#cv10) | a card payment reported before the agreement is recorded | 3 | `card/seller-reference` |
+| [CV11](#cv11) | a report with no claim, read settled | 2 | `x402/exact/eip155/eip3009` |
+| [CV12](#cv12) | a report with no claim on a pairing whose hash is read only through the claim | 2 | `x402/auth-capture/eip155/eip3009` |
 
 ## CV1
 
@@ -77,7 +79,7 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV7
 
-**a report with nothing read.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; the reported transaction is not read settled on the chain (no reader answers for it), so nothing is recorded and the report is answered 202 with the record issued: report again later.
+**a report with no claim, not read yet.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. fixed names no reader, so nothing answers for the reported transaction. This pairing's hash can be read from the transaction alone, so the door records nothing yet and answers 202 with the record issued: report again later.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
@@ -112,3 +114,21 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 | 1 | `POST /issue` | 200 | 206 bytes, SHA-256 `0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32` |
 | 2 | `POST /report` | 200 `state: paid` |  |
 | 3 | `GET /status/0x61c55d46c99a6199e8917bfbbcf7cb59b19f731dbd15c7ab750e9c2a2c664b32` | 200 `state: paid` |  |
+
+## CV11
+
+**a report with no claim, read settled.** Source: Step 1 is CV7's issue: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. fixed.reader holds the reported transaction's receipt in the form of lcp 0.4.0's vectors/x402-exact-eip155-eip3009.json V6, with its two event topics: the token's AuthorizationUsed log (EIP-3009) whose nonce topic is this ATR's hash, then its Transfer (ERC-20) of printf '%064x' 10000 from the payer, the address of x402's MCP example, to payTo. The receipt's block is at the reader's finalized mark. With no claim, the door reads the hash from the transaction alone (the pairing's recover), so the record is paid on that read.
+
+| Step | Request | Answer | Stores |
+|---|---|---|---|
+| 1 | `POST /issue` | 200 | 506 bytes, SHA-256 `0x44f9a0d126d985d37b81447205a70c6d2ecd386a9fca859ddd5f61496ec33733` |
+| 2 | `POST /report` | 200 `state: paid` |  |
+
+## CV12
+
+**a report with no claim on a pairing whose hash is read only through the claim.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. The option is lcp 0.4.0's vectors/x402-auth-capture-eip155-eip3009.json fixed.option. In lcp 0.4.0's registry this pairing has status and no recover: with no claim, no read of the transaction can check the hash. The report of money that moved is recorded, never refused: the record is settling, unpaid, with the reported transaction, and its statement says the hash is not read.
+
+| Step | Request | Answer | Stores |
+|---|---|---|---|
+| 1 | `POST /issue` | 200 | 791 bytes, SHA-256 `0x84ff8fab129ebbb99d587144e8acd0887a86810ad1e5d2257e097cbbf977a92d` |
+| 2 | `POST /report` | 202 `state: settling` |  |

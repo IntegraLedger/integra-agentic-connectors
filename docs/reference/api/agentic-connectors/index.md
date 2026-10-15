@@ -291,6 +291,11 @@ One vector: requests to the door and the answers they must produce.
 | `fixed.credential` | `string` | - |
 | `fixed.credentialDigest` | `string` | - |
 | `fixed.hosts?` | `string`[] | The tenant's hosts: an agreement URL is on the agreement's `host`, or on the tenant's only host. |
+| `fixed.reader?` | `object` | What the network's reader answers: its `finalized` and `safe` block marks, and the receipt of each transaction it holds, as `eth_getTransactionReceipt` gives it, with block numbers as decimal strings. A vector with no reader has none, and nothing is read on its network. |
+| `fixed.reader.finalized` | `string` | - |
+| `fixed.reader.network` | `string` | - |
+| `fixed.reader.receipts` | `Record`\<`string`, \{ `blockNumber`: `string`; `logs`: `object`[]; `status`: `0` \| `1`; \}\> | - |
+| `fixed.reader.safe` | `string` | - |
 | `fixed.resources` | `object`[] | - |
 | `fixed.storageBase` | `string` | - |
 | `fixed.tenant` | `string` | - |

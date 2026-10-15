@@ -240,6 +240,17 @@ export interface Vector {
       /** The tenant host the agreement URL is on; required when `hosts` has more than one. */
       host?: string;
     };
+    /**
+     * What the network's reader answers: its `finalized` and `safe` block marks, and the receipt of each transaction it
+     * holds, as `eth_getTransactionReceipt` gives it, with block numbers as decimal strings. A vector with no reader
+     * has none, and nothing is read on its network.
+     */
+    reader?: {
+      network: string;
+      finalized: string;
+      safe: string;
+      receipts: Record<string, { status: 0 | 1; blockNumber: string; logs: { address: string; topics: string[]; data: string }[] }>;
+    };
   };
   steps: {
     /** Before the request, the buyer's agreement payment for this step's record was recorded on chain as stated. */
