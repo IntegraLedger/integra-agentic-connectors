@@ -85,7 +85,7 @@ Requires the seller credential: `Authorization: Bearer isk_…`.
 | Status | Meaning | Body | Headers |
 |---|---|---|---|
 | 200 | The record as it now stands. | [RecordView](#recordview) |  |
-| 202 | Accepted; nothing final was read yet. A settling record is finished by the seller door; an issued one is reported again later. | [RecordView](#recordview) |  |
+| 202 | Accepted; no read has settled the record. A settling record is finished by the seller door. On an issued one nothing is recorded, because no read checked the hash: report again later; on a pairing whose hash is read only through the claim, the record stays issued. | [RecordView](#recordview) |  |
 | 400 | The body is not the operation's JSON object, or the runtime could not read the request. | [Refusal](#refusal): [`door/malformed`](./refusals.md#doormalformed); [RuntimeRefusal](#runtimerefusal): [`bad-request`](./refusals.md#bad-request) |  |
 | 401 | No valid seller credential. | [Refusal](#refusal): [`door/unauthenticated`](./refusals.md#doorunauthenticated) | `WWW-Authenticate`: `Bearer realm="seller-door"` |
 | 403 | The request carries an Origin header; the door serves servers only. | [Refusal](#refusal): [`door/browser-origin`](./refusals.md#doorbrowser-origin) |  |
