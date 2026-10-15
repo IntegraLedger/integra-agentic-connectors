@@ -8,3 +8,5 @@ csp.json
 next-env.d.ts
 AGENTS.md
 CLAUDE.md
+.browser/
+.browser-partial/

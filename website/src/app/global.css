@@ -2,6 +2,8 @@
 @import "fumadocs-ui/css/neutral.css";
 @import "fumadocs-ui/css/preset.css";
 @import "fumadocs-twoslash/twoslash.css";
+/* Inter, every weight, the font the Mermaid diagrams are measured and drawn in (src/mdx/font.ts). */
+@import "@fontsource-variable/inter/wght.css";
 
 @source "../../node_modules/fumadocs-ui/dist/**/*.js";
 @source "../../node_modules/fumadocs-twoslash/dist/**/*.js";

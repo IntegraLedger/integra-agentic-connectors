@@ -16,9 +16,9 @@ function git(args: string[]): Buffer {
  * The build ID. Every page carries it, and it names the folder of the build's manifests under `/_next/static/`, which
  * `public/_headers` serves as immutable, so it changes whenever anything the site serves can change:
  * - from a commit with no uncommitted change, it is the commit's sha. The commit fixes the pages, the packages the
- *   samples are checked against, the locked dependencies and each page's last-updated date (its file's last commit),
- *   so one commit gives one ID, and one site byte for byte on one machine. The machine's Chrome and fonts draw the
- *   Mermaid diagrams (src/mdx/mermaid.ts), which are in the pages, never under `/_next/static/`;
+ *   samples are checked against, the locked dependencies, each page's last-updated date (its file's last commit) and
+ *   the browser build and the font the Mermaid diagrams are drawn in (src/mdx/mermaid.ts), so one commit gives one ID
+ *   and one site, byte for byte;
  * - with uncommitted changes, it is the sha, a hyphen and 16 hex digits of a SHA-256 over the changes: the diff of
  *   the tracked files against the commit and each untracked file that is not ignored, by path and content;
  * - outside a git checkout, Next.js draws a random ID, and no page has a last-updated date.

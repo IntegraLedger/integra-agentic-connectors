@@ -385,6 +385,9 @@ jobs:
       - run: pnpm -r --if-present run build
       - run: pnpm install --frozen-lockfile
         working-directory: website
+      - name: Fetch the browser that draws the diagrams and loads the pages, and check its archive against the SHA-256 scripts/browser.mjs holds
+        working-directory: website
+        run: pnpm run browser
       - name: The committed API pages match the source
         working-directory: website
         run: |
@@ -425,13 +428,18 @@ jobs:
       - name: The code highlighting gives one result however long tokenizing takes, in the themes' colours
         working-directory: website
         run: node scripts/check-highlighting.mjs
+      - name: The diagrams are drawn in the pinned browser and font alone, and the site serves that font
+        working-directory: website
+        run: node scripts/check-diagrams.mjs
       - name: Two builds of one commit are byte-equal
         working-directory: website
         run: |
           set -eu
           sha=$(git rev-parse HEAD)
           mv out "$RUNNER_TEMP/first-build"
-          rm -rf .next
+          # The second build starts from no build state and from a browser fetched and checked again.
+          rm -rf .next .browser
+          pnpm run browser
           pnpm build
           status=0
           diff -r --brief "$RUNNER_TEMP/first-build" out || status=$?

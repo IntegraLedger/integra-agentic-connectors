@@ -1,10 +1,10 @@
-// Loads every page of the built site in a headless Google Chrome, served on 127.0.0.1 as wrangler.toml serves it:
-// worker.js first for the addresses run_worker_first names, the files of out/ for the rest, with the rules in
-// public/_headers. Each page, an address no page has (the 404 page), a page's Twoslash popup and a search are
-// checked. The check fails when a response for a page carries any Content-Security-Policy other than the page's own
-// in csp.json, when a page reports a policy violation, a script error or an error on the console, when a page
-// carries an `a` element with no accessible name, or when a link to a fragment of a page of the site, `#x` or
-// `/path#x`, finds no element with that id on that page. Run it after `pnpm build`.
+// Loads every page of the built site in the pinned Chrome Headless Shell (scripts/browser.mjs), with the machine's
+// fonts, served on 127.0.0.1 as wrangler.toml serves it: worker.js first for the addresses run_worker_first names, the
+// files of out/ for the rest, with the rules in public/_headers. Each page, an address no page has (the 404 page), a
+// page's Twoslash popup and a search are checked. The check fails when a response for a page carries any
+// Content-Security-Policy other than the page's own in csp.json, when a page reports a policy violation, a script error
+// or an error on the console, when a page carries an `a` element with no accessible name, or when a link to a fragment
+// of a page of the site, `#x` or `/path#x`, finds no element with that id on that page. Run it after `pnpm build`.
 import { readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { extname, join } from "node:path";
@@ -195,7 +195,7 @@ function recordViolations() {
 }
 
 try {
-  await withChrome("The pages are checked", async (context) => {
+  await withChrome(async (context) => {
     await context.addInitScript(recordViolations);
 
     /** Opens an address, checks its policy and errors, runs `then` on the open page, and closes it. */

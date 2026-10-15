@@ -17,18 +17,26 @@ pnpm install --frozen-lockfile
 pnpm -r --if-present run build
 ```
 
-The build renders the Mermaid diagrams in Google Chrome. Set `CHROME_PATH` to a Chrome or Chromium executable if
-Chrome is not installed where Playwright looks for it.
-
 Then, in this folder:
 
 ```sh
 pnpm install --frozen-lockfile
+pnpm run browser # fetch the browser that draws the Mermaid diagrams into .browser/, checked by its SHA-256
 pnpm run api     # regenerate the API pages (reference/api/ in the documentation folder) from ../contract/src and ../profile-facilitator/src
 pnpm build       # write the static site to out/, and csp.json
-node scripts/check-pages.mjs   # load every page of out/ in Chrome, as the Worker serves it
+node scripts/check-pages.mjs   # load every page of out/ in the pinned Chrome Headless Shell, as the Worker serves it
 pnpm dev         # serve it locally with live reload
 ```
+
+The diagrams are drawn in one browser build: Chrome Headless Shell 156.0.8078.4 for Linux x64, the build the locked
+`playwright-core` names, from Chrome for Testing's
+[download bucket](https://googlechromelabs.github.io/chrome-for-testing/). `scripts/browser.mjs` holds its version, its
+address and the SHA-256 of its archive; `pnpm run browser` fetches the archive, checks it and unpacks it. The build
+and `scripts/check-pages.mjs` use no other browser: on a machine without it, they stop and name that command.
+
+The site is built on Linux x64, in CI or on a maintainer's Linux x64 machine. The browser build is pinned for that one
+platform because a build for another platform measures text through that platform's own font engine, so its diagrams
+could differ; on another platform the build stops and names the platform it is pinned for.
 
 ## What the build does
 
@@ -44,9 +52,12 @@ pnpm dev         # serve it locally with live reload
   (`pnpm run api`), whose supported TypeScript range ends at 6.0. Hovering, focusing or clicking an identifier in a
   checked block shows its type and documentation: the build writes each page's distinct popups to
   `/twoslash/<path>.json`, which the page fetches when a reader first opens one.
-- Renders each ```` ```mermaid ```` block to SVG with the `mermaid` package, in a headless Google Chrome, once in a
-  light and once in a dark theme. Both SVGs are in the page's HTML, and the page shows the one for the reader's
-  theme; no diagram code runs in the browser.
+- Renders each ```` ```mermaid ```` block to SVG with the `mermaid` package, in the pinned Chrome Headless Shell, once
+  in a light and once in a dark theme. Every text is measured and drawn in Inter, from the
+  `@fontsource-variable/inter` package, and in no font of the machine's: the browser has a font configuration of its
+  own with no font in it. A diagram with a character Inter does not draw fails the build. Both SVGs are in the page's
+  HTML, and the page shows the one for the reader's theme; the site serves the same Inter files, and no diagram code
+  runs in the browser.
 - Writes `/llms.txt`, `/llms-full.txt`, each page as Markdown at `/md/<path>.md`, each page's social card (1200×630)
   at `/og/<path>/image.png` (`/og/image.png` for the home page), the search index, `sitemap.xml`, `robots.txt` and
   `/.well-known/security.txt`.
@@ -75,14 +86,15 @@ which allows no inline script, as they run none; a missing file under an address
 `/_next/` and the rest `run_worker_first` leaves out) is answered with the 404 page under that policy, which shows the
 page without running its scripts. `scripts/check-pages.mjs` serves `out/` on 127.0.0.1 through
 `worker.js` and the `_headers` rules, as `wrangler.toml` routes each address, and loads every page, the 404 page, a
-Twoslash popup and a search in Chrome; a policy violation, a script error, a console error, an `a` element with no
-accessible name, or a link to `#x` or `/path#x` whose page has no element with the id `x` fails it.
+Twoslash popup and a search in the pinned Chrome Headless Shell; a policy violation, a script error, a console error,
+an `a` element with no accessible name, or a link to `#x` or `/path#x` whose page has no element with the id `x` fails
+it.
 
 Each page names `/llms.txt` with `<link rel="describedby">` and its Markdown with `<link rel="alternate"
 type="text/markdown">`. `pnpm dev` does not run `worker.js`.
 
-No workflow deploys the site. A maintainer deploys it by hand from the released commit, after a build, at the
-repository root:
+No workflow deploys the site. A maintainer deploys it by hand from the released commit, after a build on Linux x64
+(see "Run it"), at the repository root:
 
 ```sh
 npx wrangler deploy -c website/wrangler.toml
