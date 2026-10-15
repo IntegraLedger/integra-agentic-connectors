@@ -27,8 +27,10 @@ Each facilitator test file creates and drops its own database on the server `INT
 
 ## Every sample is checked
 
-Every TypeScript sample in a README or in `docs/` is type-checked and run against the packages built in the same
-commit, and its printed output is compared with the `text output` block after it; a sample without that block fails,
+`scripts/samples.mjs` reads every README and every page in `docs/` as CommonMark reads them, with
+`mdast-util-from-markdown`. Every TypeScript sample there, a code block fenced `ts` wherever it stands, in a list item
+or a block quote too, is type-checked and run against the packages built in the same commit, and its printed output is
+compared with the fenced `text output` block that follows it in the same container; a sample without that block fails,
 and so does a block fenced in a TypeScript or JavaScript language other than `ts` (`tsx`, `js`, …). The documentation
 site type-checks the same samples again with Twoslash when it builds. Run the checks after the build, with
 `DATABASE_URL` naming a Postgres database, which the facilitator's samples write to:

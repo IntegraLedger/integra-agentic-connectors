@@ -1,14 +1,13 @@
 // Compiles and runs every TypeScript sample in the READMEs (every README.md in the tree) and in docs/, against the
 // packages built in this tree.
 //
-// A fence opens with three or more backticks or tildes and closes with a line of at least as many of the same
-// character, indented up to three spaces, as Markdown closes it, or as far as the opening; a line of backticks whose
-// info string holds a backtick is text, as Markdown reads it, and opens no fence. A sample is a fenced block
-// whose language is `ts` or `typescript`. A block fenced in another TypeScript or JavaScript language (`tsx`, `mts`,
-// `js`, `TS`, …) fails, so no sample leaves the run by its label. A fenced `text` block whose info string holds
-// `output`, directly after a sample, is that sample's expected standard output; a sample without one fails. A sample
-// whose info string holds `server` is sent SIGTERM once it has printed its first line, and must then exit 0. A run that
-// finds no sample fails.
+// Each file is read as CommonMark reads it, by mdast-util-from-markdown: a fenced code block inside a block quote or a
+// list item is read where it stands, and the text of an indented code block, an HTML block or a paragraph is never a
+// fence. A sample is a fenced code block whose language is `ts` or `typescript`. A block fenced in another TypeScript
+// or JavaScript language (`tsx`, `mts`, `js`, `TS`, …) fails, so no sample leaves the run by its label. A fenced `text`
+// block whose info string holds `output`, directly after a sample in the same container, with only blank lines between
+// them, is that sample's expected standard output; a sample without one fails. A sample whose info string holds
+// `server` is sent SIGTERM once it has printed its first line, and must then exit 0. A run that finds no sample fails.
 //
 // A sample runs inside the package it imports (`@integraledger/profile-facilitator`, else
 // `@integraledger/agentic-connectors`), so both it and `@integraledger/lcp` resolve as they do for an installer. It
@@ -22,6 +21,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
+import { fromMarkdown } from "mdast-util-from-markdown";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const PACKAGES = {
@@ -55,36 +55,45 @@ function markdownFiles() {
   return out;
 }
 
-/** The fenced blocks of a Markdown file: language, info string, body and line. */
+/**
+ * The fenced code blocks of a Markdown file, in document order: language, the rest of the info string, body, line, and
+ * the fenced code block that follows it in the same container, if one does. Only a fenced code block has a language, so
+ * a code node without one is an indented block or a fence with no info string. Nodes that follow each other in one
+ * container have only blank lines between them.
+ */
 function blocks(file) {
-  const lines = readFileSync(file, "utf8").split("\n");
   const out = [];
-  for (let i = 0; i < lines.length; i++) {
-    const open = /^(\s*)(`{3,}|~{3,})([^\s`]*)\s*(.*)$/.exec(lines[i]);
-    if (open === null) continue;
-    const [, indent, fence, lang, info] = open;
-    if (fence[0] === "`" && info.includes("`")) continue;
-    const body = [];
-    let j = i + 1;
-    const close = new RegExp(`^(?: {0,3}|${indent})${fence[0]}{${fence.length},}\\s*$`);
-    for (; j < lines.length && !close.test(lines[j]); j++) body.push(lines[j].slice(indent.length));
-    out.push({ lang, info, body: body.join("\n"), line: i + 1 });
-    i = j;
-  }
+  const fenced = (node) => (node?.type === "code" && node.lang !== null ? node : undefined);
+  const walk = (node) => {
+    const children = node.children ?? [];
+    children.forEach((child, i) => {
+      const code = fenced(child);
+      if (code !== undefined) {
+        const next = fenced(children[i + 1]);
+        out.push({
+          lang: code.lang,
+          info: code.meta ?? "",
+          body: code.value,
+          line: code.position.start.line,
+          next: next === undefined ? undefined : { lang: next.lang, info: next.meta ?? "", body: next.value },
+        });
+      }
+      walk(child);
+    });
+  };
+  walk(fromMarkdown(readFileSync(file, "utf8")));
   return out;
 }
 
 function samples() {
   const out = [];
   for (const file of markdownFiles()) {
-    const bs = blocks(file);
-    bs.forEach((b, i) => {
+    blocks(file).forEach((b) => {
       if (b.lang !== "ts" && b.lang !== "typescript") {
         if (/^(?:[cm]?[jt]sx?|typescript|javascript)$/i.test(b.lang)) out.push({ file: relative(root, file), line: b.line, refused: b.lang });
         return;
       }
-      const next = bs[i + 1];
-      const output = next !== undefined && next.lang === "text" && /\boutput\b/.test(next.info) ? next.body : undefined;
+      const output = b.next !== undefined && b.next.lang === "text" && /\boutput\b/.test(b.next.info) ? b.next.body : undefined;
       const pkg = /["']@integraledger\/profile-facilitator["']/.test(b.body)
         ? "@integraledger/profile-facilitator"
         : "@integraledger/agentic-connectors";
