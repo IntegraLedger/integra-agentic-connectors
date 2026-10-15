@@ -304,7 +304,7 @@ describe("a remark whose hash digits are upper case", () => {
   const upper = Buffer.from(`lcp:sha256:0x${H.slice(2).toUpperCase()}`).toString("hex");
   const xt = XT_V3.replace(lower, upper);
   const call = CALL_V2.replace(lower, upper);
-  // @integraledger/lcp 0.2.0, docs/reference/refusals.md: "`polkadot/remark-not-lcp`: The Polkadot remark is not
+  // @integraledger/lcp 0.4.0, docs/reference/refusals.md: "`polkadot/remark-not-lcp`: The Polkadot remark is not
   // exactly an ATR hash's LCP string form with lowercase hex, byte for byte."
   const REMARK_NOT_LCP = "polkadot/remark-not-lcp";
 
