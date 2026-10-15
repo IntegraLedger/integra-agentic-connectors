@@ -342,19 +342,21 @@ describe("the OpenAPI document", () => {
   });
 
   it("a paid report of an unclaimed mpp/charge/evm/hash payment carries the credential's source, from which the payer's Transfer is read", async () => {
-    // Every value is lcp's MPP vectors': mpp-challenge.json's H and its EVM charge challenge (realm, R_E as base64url,
-    // expires), and mpp-charge-evm-hash.json's payer, the payer's transaction (MV12.hash), and the read keys and the
+    // Every value is lcp's MPP vectors': mpp-challenge.json's H, realm and expires, mpp-charge-evm-transaction.json's
+    // R_ENoTypes as base64url, the request the hash pairing's challenge holds, and mpp-charge-evm-hash.json's payer, the payer's transaction (MV12.hash), and the read keys and the
     // refusal MV12 states. The source is the payer's did:pkh DID, `did:pkh:` and the payer's CAIP-10 account on MV12's
     // network.
     const lcpDir = dirname(dirname(createRequire(import.meta.url).resolve("@integraledger/lcp")));
     const vectors = (file: string): unknown => JSON.parse(readFileSync(join(lcpDir, "vectors", file), "utf8"));
-    const challenges = vectors("mpp-challenge.json") as { fixed: { H: AtrHash; realm: string; expires: string; R_E: string } };
+    const challenges = vectors("mpp-challenge.json") as { fixed: { H: AtrHash; realm: string; expires: string } };
+    const transaction = vectors("mpp-charge-evm-transaction.json") as { fixed: { R_ENoTypes: string } };
     const hash = vectors("mpp-charge-evm-hash.json") as {
       fixed: { payer: string };
       MV12: { hash: string; expectReference: { network: string }; expectNoSource: Json };
     };
-    const { H, realm, expires, R_E } = challenges.fixed;
-    const chosen = { realm, method: "evm", intent: "charge", request: Buffer.from(R_E, "utf8").toString("base64url"), expires };
+    const { H, realm, expires } = challenges.fixed;
+    const request = Buffer.from(transaction.fixed.R_ENoTypes, "utf8").toString("base64url");
+    const chosen = { realm, method: "evm", intent: "charge", request, expires };
     const network = hash.MV12.expectReference.network;
     const report: ReportOutcome = {
       atrHash: H,
