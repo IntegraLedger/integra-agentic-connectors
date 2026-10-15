@@ -126,9 +126,9 @@ Each file in `contract/vectors/` is one exchange with the seller door, with ever
 
 ## CV12
 
-**a report with no claim on a pairing whose hash is read only through the claim.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. The option is lcp 0.4.0's vectors/x402-auth-capture-eip155-eip3009.json fixed.option. In lcp 0.4.0's registry this pairing has status and no recover: with no claim, no read of the transaction can check the hash. The report of money that moved is recorded, never refused: the record is settling, unpaid, with the reported transaction, and its statement says the hash is not read.
+**a report with no claim on a pairing whose hash is read only through the claim.** Source: printf '%s' '&lt;stored bytes&gt;' | sha256sum; openssl dgst -sha256 agrees. expiresAt: date -u -d @1790000060. The option is lcp 0.4.0's vectors/x402-auth-capture-eip155-eip3009.json fixed.option. In lcp 0.4.0's registry this pairing has status and no recover: with no claim, no read of the transaction can check the hash. The report of money that moved is recorded, never refused: the record is settling with the reported transaction, and its proves (claimed false, no pattern, nothing settled it) states that the hash is not read, so it is unpaid.
 
 | Step | Request | Answer | Stores |
 |---|---|---|---|
-| 1 | `POST /issue` | 200 | 791 bytes, SHA-256 `0x84ff8fab129ebbb99d587144e8acd0887a86810ad1e5d2257e097cbbf977a92d` |
+| 1 | `POST /issue` | 200 | 791 bytes, SHA-256 `0xb8722010481cfbea6d8b6d7faa4e5ab986092682dec60c28b4c4a9e2118b99fd` |
 | 2 | `POST /report` | 202 `state: settling` |  |

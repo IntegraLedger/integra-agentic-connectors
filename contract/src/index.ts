@@ -70,7 +70,11 @@ export interface ClaimRequest {
   /** Unix seconds, at most now + 604 800. */
   settleBy?: number;
 }
-/** What a record proves: whether the claim read the hash from the payment, the pairing's pattern, and the evidence it was paid on. */
+/**
+ * What a record proves: whether the claim read the hash from the payment, the pairing's pattern, and the evidence it is
+ * paid on. A record whose `settlement` names a transaction while `claimed` is false and `pattern` and `settledBy` are
+ * null holds a reported payment whose hash is not read: nothing shows that the payment carries it, and it is unpaid.
+ */
 export interface Proves {
   claimed: boolean;
   pattern: LcpPattern | null;

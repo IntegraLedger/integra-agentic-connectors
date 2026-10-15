@@ -64,30 +64,20 @@ function operation(method: string, path: string): { request?: Schema; response(s
 /** Each pairing's pattern in lcp's registry: the source of every pattern a vector's answer carries. */
 const REGISTERED = new Map<string, LcpPattern>(BINDINGS.map((b) => [b.id, b.pattern]));
 
-interface Answered {
-  pairing: string | undefined;
-  pattern: LcpPattern;
-  agreement: AgreementView | null;
-  /** A record of a payment the door holds without a read of the hash: no claim, and nothing settled it. */
-  unread: boolean;
-}
-
 /**
  * The patterns an expected answer carries, each with its pairing: the issue answer's `pairings`, and the `proves` of a
  * claim or a record, with the record's agreement leg.
  */
-function answered(body: Json): Answered[] {
+function answered(body: Json): { pairing: string | undefined; pattern: LcpPattern; agreement: AgreementView | null }[] {
   const b = body as Record<string, unknown>;
-  const found: Answered[] = [];
+  const found: { pairing: string | undefined; pattern: LcpPattern; agreement: AgreementView | null }[] = [];
   for (const p of (b["pairings"] as IssueResponse["pairings"] | undefined) ?? []) {
-    found.push({ pairing: p.pairing, pattern: p.pattern, agreement: null, unread: false });
+    found.push({ pairing: p.pairing, pattern: p.pattern, agreement: null });
   }
   const proves = b["proves"] as Proves | undefined;
   if (proves?.pattern) {
-    const settlement = b["settlement"] as RecordView["settlement"] | undefined;
-    const pairing = (b["pairing"] as string | undefined) ?? settlement?.pairing;
-    const unread = settlement != null && !proves.claimed && proves.settledBy === null;
-    found.push({ pairing, pattern: proves.pattern, agreement: (b["agreement"] as AgreementView | null | undefined) ?? null, unread });
+    const pairing = (b["pairing"] as string | undefined) ?? (b["settlement"] as RecordView["settlement"] | undefined)?.pairing;
+    found.push({ pairing, pattern: proves.pattern, agreement: (b["agreement"] as AgreementView | null | undefined) ?? null });
   }
   return found;
 }
@@ -403,16 +393,10 @@ describe("the vectors", () => {
 
     it(`${name} · every pattern an answer carries is its pairing's pattern in lcp's registry`, () => {
       for (const step of v.steps) {
-        for (const { pairing, pattern, agreement, unread } of answered(step.expect.body)) {
+        for (const { pairing, pattern, agreement } of answered(step.expect.body)) {
           const registered = REGISTERED.get(pairing ?? "");
           expect(registered, `${name} ${pairing}`).toBeDefined();
-          if (unread) {
-            // With the hash not read, the record states what is missing in place of the pairing's statement.
-            const { proves: missing, ...members } = pattern;
-            const { proves: _statement, ...expected } = registered!;
-            expect(members, `${name} ${pairing}`).toEqual(expected);
-            expect(missing, `${name} ${pairing}`).toContain("the hash is not read");
-          } else if (agreement === null) {
+          if (agreement === null) {
             expect(pattern, `${name} ${pairing}`).toEqual(registered);
           } else if (agreement.state === "recorded") {
             // The record names the recorded agreement in the statement's <network> and <transaction>.
@@ -452,7 +436,7 @@ describe("the vectors", () => {
     expect(carrying).toEqual(["CV1", "CV2", "CV3", "CV6", "CV7", "CV9", "CV10", "CV11", "CV12"]);
   });
 
-  it("a report with no claim: CV7 has no reader, CV11's reader holds the hash in its receipt, CV12's pairing has no recover", async () => {
+  it("a report with no claim: CV7 has no reader, CV11's reader holds the hash in its receipt, CV12's pairing has no recover and its record proves nothing", async () => {
     const report = (v: Vector) => v.steps.find((s) => s.request.path === "/report")!.request.body as Record<string, string>;
     const cv7 = VECTORS["CV7"]!;
     const cv11 = VECTORS["CV11"]!;
@@ -473,6 +457,11 @@ describe("the vectors", () => {
     expect(typeof binding["status"]).toBe("function");
     expect(binding["recover"]).toBeUndefined();
     expect(cv12.fixed.reader).toBeUndefined();
+    // Its record names the reported transaction, and no claim, pattern or evidence: the hash is not read.
+    const record = cv12.steps.find((s) => s.request.path === "/report")!.expect.body as unknown as RecordView;
+    expect(record.state).toBe("settling");
+    expect(record.settlement?.reference).toBe(report(cv12)["reference"]);
+    expect(record.proves).toEqual({ claimed: false, pattern: null, settledBy: null });
   });
 
   it("OPENAPI_BYTES are openapi.json's bytes, vectors/ holds only CV<n>.json files, and VECTORS are each one parsed, in number order", () => {
