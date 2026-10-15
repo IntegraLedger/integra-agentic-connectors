@@ -102,6 +102,10 @@ or, on a pairing with nothing to read, the seller's report.
 
 *Why:* a record that claims more than it shows is not a proof.
 
+**Answering an MPP buyer.** The HTTP status of the door's answer decides first. A 503 is never a 402: retry the call,
+and if the door answers 503 again, answer the buyer 500 with `Retry-After` and no challenge. A challenge goes out only
+with a 402.
+
 ## 12. Place the agreement URL beside the carriers, and wait for the agreement
 
 Where `issue` answers with `agreement`, the record needs the agreement step: before the full payment, the buyer's agent
