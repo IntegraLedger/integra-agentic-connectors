@@ -425,7 +425,7 @@ jobs:
       - name: Every page loads under its own Content-Security-Policy, with no violation or error, names its links and finds each fragment
         working-directory: website
         run: node scripts/check-pages.mjs
-      - name: The code highlighting gives one result however long tokenizing takes, in the themes' colours
+      - name: The code highlighting gives one result however long tokenizing takes, in the themes' colours, and no other source highlights code
         working-directory: website
         run: node scripts/check-highlighting.mjs
       - name: The diagrams are drawn in the pinned browser and font alone, and the site serves that font

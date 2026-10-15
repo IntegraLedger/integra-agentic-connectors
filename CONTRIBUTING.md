@@ -57,7 +57,8 @@ The site checks its own build. In `website/`, after `pnpm build` there:
   `source.config.ts` gives the code highlighter: once with the clock as it is, and once with a clock that moves 600 ms
   at every read while a sample is tokenized and its Twoslash popups are highlighted. It checks that both give the same
   HTML, and that `const` and `myObject` take github-light-default's colours. Each line is tokenized to its end however
-  long that takes (`tokenizeTimeLimit: 0`), so a busy machine colours the code as an idle one does.
+  long that takes (`tokenizeTimeLimit: 0`), so a busy machine colours the code as an idle one does. It also checks
+  that no other source under `website/` imports a module that highlights code.
 - `node scripts/check-diagrams.mjs` draws every Mermaid diagram in the pages twice, the second time under a font
   configuration that changes every font's rendering, and checks that both give the same SVGs. It checks that a
   diagram with a character Inter does not draw is refused, and that the site serves the Inter files the diagrams are
