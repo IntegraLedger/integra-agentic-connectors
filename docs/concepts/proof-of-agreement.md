@@ -26,7 +26,7 @@ Here is the ATR the seller door stores for vector `CV1`: 506 bytes, shown as the
 {"atrVersion":"1","id":"6f1c2b0e-8d4a-4c3b-9e2f-1a7d5c9b3e50","x402":{"accepts":[{"scheme":"exact","network":"eip155:84532","amount":"10000","asset":"0x036CbD53842c5426634e7929541eC2318f3dCF7e","payTo":"0x209693Bc6afc0C5328bA36FaF03C514EF312287C","maxTimeoutSeconds":60,"extra":{"name":"USDC","version":"2"}}],"request":{"method":"GET","path":"/v1/report","query":"","bodyDigest":"0xe3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}},"terms":"Pay 10000 base units of USDC for one report."}
 ```
 
-The seller door does not require, supply or read any party content. What goes into `content` is the parties'
+The seller door does not require or interpret any party content. What goes into `content` is the parties'
 choice: terms, a checkout, a signed quote, a credential. The door carries it as given.
 
 ## The ATR hash (H)
