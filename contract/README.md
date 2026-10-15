@@ -172,9 +172,9 @@ The answer's `agreement`, when present, means the record needs the agreement ste
 
 ### Claim
 
-Where the pairing reads H from the payment, call `claim` with the presented payment before your facilitator's
-`/verify`, so every refusal comes before money moves. Send `payment` exactly as received, `chosen` as the option it
-names, `pairing` as the record offered it, and, on x402, the same `request`.
+Where the pairing reads H from the payment or records read keys for it, call `claim` with the presented payment
+before your facilitator's `/verify`, so every refusal comes before money moves. Send `payment` exactly as received,
+`chosen` as the option it names, `pairing` as the record offered it, and, on x402, the same `request`.
 
 ```ts title="claim.ts"
 import type { ClaimDeclined, ClaimRequest, ClaimResponse, Refusal } from "@integraledger/agentic-connectors";
@@ -317,8 +317,8 @@ Every connector follows these rules. Each carries its reason.
    proof is H inside what the buyer's agent approves; a sale without it has no proof.
 6. **Carry the hash to the order.** Write `atrHash` into the platform's cart and order fields, so `report` can be keyed
    by it. *Why:* the payment reference arrives on the order, and the door knows the record only by its hash.
-7. **Claim wherever the pairing reads H; report after.** See [Claim](#claim) and [Report](#report). *Why:* the claim
-   is the one check that the payment carries this ATR's hash, and it must come before money moves.
+7. **Claim wherever the pairing records read keys; report after.** See [Claim](#claim) and [Report](#report). *Why:*
+   the claim is the one check that the payment carries this ATR's hash, and it must come before money moves.
 8. **Keep no payment state of your own.** Read it with `status`. *Why:* two state machines for one payment drift
    apart.
 9. **Show the link `issue` returned.** Never build it from configuration, and never fetch the ATR on a page view.
