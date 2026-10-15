@@ -5,10 +5,11 @@ description: Where the payment carries no public proof of the hash, a nominal pa
 
 # The agreement step
 
-Some pairings' payments carry no public proof of H: on a card payment, nothing the buyer signs carries it. For such a
-pairing a seller can configure the **agreement step**: before the full payment, the buyer's agent pays a nominal
-amount in a payment whose signed payload carries H. That agreement payment is the public proof, and it is on record
-before the payment it covers.
+Some pairings' payments carry no public proof of H: on a card payment, nothing the buyer signs carries it. The
+**agreement step** is required wherever an offered pairing's `publicProof` is false: the door issues such an offer only
+with the agreement step configured. Before the full payment, the buyer's agent pays a nominal amount through
+`agreement.pairing`: a pairing whose `publicProof` is true, so its settlement leaves a public record that commits to H.
+That agreement payment is the public proof, and it is on record before the payment it covers.
 
 The pairings whose `publicProof` is "no" are marked in [the pairings reference](../reference/pairings.md).
 

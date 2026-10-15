@@ -56,9 +56,10 @@ Every pairing's sentence is in [the pairings reference](../reference/pairings.md
 
 ## The agreement leg
 
-Where a pairing's payment carries no public proof of H, a seller can require the **agreement step**: before the full
-payment, the buyer's agent pays a nominal amount in a payment whose signed payload carries H. The record's
-`agreement` is then `{state, network, transaction}`:
+The **agreement step** is required wherever an offered pairing's `publicProof` is false (its payment carries no public
+proof of H): the door issues such an offer only with the agreement step configured. Before the full payment, the
+buyer's agent pays a nominal amount through `agreement.pairing`: a pairing whose `publicProof` is true, so its
+settlement leaves a public record that commits to H. The record's `agreement` is then `{state, network, transaction}`:
 
 - `required`: the buyer has not paid the agreement URL yet;
 - `settling`: the agreement payment is settling;

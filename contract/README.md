@@ -168,7 +168,7 @@ An offer count outside 1 to 16, or more than 56 content slots, answers `422 issu
 not match `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` answers `422 core/slot-name`.
 
 The answer's `agreement`, when present, means the record needs the agreement step; see
-[Card checkouts and the agreement step](#card-checkouts-and-the-agreement-step).
+[The agreement step](#the-agreement-step).
 
 ### Claim
 
@@ -259,10 +259,11 @@ Show the buyer and the seller `proves` as the door returns it. Never claim that 
 `claimed` is false. `settledBy` says what made the payment paid: `read` (a read of the rail), `facilitator` (the
 facilitator's settle answer) or `seller-report` (on a pairing with nothing to read).
 
-### Card checkouts and the agreement step
+### The agreement step
 
-Where a pairing's payment carries no public proof of H, a seller can require the **agreement step**. `issue` then
-answers with `agreement: {url, network, pairing}`. Before the full payment, the buyer's agent pays a nominal amount at
+The **agreement step** is required wherever an offered pairing's `publicProof` is false (its payment carries no public
+proof of H): the door issues such an offer only with the agreement step configured. `issue` then answers with
+`agreement: {url, network, pairing}`. Before the full payment, the buyer's agent pays a nominal amount at
 `agreement.url`, on `agreement.network`, through `agreement.pairing`: a pairing whose `publicProof` is true, so its
 settlement leaves a public record that commits to H.
 
@@ -328,7 +329,7 @@ Every connector follows these rules. Each carries its reason.
 11. **Every record states what it proves.** See [Status](#status). *Why:* a record that claims more than it shows is
     not a proof.
 12. **Place the agreement URL beside the carriers, and wait for the agreement.** See
-    [the agreement step](#card-checkouts-and-the-agreement-step). *Why:* where the payment itself carries no public
+    [the agreement step](#the-agreement-step). *Why:* where the payment itself carries no public
     proof of H, the agreement payment is that proof, and it must be on record before the payment it covers.
 13. **For a channel pairing, claim the opening only, serve later requests yourself, and report the close.** *Why:*
     one agreement covers the whole channel, and its record ends when the channel closes.
