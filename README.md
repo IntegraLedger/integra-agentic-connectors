@@ -98,7 +98,8 @@ DATABASE_URL=postgres://postgres@127.0.0.1:5432/postgres node scripts/samples.mj
   registry. Without `--check` it writes them.
 - `scripts/samples.mjs` type-checks and runs every TypeScript sample in the READMEs and `docs/` against the packages
   built in this tree, with this tree's TypeScript, and compares what each prints with the `text output` block after
-  it. A sample without that block fails, and so does a run that finds no sample. Each sample gets a fresh
+  it. A sample without that block fails, and so do a block fenced in a TypeScript or JavaScript language other than
+  `ts` (`tsx`, `js`, …) and a run that finds no sample. Each sample gets a fresh
   `scripts/stand-in-door.mjs` for the door and the Postgres database that `DATABASE_URL` (or `INTEGRA_DATABASE_URL`)
   names; with neither set, no sample runs. A sample sees no other variable of the caller's than `PATH`, `HOME` and
   `TMPDIR`.

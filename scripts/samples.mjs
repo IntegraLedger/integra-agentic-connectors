@@ -1,9 +1,11 @@
-// Compiles and runs every TypeScript sample in the READMEs and in docs/, against the packages built in this tree.
+// Compiles and runs every TypeScript sample in the READMEs (every README.md in the tree) and in docs/, against the
+// packages built in this tree.
 //
-// A sample is a fenced block whose language is `ts` or `typescript`. A fenced `text` block whose info string holds
-// `output`, directly after a sample, is that sample's expected standard output; a sample without one fails. A sample
-// whose info string holds `server` is sent SIGTERM once it has printed its first line, and must then exit 0. A run that
-// finds no sample fails.
+// A sample is a fenced block (``` or ~~~) whose language is `ts` or `typescript`. A block fenced in another TypeScript
+// or JavaScript language (`tsx`, `mts`, `js`, `TS`, …) fails, so no sample leaves the run by its label. A fenced `text`
+// block whose info string holds `output`, directly after a sample, is that sample's expected standard output; a sample
+// without one fails. A sample whose info string holds `server` is sent SIGTERM once it has printed its first line, and
+// must then exit 0. A run that finds no sample fails.
 //
 // A sample runs inside the package it imports (`@integraledger/profile-facilitator`, else
 // `@integraledger/agentic-connectors`), so both it and `@integraledger/lcp` resolve as they do for an installer. It
@@ -28,7 +30,17 @@ const RUN_MS = 60_000;
 
 function markdownFiles() {
   const out = [];
-  for (const f of ["README.md", "contract/README.md", "profile-facilitator/README.md"]) out.push(join(root, f));
+  // Every README.md in the tree, outside node_modules, build output and dot-folders; then every page in docs/.
+  const readmes = (d) => {
+    for (const e of readdirSync(d, { withFileTypes: true }).sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      if (e.name === "node_modules" || e.name === "dist" || e.name === "out" || e.name.startsWith(".")) continue;
+      const p = join(d, e.name);
+      if (e.isDirectory()) {
+        if (p !== join(root, "docs")) readmes(p);
+      } else if (e.name === "README.md") out.push(p);
+    }
+  };
+  readmes(root);
   const walk = (d) => {
     for (const e of readdirSync(d).sort()) {
       const p = join(d, e);
@@ -37,7 +49,7 @@ function markdownFiles() {
     }
   };
   if (existsSync(join(root, "docs"))) walk(join(root, "docs"));
-  return out.filter((f) => existsSync(f));
+  return out;
 }
 
 /** The fenced blocks of a Markdown file: language, info string, body and line. */
@@ -45,12 +57,13 @@ function blocks(file) {
   const lines = readFileSync(file, "utf8").split("\n");
   const out = [];
   for (let i = 0; i < lines.length; i++) {
-    const open = /^(\s*)(`{3,})(\S*)\s*(.*)$/.exec(lines[i]);
+    const open = /^(\s*)(`{3,}|~{3,})([^\s`]*)\s*(.*)$/.exec(lines[i]);
     if (open === null) continue;
     const [, indent, fence, lang, info] = open;
     const body = [];
     let j = i + 1;
-    for (; j < lines.length && !new RegExp(`^${indent}${fence}\\s*$`).test(lines[j]); j++) body.push(lines[j].slice(indent.length));
+    const close = new RegExp(`^${indent}${fence[0]}{${fence.length},}\\s*$`);
+    for (; j < lines.length && !close.test(lines[j]); j++) body.push(lines[j].slice(indent.length));
     out.push({ lang, info, body: body.join("\n"), line: i + 1 });
     i = j;
   }
@@ -62,7 +75,10 @@ function samples() {
   for (const file of markdownFiles()) {
     const bs = blocks(file);
     bs.forEach((b, i) => {
-      if (b.lang !== "ts" && b.lang !== "typescript") return;
+      if (b.lang !== "ts" && b.lang !== "typescript") {
+        if (/^(?:[cm]?[jt]sx?|typescript|javascript)$/i.test(b.lang)) out.push({ file: relative(root, file), line: b.line, refused: b.lang });
+        return;
+      }
       const next = bs[i + 1];
       const output = next !== undefined && next.lang === "text" && /\boutput\b/.test(next.info) ? next.body : undefined;
       const pkg = /["']@integraledger\/profile-facilitator["']/.test(b.body)
@@ -116,7 +132,7 @@ if (all.length === 0) {
   process.exit(1);
 }
 if (process.argv.includes("--list")) {
-  for (const s of all) console.log(`${s.file}:${s.line} ${s.pkg}${s.output !== undefined ? " (output)" : ""}${s.server ? " (server)" : ""}`);
+  for (const s of all.filter((s) => s.refused === undefined)) console.log(`${s.file}:${s.line} ${s.pkg}${s.output !== undefined ? " (output)" : ""}${s.server ? " (server)" : ""}`);
   process.exit(0);
 }
 
@@ -132,6 +148,7 @@ if (!statSync(tsc, { throwIfNoEntry: false })?.isFile()) {
 }
 const dirs = new Map();
 for (const [i, s] of all.entries()) {
+  if (s.refused !== undefined) continue;
   const dir = join(PACKAGES[s.pkg], ".samples");
   if (!dirs.has(dir)) {
     rmSync(dir, { recursive: true, force: true });
@@ -153,12 +170,17 @@ for (const [dir, files] of dirs) {
   if (r.status !== 0) {
     failed++;
     console.log(`typecheck failed in ${relative(root, dir)}:\n${r.stdout}${r.stderr}`);
-    for (const s of all) if (r.stdout.includes(relative(dir, s.path))) console.log(`  ${relative(dir, s.path)} is ${s.file}:${s.line}`);
+    for (const s of all) if (s.path !== undefined && r.stdout.includes(relative(dir, s.path))) console.log(`  ${relative(dir, s.path)} is ${s.file}:${s.line}`);
   }
 }
 
 try {
   for (const s of all) {
+    if (s.refused !== undefined) {
+      failed++;
+      console.log(`FAIL ${s.file}:${s.line} is fenced \`${s.refused}\`: a sample is fenced \`ts\``);
+      continue;
+    }
     if (s.output === undefined) {
       failed++;
       console.log(`FAIL ${s.file}:${s.line} has no \`text output\` block after it`);
