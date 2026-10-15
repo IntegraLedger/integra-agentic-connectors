@@ -2,7 +2,8 @@
 // packages built in this tree.
 //
 // A fence opens with three or more backticks or tildes and closes with a line of at least as many of the same
-// character, indented up to three spaces, as Markdown closes it, or as far as the opening. A sample is a fenced block
+// character, indented up to three spaces, as Markdown closes it, or as far as the opening; a line of backticks whose
+// info string holds a backtick is text, as Markdown reads it, and opens no fence. A sample is a fenced block
 // whose language is `ts` or `typescript`. A block fenced in another TypeScript or JavaScript language (`tsx`, `mts`,
 // `js`, `TS`, …) fails, so no sample leaves the run by its label. A fenced `text` block whose info string holds
 // `output`, directly after a sample, is that sample's expected standard output; a sample without one fails. A sample
@@ -62,6 +63,7 @@ function blocks(file) {
     const open = /^(\s*)(`{3,}|~{3,})([^\s`]*)\s*(.*)$/.exec(lines[i]);
     if (open === null) continue;
     const [, indent, fence, lang, info] = open;
+    if (fence[0] === "`" && info.includes("`")) continue;
     const body = [];
     let j = i + 1;
     const close = new RegExp(`^(?: {0,3}|${indent})${fence[0]}{${fence.length},}\\s*$`);
