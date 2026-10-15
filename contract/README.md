@@ -72,7 +72,7 @@ sequenceDiagram
 ## Install
 
 ```sh
-npm install @integraledger/agentic-connectors @integraledger/lcp
+npm install @integraledger/agentic-connectors @integraledger/lcp@~0.4.0
 ```
 
 It needs Node.js `>=26.11.1`, and it is ESM only. Its one peer dependency is `@integraledger/lcp` (`~0.4.0`), whose
@@ -401,7 +401,8 @@ console.log(REFUSALS["issue/storage-unavailable"], retryable("issue/storage-unav
 
 A `pairing` is any id `@integraledger/lcp` registers in `BINDINGS`; a resource serves the pairings the seller
 declared for it, and an offer naming another answers `422 issue/pairing-not-served`. A recorded payment's record
-carries the pairing's `pattern`, including the sentence `proves`. To list them from the registry:
+carries the pairing's `pattern`, including the sentence `proves`. To list them from the registry of the peer
+`@integraledger/lcp`, installed beside this package as [Install](#install) shows:
 
 ```ts title="pairings.ts"
 import { BINDINGS } from "@integraledger/lcp";
