@@ -22,7 +22,7 @@ jobs:
       - name: Fetch Node.js
         run: |
           set -eu
-          curl -fsSL -o "$RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" https://nodejs.org/dist/v26.11.1/node-v26.11.1-linux-x64.tar.xz
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" https://nodejs.org/dist/v26.11.1/node-v26.11.1-linux-x64.tar.xz
           echo "3883bfc73f9a680ca4eab04b196068aaaab1373ffa77d8fc1a4408222495b651  $RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" | sha256sum -c -
           mkdir "$RUNNER_TEMP/node"
           tar -xJf "$RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" -C "$RUNNER_TEMP/node" --strip-components=1
@@ -63,7 +63,7 @@ jobs:
       - name: Fetch Node.js
         run: |
           set -eu
-          curl -fsSL -o "$RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" https://nodejs.org/dist/v26.11.1/node-v26.11.1-linux-x64.tar.xz
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" https://nodejs.org/dist/v26.11.1/node-v26.11.1-linux-x64.tar.xz
           echo "3883bfc73f9a680ca4eab04b196068aaaab1373ffa77d8fc1a4408222495b651  $RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" | sha256sum -c -
           mkdir "$RUNNER_TEMP/node"
           tar -xJf "$RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" -C "$RUNNER_TEMP/node" --strip-components=1
@@ -145,7 +145,7 @@ jobs:
           if (bad > 0) process.exit(1);
           console.log(`${packages} package(s) and the root: no @integraledger dependency, import or name outside the allowed set; each workspace package has a build, typecheck and test script`);
           EOF
-      - name: Every job that runs a step fetches the Node.js .node-version names first, and checks it against one SHA-256
+      - name: Every job that runs a step fetches the Node.js .node-version names first, and checks it against one SHA-256, and every download retries five times
         run: |
           node - <<'JS'
           const fs = require("node:fs");
@@ -154,6 +154,9 @@ jobs:
           // Spelled in parts, so that this step's own lines do not hold what it looks for.
           const PATH_FILE = ["GITHUB", "PATH"].join("_");
           const ENV_FILE = ["GITHUB", "ENV"].join("_");
+          // Every download retries a failed transfer five times, whatever the error, and writes one file.
+          const FETCH = ["cu", "rl -fsSL --retry 5 --retry-all-errors"].join("");
+          const fetchLine = new RegExp(`^ +${FETCH} -o "\\$RUNNER_TEMP/[^"\\s]+" https://[^\\s"'\`]+$`);
           if (process.version !== `v${v}`) bad.push(`node ${process.version} runs this step, where .node-version names ${v}`);
           const tarball = `node-v${v}-linux-x64.tar.xz`;
           const url = `https://nodejs.org/dist/v${v}/${tarball}`;
@@ -169,7 +172,7 @@ jobs:
             "      - name: Fetch Node.js",
             "        run: |",
             "          set -eu",
-            `          curl -fsSL -o "$RUNNER_TEMP/${tarball}" ${url}`,
+            `          ${FETCH} -o "$RUNNER_TEMP/${tarball}" ${url}`,
             `          echo "${digests[0]}  $RUNNER_TEMP/${tarball}" | sha256sum -c -`,
             '          mkdir "$RUNNER_TEMP/node"',
             `          tar -xJf "$RUNNER_TEMP/${tarball}" -C "$RUNNER_TEMP/node" --strip-components=1`,
@@ -186,6 +189,7 @@ jobs:
               if (/setup-[n]ode|continue-on-[e]rror|^\s*(- )?(if|container|shell|PATH):/.test(l)) bad.push(`${at(i)}: ${l.trim()}`);
               if (l.includes(PATH_FILE) && !paths.has(l)) bad.push(`${at(i)}: a PATH entry other than the fetched Node.js and pnpm`);
               if (l.includes(ENV_FILE)) bad.push(`${at(i)}: a step sets the environment of the steps after it`);
+              if (/\bcu[r]l\b/.test(l) && !fetchLine.test(l)) bad.push(`${at(i)}: a download other than ${FETCH} -o "$RUNNER_TEMP/<file>" https://<address>: ${l.trim()}`);
             });
             // The patterns here read lines, so every workflow is written in YAML's plain block style: outside a block
             // scalar (`run: |`), a line is blank, a comment, one plain key and its value, or a sequence entry that is
@@ -245,7 +249,7 @@ jobs:
             console.log(`${bad.join("\n")}\nEvery job that runs a step holds, before its first other step that runs, the step:\n${step.join("\n")}`);
             process.exit(1);
           }
-          console.log(`node ${process.version}: each of the ${jobs} jobs that runs a step fetches ${url} first and checks it against ${digests[0]}`);
+          console.log(`node ${process.version}: each of the ${jobs} jobs that runs a step fetches ${url} first and checks it against ${digests[0]}; every download is ${FETCH} -o "$RUNNER_TEMP/<file>" https://<address>`);
           JS
       - name: The install policy, in the workspace and the site, their lockfiles and the workflows
         run: |
@@ -288,8 +292,8 @@ jobs:
       - name: Fetch pnpm
         run: |
           set -eu
-          curl -fsSL -o "$RUNNER_TEMP/pnpm-12.11.2.tgz" https://registry.npmjs.org/pnpm/-/pnpm-12.11.2.tgz
-          curl -fsSL -o "$RUNNER_TEMP/pnpm-exe.linux-x64-12.11.2.tgz" https://registry.npmjs.org/@pnpm/exe.linux-x64/-/exe.linux-x64-12.11.2.tgz
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/pnpm-12.11.2.tgz" https://registry.npmjs.org/pnpm/-/pnpm-12.11.2.tgz
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/pnpm-exe.linux-x64-12.11.2.tgz" https://registry.npmjs.org/@pnpm/exe.linux-x64/-/exe.linux-x64-12.11.2.tgz
           echo "25a51652a196785af5f28bda6dfe8dc582ebefa4ac1d180221ce1390231c5fb76637822ea4b6e4633ce74acdcb0a77f725af11bad38177fdeddaee818a955cb9  $RUNNER_TEMP/pnpm-12.11.2.tgz" | sha512sum -c -
           echo "14aed029edb8018829a49c0ede6a68a18a6d76ebaf206a8a24f8b969cecc7675a48d4cb8e8905f621096d20ae7916282f1839fd31faf1af8ae42a2448f74a941  $RUNNER_TEMP/pnpm-exe.linux-x64-12.11.2.tgz" | sha512sum -c -
           mkdir "$RUNNER_TEMP/pnpm"
@@ -328,7 +332,7 @@ jobs:
       - name: Fetch Node.js
         run: |
           set -eu
-          curl -fsSL -o "$RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" https://nodejs.org/dist/v26.11.1/node-v26.11.1-linux-x64.tar.xz
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" https://nodejs.org/dist/v26.11.1/node-v26.11.1-linux-x64.tar.xz
           echo "3883bfc73f9a680ca4eab04b196068aaaab1373ffa77d8fc1a4408222495b651  $RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" | sha256sum -c -
           mkdir "$RUNNER_TEMP/node"
           tar -xJf "$RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" -C "$RUNNER_TEMP/node" --strip-components=1
@@ -336,8 +340,8 @@ jobs:
       - name: Fetch pnpm
         run: |
           set -eu
-          curl -fsSL -o "$RUNNER_TEMP/pnpm-12.11.2.tgz" https://registry.npmjs.org/pnpm/-/pnpm-12.11.2.tgz
-          curl -fsSL -o "$RUNNER_TEMP/pnpm-exe.linux-x64-12.11.2.tgz" https://registry.npmjs.org/@pnpm/exe.linux-x64/-/exe.linux-x64-12.11.2.tgz
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/pnpm-12.11.2.tgz" https://registry.npmjs.org/pnpm/-/pnpm-12.11.2.tgz
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/pnpm-exe.linux-x64-12.11.2.tgz" https://registry.npmjs.org/@pnpm/exe.linux-x64/-/exe.linux-x64-12.11.2.tgz
           echo "25a51652a196785af5f28bda6dfe8dc582ebefa4ac1d180221ce1390231c5fb76637822ea4b6e4633ce74acdcb0a77f725af11bad38177fdeddaee818a955cb9  $RUNNER_TEMP/pnpm-12.11.2.tgz" | sha512sum -c -
           echo "14aed029edb8018829a49c0ede6a68a18a6d76ebaf206a8a24f8b969cecc7675a48d4cb8e8905f621096d20ae7916282f1839fd31faf1af8ae42a2448f74a941  $RUNNER_TEMP/pnpm-exe.linux-x64-12.11.2.tgz" | sha512sum -c -
           mkdir "$RUNNER_TEMP/pnpm"
@@ -367,7 +371,7 @@ jobs:
       - name: Fetch Node.js
         run: |
           set -eu
-          curl -fsSL -o "$RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" https://nodejs.org/dist/v26.11.1/node-v26.11.1-linux-x64.tar.xz
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" https://nodejs.org/dist/v26.11.1/node-v26.11.1-linux-x64.tar.xz
           echo "3883bfc73f9a680ca4eab04b196068aaaab1373ffa77d8fc1a4408222495b651  $RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" | sha256sum -c -
           mkdir "$RUNNER_TEMP/node"
           tar -xJf "$RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" -C "$RUNNER_TEMP/node" --strip-components=1
@@ -375,8 +379,8 @@ jobs:
       - name: Fetch pnpm
         run: |
           set -eu
-          curl -fsSL -o "$RUNNER_TEMP/pnpm-12.11.2.tgz" https://registry.npmjs.org/pnpm/-/pnpm-12.11.2.tgz
-          curl -fsSL -o "$RUNNER_TEMP/pnpm-exe.linux-x64-12.11.2.tgz" https://registry.npmjs.org/@pnpm/exe.linux-x64/-/exe.linux-x64-12.11.2.tgz
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/pnpm-12.11.2.tgz" https://registry.npmjs.org/pnpm/-/pnpm-12.11.2.tgz
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/pnpm-exe.linux-x64-12.11.2.tgz" https://registry.npmjs.org/@pnpm/exe.linux-x64/-/exe.linux-x64-12.11.2.tgz
           echo "25a51652a196785af5f28bda6dfe8dc582ebefa4ac1d180221ce1390231c5fb76637822ea4b6e4633ce74acdcb0a77f725af11bad38177fdeddaee818a955cb9  $RUNNER_TEMP/pnpm-12.11.2.tgz" | sha512sum -c -
           echo "14aed029edb8018829a49c0ede6a68a18a6d76ebaf206a8a24f8b969cecc7675a48d4cb8e8905f621096d20ae7916282f1839fd31faf1af8ae42a2448f74a941  $RUNNER_TEMP/pnpm-exe.linux-x64-12.11.2.tgz" | sha512sum -c -
           mkdir "$RUNNER_TEMP/pnpm"

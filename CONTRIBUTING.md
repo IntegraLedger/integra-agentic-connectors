@@ -11,10 +11,11 @@ every door implementation speaks: describe it in the issue first.
 
 ## Build and test
 
-You need Node.js `26.11.1` (see `.node-version`), pnpm (the version in `package.json`'s `packageManager`), and
-Postgres for the facilitator's tests. CI and the publish workflow take Node.js as `node-v26.11.1-linux-x64.tar.xz` from
+You need Node.js `26.11.1` (see `.node-version`), pnpm (the version in `package.json`'s `packageManager`), and Postgres
+for the facilitator's tests. CI and the publish workflow take Node.js as `node-v26.11.1-linux-x64.tar.xz` from
 `nodejs.org/dist`, checked against the SHA-256 the workflow holds, and pnpm as two tarballs checked against their
-SHA-512.
+SHA-512. Every download in a workflow is `curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/<file>"
+https://<address>`, which retries a failed transfer five times whatever the error, and writes one file.
 
 ```sh
 pnpm install --frozen-lockfile
@@ -47,11 +48,11 @@ A sample that talks to the seller door runs against `scripts/stand-in-door.mjs`,
 vectors. A sample that needs a chain uses a local stand-in or the package's own vectors, and says so.
 
 The documentation site in `website/` builds with `pnpm install --frozen-lockfile && pnpm run browser && pnpm build`
-inside that folder, on Linux x64. `pnpm run browser` fetches the browser build the Mermaid diagrams are drawn in and
-the pages are checked in, Chrome Headless Shell, which `website/scripts/browser.mjs` pins by version and by the SHA-256
-of its archive, and the build refuses any other. The build is pinned for Linux x64 alone, since a browser build for
-another platform measures text through that platform's own font engine, so the site is built in CI or on a
-maintainer's Linux x64 machine.
+inside that folder, on Linux x64. `pnpm run browser` fetches, retrying a failed download five times, the browser build
+the Mermaid diagrams are drawn in and the pages are checked in, Chrome Headless Shell, which
+`website/scripts/browser.mjs` pins by version and by the SHA-256 of its archive, and the build refuses any other. The
+build is pinned for Linux x64 alone, since a browser build for another platform measures text through that platform's
+own font engine, so the site is built in CI or on a maintainer's Linux x64 machine.
 
 The site checks its own build. In `website/`, after `pnpm build` there:
 
@@ -116,14 +117,14 @@ Keep a pull request to one change. On every push to `main`, when dispatched by h
 packs, CI builds, type-checks and tests every package, and fails on a package in the workspace without a `build`,
 `typecheck` or `test` script. It checks the one-way imports (the packages here depend on and name only
 `@integraledger/lcp` from the `@integraledger` scope), that every job that runs a step fetches the version
-`.node-version` names before it and checks its SHA-256, the install policy in both `pnpm-workspace.yaml` files, both
-lockfiles and the workflows, every sample, and every commit's sign-off. The Node.js check reads the jobs' steps only
-outside a block scalar (`run: |`), and refuses a workflow line that is not in YAML's plain block style, such as a quoted
-value that does not close on its own line or a block scalar whose header holds more than its indicators and a comment.
-The install-policy check reads the committed files and the workflows' lines. A workflow step that rewrites a checked
-file before the install, such as a `sed -i` on `pnpm-workspace.yaml`, or that builds a setting's name at run time, is
-code, like a step that deletes the check, and the check does not read it. No workflow runs on `pull_request`, and no
-check is required before a merge, so CI reads a change once it is on `main`.
+`.node-version` names before it and checks its SHA-256, that every download retries five times, the install policy in
+both `pnpm-workspace.yaml` files, both lockfiles and the workflows, every sample, and every commit's sign-off. The
+Node.js check reads the jobs' steps only outside a block scalar (`run: |`), and refuses a workflow line that is not in
+YAML's plain block style, such as a quoted value that does not close on its own line or a block scalar whose header
+holds more than its indicators and a comment. The install-policy check reads the committed files and the workflows'
+lines. A workflow step that rewrites a checked file before the install, such as a `sed -i` on `pnpm-workspace.yaml`, or
+that builds a setting's name at run time, is code, like a step that deletes the check, and the check does not read it.
+No workflow runs on `pull_request`, and no check is required before a merge, so CI reads a change once it is on `main`.
 
 ## License
 

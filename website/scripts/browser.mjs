@@ -4,9 +4,9 @@
 // it. The site uses this one build on every machine, never a browser the machine has, so one commit draws one set of
 // diagrams.
 //
-// Run in website/ (`pnpm run browser`), this module fetches the archive, checks it against the SHA-256 below, and
-// unpacks it into website/.browser/, with the SHA-256 it checked. `browserExecutable()` gives the build the executable,
-// and refuses when the folder holds anything else.
+// Run in website/ (`pnpm run browser`), this module fetches the archive, retrying a failed download five times,
+// checks it against the SHA-256 below, and unpacks it into website/.browser/, with the SHA-256 it checked.
+// `browserExecutable()` gives the build the executable, and refuses when the folder holds anything else.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createWriteStream, existsSync, readFileSync, rmSync, renameSync, writeFileSync } from "node:fs";
@@ -15,6 +15,7 @@ import { createRequire } from "node:module";
 import { dirname, join, resolve } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
+import { setTimeout as sleep } from "node:timers/promises";
 
 export const BROWSER = {
   name: "Chrome Headless Shell",
@@ -33,6 +34,11 @@ const folder = () => resolve(process.cwd(), ".browser");
 /** The file in that folder that holds the SHA-256 of the archive unpacked there. */
 const DIGEST_FILE = "archive.sha256";
 const FETCH = "run `pnpm run browser` in website/ to fetch it";
+/**
+ * The attempts at the download: a network error or an answer other than 2xx starts the next, after 1, 2, 4, 8 and
+ * 16 s.
+ */
+const ATTEMPTS = 6;
 
 /**
  * The executable of the pinned build, in website/.browser/. Throws, naming the command that fetches the build, when
@@ -77,6 +83,49 @@ function playwrightBuild() {
   return browsers.find((b) => b.name === "chromium-headless-shell")?.browserVersion;
 }
 
+/** An error's message, with the code or message of its cause (fetch reports a reset connection as its cause). */
+function reason(e) {
+  const cause = e?.cause?.code ?? e?.cause?.message;
+  return cause ? `${e.message}: ${cause}` : String(e?.message ?? e);
+}
+
+/**
+ * Downloads `url` into `file` in up to ATTEMPTS attempts, each writing the file from its start, and gives the SHA-256
+ * of the bytes the successful attempt wrote. Throws, naming the last attempt's cause, when every attempt fails.
+ */
+async function download(url, file) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      const response = await fetch(url);
+      if (!response.ok || !response.body) {
+        await response.body?.cancel();
+        throw new Error(`HTTP ${response.status}`);
+      }
+      const hash = createHash("sha256");
+      await pipeline(
+        Readable.fromWeb(response.body),
+        async function* (chunks) {
+          for await (const chunk of chunks) {
+            hash.update(chunk);
+            yield chunk;
+          }
+        },
+        createWriteStream(file),
+      );
+      return hash.digest("hex");
+    } catch (e) {
+      if (attempt === ATTEMPTS) {
+        throw new Error(`${url}: ${ATTEMPTS} attempts failed, the last with ${reason(e)}`, { cause: e });
+      }
+      const wait = 2 ** (attempt - 1);
+      console.log(
+        `${url}: attempt ${attempt} of ${ATTEMPTS} failed with ${reason(e)}; attempt ${attempt + 1} in ${wait} s`,
+      );
+      await sleep(wait * 1000);
+    }
+  }
+}
+
 /** Fetches the archive, checks its SHA-256, and unpacks it into website/.browser/, replacing what is there. */
 async function fetchBrowser() {
   const here = `${process.platform}-${process.arch}`;
@@ -93,20 +142,7 @@ async function fetchBrowser() {
   await mkdir(partial, { recursive: true });
   try {
     const archive = join(partial, "archive.zip");
-    const response = await fetch(BROWSER.url);
-    if (!response.ok || !response.body) throw new Error(`${BROWSER.url}: HTTP ${response.status}`);
-    const hash = createHash("sha256");
-    await pipeline(
-      Readable.fromWeb(response.body),
-      async function* (chunks) {
-        for await (const chunk of chunks) {
-          hash.update(chunk);
-          yield chunk;
-        }
-      },
-      createWriteStream(archive),
-    );
-    const digest = hash.digest("hex");
+    const digest = await download(BROWSER.url, archive);
     if (digest !== BROWSER.sha256) {
       throw new Error(`${BROWSER.url} has SHA-256 ${digest}, not ${BROWSER.sha256}`);
     }
