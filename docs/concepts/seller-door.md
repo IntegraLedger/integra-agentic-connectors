@@ -39,10 +39,11 @@ site plugin calls the connector's own backend, which calls the door.
 
 ## One mint request id per checkout state
 
-`mintRequestId` names one state of one checkout, such as `chk_7Q2:v1` (a cart id and its version). The door answers a
-retry of the same id and the same input with the same answer, byte for byte, and writes no second file. A different
-input under a used id answers `409 issue/mint-request-reused`: a changed checkout gets a new id, so it never reuses an
-ATR that records other terms.
+`mintRequestId` names one state of one checkout, such as `chk_7Q2:v1` (a cart id and its version). A changed checkout
+gets a new id, so it never reuses an ATR that records other terms. A repeat answers the record as it stands: its
+`expiresAt` is the first issue's, or later once a claim raised it; the repeat's own `lifetimeSeconds` and `content` are
+not applied. Before a claim the repeat's answer is the first one byte for byte. A repeat that finds the record writes
+no file. A reused id with other offers or another request answers `409 issue/mint-request-reused`.
 
 ## What the door checks, and what it does not
 

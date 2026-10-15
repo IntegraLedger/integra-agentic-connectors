@@ -40,8 +40,8 @@ It contains no client and no server. It is the contract both sides build to.
 - **Binding:** how H rides in a pairing's payment, the field its specification defines.
 - **Carriers:** the forms of H and the ATR's link that `issue` returns for you to place: `lcp:sha256:0x…`,
   `{type, value, legalContextUrl}` and `{type, value, legal_context_url}`.
-- **Mint request id:** `mintRequestId` names one state of one checkout. The same id with the same input returns the
-  same ATR, byte for byte.
+- **Mint request id:** `mintRequestId` names one state of one checkout. A repeat of the id answers its record as it
+  stands; before a claim, that answer is the first one, byte for byte.
 - **Record:** the door's state for one ATR: `issued`, `settling`, `paid`, `closed` or `stale`, with `proves`, the
   statement of what it shows. `stale` is terminal: the payment was claimed, and 604 800 seconds after its `settleBy`
   no read has shown it settled or unable to settle; the record is never paid after that.
@@ -150,9 +150,12 @@ the protocol. For x402 that is the published profile `x402/exact/eip155/eip3009`
 Call `issue` before the buyer approves, once per checkout state.
 
 - `mintRequestId` is `<checkout id>:<version>`, matching `^[A-Za-z0-9._:-]{1,128}$`. A retry of the same state reuses
-  it and gets the same answer. Any change to the offers, content or request is a new id; reusing an id for other
-  input answers `409 issue/mint-request-reused`. If the platform's id has other characters, use the SHA-256 hex of
-  it. On `409 issue/mint-request-lapsed`, append `:<n>` with a new `n`.
+  it. Any change to the offers, content or request is a new id. A repeat answers the record as it stands: its
+  `expiresAt` is the first issue's, or later once a claim raised it; the repeat's own `lifetimeSeconds` and `content`
+  are not applied. Before a claim the repeat's answer is the first one byte for byte. A repeat that finds the record
+  writes no file. A reused id with other offers or another request answers `409 issue/mint-request-reused`. If the
+  platform's id has other characters, use the SHA-256 hex of it. On `409 issue/mint-request-lapsed`, append `:<n>`
+  with a new `n`.
 - `offers` holds 1 to 16 options, each exactly as the challenge will carry it, all of one protocol.
 - `content` holds 0 to 56 slots. Each slot is one JSON value, sent as padded base64 of its exact bytes. The door
   writes the bytes into the ATR as received.

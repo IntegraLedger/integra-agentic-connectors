@@ -74,8 +74,10 @@ console.log(JSON.stringify(commitment("POST", "/v1/quote?region=eu", new TextEnc
 
 ## Retries and changes
 
-The same `mintRequestId` with the same input returns the first answer, byte for byte, and writes no second file
-(vector `CV2`):
+A repeat of a `mintRequestId` answers the record as it stands: its `expiresAt` is the first issue's, or later once a
+claim raised it; the repeat's own `lifetimeSeconds` and `content` are not applied. Before a claim the repeat's answer
+is the first one byte for byte (vector `CV2`). A repeat that finds the record writes no file. A reused id with other
+offers or another request answers `409 issue/mint-request-reused` (vector `CV3`):
 
 ```ts title="retry.ts"
 import { VECTORS } from "@integraledger/agentic-connectors";
