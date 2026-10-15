@@ -118,12 +118,14 @@ packs, CI builds, type-checks and tests every package, and fails on a package in
 `typecheck` or `test` script. It checks the one-way imports (the packages here depend on and name only
 `@integraledger/lcp` from the `@integraledger` scope), that every job that runs a step fetches the version
 `.node-version` names before it and checks its SHA-256, that every download retries five times, the install policy in
-both `pnpm-workspace.yaml` files, both lockfiles and the workflows, every sample, and every commit's sign-off. The
+both `pnpm-workspace.yaml` files and as pnpm reads them, in every `package.json`, both lockfiles, every `.npmrc` and the
+workflows, and that git lists no `.pnpmfile.cjs` or `.pnpmfile.mjs`, every sample, and every commit's sign-off. The
 Node.js check reads the jobs' steps only outside a block scalar (`run: |`), and refuses a workflow line that is not in
 YAML's plain block style, such as a quoted value that does not close on its own line or a block scalar whose header
-holds more than its indicators and a comment. The install-policy check reads the committed files and the workflows'
-lines. A workflow step that rewrites a checked file before the install, such as a `sed -i` on `pnpm-workspace.yaml`, or
-that builds a setting's name at run time, is code, like a step that deletes the check, and the check does not read it.
+holds more than its indicators and a comment. The install-policy check reads the committed files, pnpm's reading of
+them and the workflows' lines. A workflow step that rewrites a checked file before the install, such as a `sed -i` on
+`pnpm-workspace.yaml`, or that builds a setting's name at run time, is code, like a step that deletes the check, and
+the check does not read it.
 No workflow runs on `pull_request`, and no check is required before a merge, so CI reads a change once it is on `main`.
 
 ## License
