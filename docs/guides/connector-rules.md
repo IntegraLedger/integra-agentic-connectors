@@ -58,7 +58,7 @@ it.
 
 *Why:* the payment reference arrives on the order, and the door knows the record only by its hash.
 
-## 7. Claim wherever the pairing records read keys; report after
+## 7. Claim wherever the pairing reads the hash or records read keys; report after
 
 Where a pairing reads the hash from the payment or records read keys for it, call `claim` with the presented payment
 before your facilitator's `/verify`, so every refusal comes before money moves. Name the pairing the record offered: a
