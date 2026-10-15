@@ -126,8 +126,6 @@ export interface ReportClosed {
   pairing: string;
   state: "closed";
   reference: string;
-  network?: string;
-  chosen?: Json;
 }
 export type ReportRequest = ReportOutcome | ReportClosed;
 /** A channel pairing's channel: `until` is the rail's deadline for the channel, or null when the rail gives none. */

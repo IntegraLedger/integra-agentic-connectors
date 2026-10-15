@@ -19,8 +19,8 @@ ATR.
    `409 claim/channel-open`, and a claim in a channel whose opening was never claimed answers
    `409 claim/channel-not-open`. Every later 402 in the channel repeats the legal context of the channel's ATR.
 4. **Report the close** with `{atrHash, pairing, state: "closed", reference}`, where `reference` is the close
-   transaction. Where the pairing's rail can be read, the door reads it with the close keys recorded at the opening,
-   and needs no `chosen`; on a pairing with nothing to read, the report is the close. The record becomes `closed`.
+   transaction. Where the pairing's rail can be read, the door reads it with the close keys recorded at the opening;
+   on a pairing with nothing to read, the report is the close. The record becomes `closed`.
 
 ```json no-check
 { "atrHash": "0x…", "pairing": "x402/batch-settlement/eip155", "state": "closed", "reference": "0x…" }

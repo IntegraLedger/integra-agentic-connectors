@@ -24,6 +24,7 @@ import {
   type IssueResponse,
   type Proves,
   type RecordView,
+  type ReportClosed,
   type ReportOutcome,
   type Vector,
 } from "../src/index.js";
@@ -369,6 +370,18 @@ describe("the OpenAPI document", () => {
     expect(check(schema, { ...report, source: 1 })).not.toEqual([]);
     expect(await evmHash.reference({ challenge: report.chosen, source: report.source })).toEqual(hash.MV12.expectReference);
     expect(await evmHash.reference({ challenge: report.chosen })).toEqual(hash.MV12.expectNoSource);
+  });
+
+  it("a channel's close is the record's hash, its pairing, the state and the close transaction, in the type and the document", () => {
+    // A key missing from or added to the object is a type error against the type's members.
+    const members: Record<keyof ReportClosed, true> = { atrHash: true, pairing: true, state: true, reference: true };
+    expect(Object.keys(doc.components.schemas.ReportClosed.properties)).toEqual(Object.keys(members));
+    const schema = { $ref: `${CONTRACT}#/$defs/ReportClosed` };
+    const close = { atrHash: `0x${"ab".repeat(32)}`, pairing: "mpp/session/tempo", state: "closed", reference: `0x${"cd".repeat(32)}` };
+    expect(check(schema, close)).toEqual([]);
+    for (const extra of [{ chosen: { deposit: "1000" } }, { network: "eip155:42431" }]) {
+      expect(check(schema, { ...close, ...extra }).some((e) => e.includes("must NOT have additional properties"))).toBe(true);
+    }
   });
 });
 

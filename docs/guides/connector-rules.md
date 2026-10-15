@@ -132,7 +132,7 @@ Serve later requests yourself, never claim them, and report the close. The openi
 in the channel, session or subscription are paid under that ATR. Every later 402 in a channel repeats the legal
 context of the channel's ATR. Report the close with `{atrHash, pairing, state: "closed", reference}`, the reference
 being the close transaction. Where the pairing's rail can be read, the door reads it with the close keys recorded at
-the opening, and needs no `chosen`; on a pairing with nothing to read, the report is the close.
+the opening; on a pairing with nothing to read, the report is the close.
 For a subscription whose payment carries nothing to claim, the opening's `report` `paid` records the channel, the
 reference being the subscription's own identifier.
 

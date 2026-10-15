@@ -340,8 +340,6 @@ An object. A member not listed here is refused.
 | `pairing` | [PairingId](#pairingid) | yes |  |  |
 | `state` | `"closed"` | yes |  |  |
 | `reference` | [Reference](#reference) | yes |  |  |
-| `network` | `string` | no | 1 to 64 characters |  |
-| `chosen` | any JSON value | no |  |  |
 
 ### Channel
 

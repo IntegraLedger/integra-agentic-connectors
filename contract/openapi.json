@@ -2518,13 +2518,7 @@
           },
           "reference": {
             "$ref": "#/components/schemas/Reference"
-          },
-          "network": {
-            "type": "string",
-            "minLength": 1,
-            "maxLength": 64
-          },
-          "chosen": {}
+          }
         }
       },
       "Channel": {
