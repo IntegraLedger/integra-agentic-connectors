@@ -71,8 +71,8 @@ A **binding** is how H rides in a pairing's payment: the field its specification
 in the token contract's `AuthorizationUsed` event. On a card payment, nothing the buyer signs carries H, and the
 record says so.
 
-Each pairing has a **pattern**: how it carries H, and what a record of it proves. The door returns the pattern with
-every record, so a record never claims more than its pairing shows.
+Each pairing has a **pattern**: how it carries H, and what a record of it proves. A recorded payment's record carries
+its pairing's pattern, so a record never claims more than its pairing shows.
 
 ## The buyer gate
 
