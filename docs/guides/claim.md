@@ -77,9 +77,10 @@ settleBy is validBefore: true
 
 ## Pushed payments
 
-On a push-mode pairing, the buyer broadcasts the payment itself, and `payment` names the landed transaction. The door
-reads it on the rail before it checks it. If the read is not possible yet, the door answers
-`503 claim/read-unavailable`: retry. If the check fails, the money has moved, so the answer is `200`:
+On a push-mode pairing, the buyer broadcasts the payment itself, and `payment` names the landed transaction. Where the
+pairing's binding fetches the landed payment, the door reads it on the rail before it checks it. If the read is not
+possible yet, the door answers `503 claim/read-unavailable`: retry. If the check fails, the money has moved, so the
+answer is `200`:
 
 ```json no-check
 {
