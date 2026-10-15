@@ -29,8 +29,9 @@ It contains no client and no server. It is the contract both sides build to.
 
 ## Key concepts
 
-- **Agentic Transaction Record (ATR):** the agreement's record, a JSON document the seller serves. The door writes it
-  to the seller's storage before it answers `issue`, so a storage failure means no challenge goes out.
+- **Agentic Transaction Record (ATR):** the agreement's record: the exact bytes the seller serves, which the door
+  writes as one JSON object to the seller's storage before it answers `issue`, so a storage failure means no challenge
+  goes out.
 - **ATR hash (H):** SHA-256 over the ATR's exact bytes, written `0x` and 64 lowercase hex digits.
 - **Legal Context Protocol (LCP):** the pattern this contract serves: H bound into the payment, so that where the
   payment the buyer approves carries H, that approval is the buyer's acceptance of that exact record; where it does

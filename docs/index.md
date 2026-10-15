@@ -8,7 +8,7 @@ description: The seller door contract that connectors speak, and an x402 facilit
 This repository holds what a seller's own systems need to put proof of agreement into their payments.
 
 The proof works like this. Before a buyer's agent pays, the seller's side assembles an **Agentic Transaction Record
-(ATR)**: the agreement's record, a JSON document the seller serves. Its **ATR hash (H)** is SHA-256 over the ATR's
+(ATR)**: the agreement's record, the exact bytes the seller serves. Its **ATR hash (H)** is SHA-256 over the ATR's
 exact bytes. H is bound into the payment, in the field the payment protocol provides, so that where the payment the
 buyer approves carries H, that approval is the buyer's acceptance of that exact record; where it does not, the
 pairing's statement of what it proves says so. That is the pattern of the **Legal Context Protocol (LCP)**.

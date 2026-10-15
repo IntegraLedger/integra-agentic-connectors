@@ -11,8 +11,8 @@ before the payment, and a record without one says so. This page defines the term
 
 ## The Agentic Transaction Record (ATR)
 
-The **Agentic Transaction Record (ATR)** is the agreement's record: one JSON document the seller serves at an
-`https` link. Its bytes are written once, in a fixed order:
+The **Agentic Transaction Record (ATR)** is the agreement's record: the exact bytes the seller serves at an `https`
+link. The door writes them once, as one JSON object, in a fixed order:
 
 1. `atrVersion`, the format marker;
 2. `id`, a per-transaction identifier;
