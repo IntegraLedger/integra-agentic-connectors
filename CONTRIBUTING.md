@@ -79,12 +79,13 @@ git rebase --signoff origin/main
 
 ## Pull requests
 
-Keep a pull request to one change. On every push to `main`, and when dispatched by hand, CI builds, type-checks and
-tests every package, and fails on a package in the workspace without a `build`, `typecheck` or `test` script. It
-checks the one-way imports (the packages here import only `@integraledger/lcp` from the `@integraledger` scope), that
-every job that runs Node.js fetches the version `.node-version` names and checks its SHA-256, the install policy in
-both `pnpm-workspace.yaml` files, every sample, and every commit's sign-off. No workflow runs on `pull_request`, and
-no check is required before a merge, so CI reads a change once it is on `main`.
+Keep a pull request to one change. On every push to `main`, when dispatched by hand, and before the publish workflow
+packs, CI builds, type-checks and tests every package, and fails on a package in the workspace without a `build`,
+`typecheck` or `test` script. It checks the one-way imports (the packages here depend on and name only
+`@integraledger/lcp` from the `@integraledger` scope), that every job that runs a step fetches the version
+`.node-version` names before it and checks its SHA-256, the install policy in both `pnpm-workspace.yaml` files, both
+lockfiles and the workflows, every sample, and every commit's sign-off. No workflow runs on `pull_request`, and no
+check is required before a merge, so CI reads a change once it is on `main`.
 
 ## License
 
