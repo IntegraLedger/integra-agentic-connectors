@@ -279,7 +279,7 @@ function schemaStatus(c) {
 function vectorsPage() {
   const dir = join(contract, "vectors");
   const files = readdirSync(dir)
-    .filter((f) => /^CV[0-9]+\.json$/.test(f))
+    .filter((f) => /^CV[1-9][0-9]*\.json$/.test(f))
     .sort((a, b) => Number(a.slice(2, -5)) - Number(b.slice(2, -5)));
   const out = [
     frontmatter("Vectors", "The seller door's vectors: the requests, the answers they must produce, and the ATR bytes they store.", "contract/vectors/"),
