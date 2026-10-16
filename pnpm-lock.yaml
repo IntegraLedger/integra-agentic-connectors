@@ -182,8 +182,8 @@ importers:
   contract:
     devDependencies:
       '@integraledger/lcp':
-        specifier: 0.4.0
-        version: 0.4.0
+        specifier: 0.4.2
+        version: 0.4.2
       ajv:
         specifier: 8.20.0
         version: 8.20.0
@@ -210,8 +210,8 @@ importers:
         version: 8.23.1
     devDependencies:
       '@integraledger/lcp':
-        specifier: 0.4.0
-        version: 0.4.0
+        specifier: 0.4.2
+        version: 0.4.2
       vitest:
         specifier: 5.0.4
         version: 5.0.4(@types/node@26.6.5)(vite@8.3.1(@types/node@26.6.5)(esbuild@0.28.2))
@@ -374,8 +374,8 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@integraledger/lcp@0.4.0':
-    resolution: {integrity: sha512-DKSnPTr5ocZwvtlkRJm/ZiydZywUIv/4vbSZguifmZMULFylDLiXV1/O9+vHpmzUkdddl5Lf+6bTNgnNzH3odw==}
+  '@integraledger/lcp@0.4.2':
+    resolution: {integrity: sha512-BRn0a57jPOjWWb9T+23+HMFVERB7ruIWe9VuTDDGBJKhhReyVj1MCbUJiYVsd+DLSpkEKzx7xvj9FoMy1AM2ZA==}
     engines: {node: '>=26.11.1'}
     peerDependencies:
       '@mysten/sui': ^2.31.3
@@ -384,7 +384,6 @@ packages:
       '@ton/core': ^0.63.1
       algosdk: ^3.8.0
       borsh: ^2.0.0
-      near-api-js: ^7.3.1
       ripple-binary-codec: ~2.11.0
     peerDependenciesMeta:
       '@mysten/sui':
@@ -398,8 +397,6 @@ packages:
       algosdk:
         optional: true
       borsh:
-        optional: true
-      near-api-js:
         optional: true
       ripple-binary-codec:
         optional: true
@@ -1466,7 +1463,7 @@ snapshots:
   '@esbuild/win32-x64@0.28.2':
     optional: true
 
-  '@integraledger/lcp@0.4.0':
+  '@integraledger/lcp@0.4.2':
     dependencies:
       '@noble/curves': 2.4.0
       '@noble/hashes': 2.4.0
