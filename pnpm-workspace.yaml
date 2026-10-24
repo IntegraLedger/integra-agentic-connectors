@@ -10,4 +10,4 @@ permissions:
   esbuild: {build: false}
 
 minimumReleaseAgeExclude:
-  - '@integraledger/lcp@0.4.2'
+  - '@integraledger/lcp@0.5.0'

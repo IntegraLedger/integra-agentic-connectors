@@ -46,10 +46,10 @@
     "test": "node scripts/embed.mjs && vitest run"
   },
   "peerDependencies": {
-    "@integraledger/lcp": "~0.4.0"
+    "@integraledger/lcp": "~0.5.0"
   },
   "devDependencies": {
-    "@integraledger/lcp": "0.4.2",
+    "@integraledger/lcp": "0.5.0",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "vitest": "5.0.4"

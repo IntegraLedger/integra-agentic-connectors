@@ -7,7 +7,7 @@ description: "Every pairing id the seller door accepts, with its binding pattern
 
 # Pairings
 
-A pairing names a payment protocol, scheme and rail, such as `x402/exact/eip155/eip3009`. It is the `pairing` of every offer, claim and report, and a recorded payment's record carries the pairing's pattern. This page lists the 67 pairings of `@integraledger/lcp`'s registry (`BINDINGS`), the package that owns each binding. How the hash rides in each one is documented with that package, in [its pairing registry for 0.4.0](https://github.com/IntegraLedger/integra-protocol/blob/v0.4.0/docs/reference/pairings.md), the release these packages pin.
+A pairing names a payment protocol, scheme and rail, such as `x402/exact/eip155/eip3009`. It is the `pairing` of every offer, claim and report, and a recorded payment's record carries the pairing's pattern. This page lists the 67 pairings of `@integraledger/lcp`'s registry (`BINDINGS`), the package that owns each binding. How the hash rides in each one is documented with that package, in [its pairing registry for 0.5.0](https://github.com/IntegraLedger/integra-protocol/blob/v0.5.0/docs/reference/pairings.md), the release these packages pin.
 
 The columns:
 

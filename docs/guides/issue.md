@@ -41,7 +41,7 @@ imports `@integraledger/lcp`, the peer of `@integraledger/agentic-connectors`, s
 range:
 
 ```sh
-npm install @integraledger/agentic-connectors @integraledger/lcp@~0.4.0
+npm install @integraledger/agentic-connectors @integraledger/lcp@~0.5.0
 ```
 
 ```ts title="commitment.ts"

@@ -40,17 +40,17 @@ flowchart LR
 - **The profile facilitator** verifies and settles x402 payments on the two LCP profiles that carry H in the payer's
   own signed transaction on Tron and Polkadot.
 - Both use [`@integraledger/lcp`](https://github.com/IntegraLedger/integra-protocol), which owns the ATR's assembly
-  and hashing and every binding of H into a payment. Its documentation for 0.4.2, the release both packages pin, is in
-  [its repository at that release](https://github.com/IntegraLedger/integra-protocol/blob/v0.4.2/docs/index.md).
+  and hashing and every binding of H into a payment. Its documentation for 0.5.0, the release both packages pin, is in
+  [its repository at that release](https://github.com/IntegraLedger/integra-protocol/blob/v0.5.0/docs/index.md).
 
 ## Packages
 
 | Package | Purpose | Install |
 |---|---|---|
-| [`@integraledger/agentic-connectors`](./contract) | The seller door's contract: `openapi.json`, its TypeScript types, the refusal table and the vectors. | `npm install @integraledger/agentic-connectors @integraledger/lcp@~0.4.0` |
-| [`@integraledger/profile-facilitator`](./profile-facilitator) | An x402 facilitator for `x402/exact/tron/lcp-trc20-memo` and `x402/exact/polkadot/lcp-assets-remark`. | `npm install @integraledger/profile-facilitator @integraledger/lcp@~0.4.0` |
+| [`@integraledger/agentic-connectors`](./contract) | The seller door's contract: `openapi.json`, its TypeScript types, the refusal table and the vectors. | `npm install @integraledger/agentic-connectors @integraledger/lcp@~0.5.0` |
+| [`@integraledger/profile-facilitator`](./profile-facilitator) | An x402 facilitator for `x402/exact/tron/lcp-trc20-memo` and `x402/exact/polkadot/lcp-assets-remark`. | `npm install @integraledger/profile-facilitator @integraledger/lcp@~0.5.0` |
 
-Both need Node.js `>=24` and are ESM only, and both take `@integraledger/lcp` (`~0.4.0`) as a peer dependency. The
+Both need Node.js `>=24` and are ESM only, and both take `@integraledger/lcp` (`~0.5.0`) as a peer dependency. The
 facilitator also needs Postgres.
 
 ## Documentation
