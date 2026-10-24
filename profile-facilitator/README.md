@@ -64,7 +64,7 @@ sequenceDiagram
 npm install @integraledger/profile-facilitator @integraledger/lcp@~0.4.0
 ```
 
-It needs Node.js `>=26.11.1`, Postgres (the tests run on Postgres 18), and an HTTP endpoint for each network you
+It needs Node.js `>=24`, Postgres (the tests run on Postgres 18), and an HTTP endpoint for each network you
 serve: a Tron FullNode that keeps the block history (not a lite FullNode) and a Solidity node, or a Polkadot Asset Hub
 RPC node. A Polkadot node that keeps the state of every block (an archive node) gives the events of any block; a
 pruning node discards the state of older blocks, and a block that holds the extrinsic and whose state is discarded
@@ -559,7 +559,7 @@ false. On Polkadot they also cover a repeat of a consumed payment, a block answe
 
 ## Requirements
 
-- Node.js `>=26.11.1`.
+- Node.js `>=24`.
 - Postgres; the tests run on Postgres 18.
 - For Tron, a FullNode and a Solidity node with java-tron's HTTP API: the FullNode serves `/wallet/getaccount`,
   `/wallet/getnowblock`, `/wallet/getblock`, `/wallet/gettransactionbyid`, `/wallet/gettransactionfrompending`,

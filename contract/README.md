@@ -75,7 +75,7 @@ sequenceDiagram
 npm install @integraledger/agentic-connectors @integraledger/lcp@~0.4.0
 ```
 
-It needs Node.js `>=26.11.1`, and it is ESM only. Its one peer dependency is `@integraledger/lcp` (`~0.4.0`), whose
+It needs Node.js `>=24`, and it is ESM only. Its one peer dependency is `@integraledger/lcp` (`~0.4.0`), whose
 `AtrHash`, `Json` and `LcpPattern` types it uses: install it beside it.
 
 ## Quickstart
@@ -515,7 +515,7 @@ carries against its pairing's pattern in `@integraledger/lcp`'s registry, and th
 
 ## Requirements
 
-- Node.js `>=26.11.1`.
+- Node.js `>=24`.
 - ESM (`"type": "module"`).
 - `@integraledger/lcp` `~0.4.0`, installed beside it as a peer dependency.
 

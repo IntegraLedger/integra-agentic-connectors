@@ -148,7 +148,7 @@ jobs:
           if (bad > 0) process.exit(1);
           console.log(`${packages} package(s) and the root: no @integraledger dependency, import or name outside the allowed set; each workspace package has a build, typecheck and test script`);
           EOF
-      - name: Every job that runs a step fetches the Node.js .node-version names first, and checks it against one SHA-256, and every download retries five times
+      - name: Every job that runs a step fetches the Node.js .node-version names first, and checks it against one SHA-256, the Node.js .node-version-floor names is fetched only by its own step, against one SHA-256, and every download retries five times
         run: |
           node - <<'JS'
           const fs = require("node:fs");
@@ -163,13 +163,45 @@ jobs:
           if (process.version !== `v${v}`) bad.push(`node ${process.version} runs this step, where .node-version names ${v}`);
           const tarball = `node-v${v}-linux-x64.tar.xz`;
           const url = `https://nodejs.org/dist/v${v}/${tarball}`;
+          // The oldest Node.js the published packages' engines allow, which the floor job runs their tests on: its own
+          // pin and SHA-256, fetched by one step of its own that changes no PATH, and the major each engines.node names.
+          const floor = fs.readFileSync(".node-version-floor", "utf8").trim();
+          const floorTarball = `node-v${floor}-linux-x64.tar.xz`;
+          const floorUrl = `https://nodejs.org/dist/v${floor}/${floorTarball}`;
+          const engines = `>=${floor.split(".")[0]}`;
+          if (!/^[0-9]+\.[0-9]+\.[0-9]+$/.test(floor)) bad.push(`.node-version-floor names ${floor}, which is no version`);
+          for (const m of ["contract/package.json", "profile-facilitator/package.json"]) {
+            const e = JSON.parse(fs.readFileSync(m, "utf8")).engines?.node;
+            if (e !== engines) bad.push(`${m}'s engines.node is ${e}, where .node-version-floor names ${floor}: it is ${engines}`);
+          }
           const files = fs.readdirSync(".github/workflows").filter((f) => /\.ya?ml$/.test(f)).sort().map((f) => `.github/workflows/${f}`);
           const text = new Map(files.map((f) => [f, fs.readFileSync(f, "utf8").split("\n")]));
           const all = [...text.values()].flat();
-          for (const u of all.join("\n").match(/https:\/\/nodejs\.org\/dist\/v[0-9][^\s"']*/g) ?? []) if (u !== url) bad.push(`a Node.js other than ${url}: ${u}`);
+          for (const u of all.join("\n").match(/https:\/\/nodejs\.org\/dist\/v[0-9][^\s"']*/g) ?? []) if (u !== url && u !== floorUrl) bad.push(`a Node.js other than ${url} and ${floorUrl}: ${u}`);
           const check = new RegExp(`^ +echo "([0-9a-f]{64})  \\$RUNNER_TEMP/${tarball.replaceAll(".", "\\.")}" \\| sha256sum -c -$`);
           const digests = [...new Set(all.map((l) => check.exec(l)?.[1]).filter(Boolean))];
           if (digests.length !== 1) bad.push(`${digests.length} SHA-256 digests for ${tarball}, where there is one`);
+          const floorCheck = new RegExp(`^ +echo "([0-9a-f]{64})  \\$RUNNER_TEMP/${floorTarball.replaceAll(".", "\\.")}" \\| sha256sum -c -$`);
+          const floorDigests = [...new Set(all.map((l) => floorCheck.exec(l)?.[1]).filter(Boolean))];
+          if (floorDigests.length !== 1) bad.push(`${floorDigests.length} SHA-256 digests for ${floorTarball}, where there is one`);
+          const floorStep = [
+            "      - name: Fetch the Node.js .node-version-floor names",
+            "        run: |",
+            "          set -eu",
+            `          ${FETCH} -o "$RUNNER_TEMP/${floorTarball}" ${floorUrl}`,
+            `          echo "${floorDigests[0]}  $RUNNER_TEMP/${floorTarball}" | sha256sum -c -`,
+            '          mkdir "$RUNNER_TEMP/node-floor"',
+            `          tar -xJf "$RUNNER_TEMP/${floorTarball}" -C "$RUNNER_TEMP/node-floor" --strip-components=1`,
+          ];
+          // Every line that names the floor's tarball is in a copy of that step, byte for byte.
+          let floorSteps = 0;
+          for (const [f, lines] of text) {
+            lines.forEach((l, i) => {
+              if (floorStep.every((s, k) => lines[i + k] === s)) floorSteps++;
+            });
+          }
+          const floorLines = all.filter((l) => l.includes(floorTarball)).length;
+          if (floorSteps === 0 || floorLines !== 3 * floorSteps) bad.push(`${floorLines} lines name ${floorTarball}, where each is in one of the ${floorSteps} copies of the step:\n${floorStep.join("\n")}`);
           // The one Fetch Node.js step, byte for byte, so that no key can be added to it.
           const step = [
             "      - name: Fetch Node.js",
@@ -252,7 +284,7 @@ jobs:
             console.log(`${bad.join("\n")}\nEvery job that runs a step holds, before its first other step that runs, the step:\n${step.join("\n")}`);
             process.exit(1);
           }
-          console.log(`node ${process.version}: each of the ${jobs} jobs that runs a step fetches ${url} first and checks it against ${digests[0]}; every download is ${FETCH} -o "$RUNNER_TEMP/<file>" https://<address>`);
+          console.log(`node ${process.version}: each of the ${jobs} jobs that runs a step fetches ${url} first and checks it against ${digests[0]}; ${floorUrl}, the floor the published packages' engines.node ${engines} names, is fetched only by its own step, against ${floorDigests[0]}; every download is ${FETCH} -o "$RUNNER_TEMP/<file>" https://<address>`);
           JS
       - name: Fetch pnpm
         run: |
@@ -549,6 +581,65 @@ jobs:
         env:
           INTEGRA_DATABASE_URL: postgres://postgres@127.0.0.1:5432/postgres
         run: pnpm -r --if-present run test
+
+  floor:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    services:
+      postgres:
+        image: postgres:18@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722
+        env:
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -h 127.0.0.1"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Fetch Node.js
+        run: |
+          set -eu
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" https://nodejs.org/dist/v26.11.1/node-v26.11.1-linux-x64.tar.xz
+          echo "3883bfc73f9a680ca4eab04b196068aaaab1373ffa77d8fc1a4408222495b651  $RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" | sha256sum -c -
+          mkdir "$RUNNER_TEMP/node"
+          tar -xJf "$RUNNER_TEMP/node-v26.11.1-linux-x64.tar.xz" -C "$RUNNER_TEMP/node" --strip-components=1
+          echo "$RUNNER_TEMP/node/bin" >> "$GITHUB_PATH"
+      - name: Fetch pnpm
+        run: |
+          set -eu
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/pnpm-12.11.2.tgz" https://registry.npmjs.org/pnpm/-/pnpm-12.11.2.tgz
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/pnpm-exe.linux-x64-12.11.2.tgz" https://registry.npmjs.org/@pnpm/exe.linux-x64/-/exe.linux-x64-12.11.2.tgz
+          echo "25a51652a196785af5f28bda6dfe8dc582ebefa4ac1d180221ce1390231c5fb76637822ea4b6e4633ce74acdcb0a77f725af11bad38177fdeddaee818a955cb9  $RUNNER_TEMP/pnpm-12.11.2.tgz" | sha512sum -c -
+          echo "14aed029edb8018829a49c0ede6a68a18a6d76ebaf206a8a24f8b969cecc7675a48d4cb8e8905f621096d20ae7916282f1839fd31faf1af8ae42a2448f74a941  $RUNNER_TEMP/pnpm-exe.linux-x64-12.11.2.tgz" | sha512sum -c -
+          mkdir "$RUNNER_TEMP/pnpm"
+          tar -xzf "$RUNNER_TEMP/pnpm-exe.linux-x64-12.11.2.tgz" -C "$RUNNER_TEMP/pnpm" --strip-components=1 package/pnpm
+          tar -xzf "$RUNNER_TEMP/pnpm-12.11.2.tgz" -C "$RUNNER_TEMP/pnpm" --strip-components=1 package/dist
+          echo "$RUNNER_TEMP/pnpm" >> "$GITHUB_PATH"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm -r --if-present run build
+      - name: Fetch the Node.js .node-version-floor names
+        run: |
+          set -eu
+          curl -fsSL --retry 5 --retry-all-errors -o "$RUNNER_TEMP/node-v24.22.1-linux-x64.tar.xz" https://nodejs.org/dist/v24.22.1/node-v24.22.1-linux-x64.tar.xz
+          echo "6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6  $RUNNER_TEMP/node-v24.22.1-linux-x64.tar.xz" | sha256sum -c -
+          mkdir "$RUNNER_TEMP/node-floor"
+          tar -xJf "$RUNNER_TEMP/node-v24.22.1-linux-x64.tar.xz" -C "$RUNNER_TEMP/node-floor" --strip-components=1
+      - name: The packages' tests on the oldest Node.js their engines allow, which runs them and every worker they fork
+        env:
+          INTEGRA_DATABASE_URL: postgres://postgres@127.0.0.1:5432/postgres
+        run: |
+          set -eu
+          floor="$RUNNER_TEMP/node-floor/bin/node"
+          test "$("$floor" --version)" = "v$(cat .node-version-floor)"
+          (cd contract && "$floor" ../node_modules/vitest/vitest.mjs run)
+          (cd profile-facilitator && "$floor" ../node_modules/vitest/vitest.mjs run)
 
   docs:
     runs-on: ubuntu-24.04

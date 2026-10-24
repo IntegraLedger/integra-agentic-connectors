@@ -117,7 +117,10 @@ Keep a pull request to one change. On every push to `main`, when dispatched by h
 packs, CI builds, type-checks and tests every package, and fails on a package in the workspace without a `build`,
 `typecheck` or `test` script. It checks the one-way imports (the packages here depend on and name only
 `@integraledger/lcp` from the `@integraledger` scope), that every job that runs a step fetches the version
-`.node-version` names before it and checks its SHA-256, that every download retries five times, the install policy in
+`.node-version` names before it and checks its SHA-256, that the one other Node.js a workflow fetches is the one
+`.node-version-floor` names, by one step of its own checked against one SHA-256 and adding nothing to `PATH`, whose
+major both packages' `engines.node` allow and on which the `floor` job runs both packages' tests, that every download
+retries five times, the install policy in
 both `pnpm-workspace.yaml` files and as pnpm reads them, in every `package.json`, both lockfiles, every `.npmrc` and the
 workflows, and that git lists no `.pnpmfile.cjs` or `.pnpmfile.mjs`, every sample, and every commit's sign-off. The
 Node.js check reads the jobs' steps only outside a block scalar (`run: |`), and refuses a workflow line that is not in
