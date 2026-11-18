@@ -1,5 +1,8 @@
 # @integraledger/agentic-connectors
 
+> **Archived.** `@integraledger/agentic-connectors` stays published as it is, at 0.4.0; no further releases are made from
+> this repository.
+
 The seller door's contract: the OpenAPI 3.1 document, TypeScript types, refusal table and vectors that a connector
 speaks to issue an ATR, claim a presented payment, report a settlement and read a record's status.
 

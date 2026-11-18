@@ -1,5 +1,8 @@
 # @integraledger/profile-facilitator
 
+> **Moved.** From 0.5.0 this package is developed and released from [integra-protocol's `settler/` folder](https://github.com/IntegraLedger/integra-protocol/tree/main/settler). This
+> copy is 0.4.0's, for the Tron and Polkadot profiles alone.
+
 An x402 facilitator for two LCP profiles: `x402/exact/tron/lcp-trc20-memo` and
 `x402/exact/polkadot/lcp-assets-remark`. It verifies and settles payments whose payer-signed transaction carries the
 ATR hash, and it holds no key and pays no fee.

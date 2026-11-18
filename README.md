@@ -1,5 +1,9 @@
 # integra-agentic-connectors
 
+> **Archived.** No further releases are made from this repository. The x402 facilitator, `@integraledger/profile-facilitator`,
+> is developed and released from [integra-protocol's `settler/` folder](https://github.com/IntegraLedger/integra-protocol/tree/main/settler) from 0.5.0, for the x402 pairings
+> `@integraledger/lcp` 0.6.0 ships. `@integraledger/agentic-connectors` stays published as it is, at 0.4.0.
+
 The seller side of proof of agreement: the contract a seller's systems speak to put an Agentic Transaction Record's
 hash into their payments, and an x402 facilitator for the LCP profiles on Tron and Polkadot.
 
